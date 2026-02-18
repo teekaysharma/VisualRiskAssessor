@@ -124,7 +124,59 @@
     };
     let model=null,video=null,imgData=null,hazards=[],overallScore=0;
     async function init(){try{model=await mobilenet.load();console.log('Model loaded')}catch(e){console.log('Model failed')}}
-    async function startCam(){try{video=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});document.getElementById('videoPreview').srcObject=video;document.getElementById('camSec').classList.add('active');document.getElementById('uploadArea').classList.add('hidden');document.getElementById('stopBtn').classList.remove('hidden');}catch(e){alert('Camera error: '+e.message)}}
+    async function startCam(){
+        const constraints = {
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: "environment"
+            }
+        };
+        
+        try {
+            // Try with rear camera first
+            let stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // If rear camera fails, try front camera
+            if (!stream.getVideoTracks().length) {
+                stream.getTracks().forEach(track => track.stop());
+                constraints.video.facingMode = "user";
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+            }
+            
+            const videoEl = document.getElementById("videoPreview");
+            videoEl.srcObject = stream;
+            
+            // Wait for video to load
+            videoEl.onloadedmetadata = () => {
+                videoEl.play();
+                document.getElementById("camSec").classList.add("active");
+                document.getElementById("uploadArea").classList.add("hidden");
+                document.getElementById("stopBtn").classList.remove("hidden");
+            };
+            
+        } catch (error) {
+            console.error("Camera error:", error);
+            
+            let errorMessage = "Unable to access camera. ";
+            
+            if (error.name === "NotAllowedError") {
+                errorMessage += "Please allow camera permission and try again.";
+            } else if (error.name === "NotFoundError") {
+                errorMessage += "No camera found on this device.";
+            } else if (error.name === "NotReadableError") {
+                errorMessage += "Camera is being used by another application.";
+            } else {
+                errorMessage += "Please use the upload feature instead.";
+            }
+            
+            // Show more detailed error and suggest upload
+            const shouldUpload = confirm(errorMessage + "\n\nWould you like to upload an image instead?");
+            if (shouldUpload) {
+                document.getElementById("fileInput").click();
+            }
+        }
+    }
     function stopCam(){if(video){video.getTracks().forEach(t=>t.stop());video=null;}document.getElementById('camSec').classList.remove('active');document.getElementById('uploadArea').classList.remove('hidden');document.getElementById('stopBtn').classList.add('hidden');}
     function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
     function handleFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=function(e){imgData=e.target.result;analyze(imgData);};r.readAsDataURL(f);}
