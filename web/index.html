@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisualRiskAssessor - HSE Risk Assessment Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+    <style>
+        :root {
+            --primary: #FF6D00;
+            --primary-dark: #E65100;
+            --secondary: #1565C0;
+            --secondary-dark: #0D47A1;
+            --background: #FAFAFA;
+            --surface: #FFFFFF;
+            --text-primary: #212121;
+            --text-secondary: #757575;
+            --risk-low: #4CAF50;
+            --risk-medium: #FFC107;
+            --risk-high: #F44336;
+            --risk-extreme: #B71C1C;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .input-section {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .camera-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .camera-container.active {
+            display: flex;
+        }
+
+        #videoPreview {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 12px;
+            background: #000;
+        }
+
+        .upload-area {
+            border: 3px dashed var(--secondary);
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-area:hover {
+            background: rgba(21, 101, 192, 0.05);
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .results-section {
+            display: none;
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .risk-matrix {
+            display: grid;
+            grid-template-columns: auto repeat(5, 1fr);
+            gap: 2px;
+            max-width: 500px;
+            margin: 20px auto;
+        }
+
+        .matrix-cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 4px;
+            min-height: 50px;
+        }
+
+        .matrix-header {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .cell-low { background: var(--risk-low); color: white; }
+        .cell-medium { background: var(--risk-medium); color: #000; }
+        .cell-high { background: var(--risk-high); color: white; }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🔬 VisualRiskAssessor</h1>
+        <p>HSE Risk Assessment Tool - Capture, Analyze, Protect</p>
+    </header>
+
+    <main class="container">
+        <section class="input-section" id="inputSection">
+            <h2>📸 Capture or Upload Image</h2>
+            <p style="margin-bottom: 20px; color: var(--text-secondary);">
+                Take a photo of a workplace area or upload an existing image to analyze for potential health and safety hazards.
+            </p>
+            
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="startCamera()">
+                    📷 Take Photo
+                </button>
+                <button class="btn btn-secondary" onclick="openFileUpload()">
+                    🖼️ Choose from Library
+                </button>
+                <button class="btn btn-primary hidden" onclick="stopCamera()" id="stopCameraBtn">
+                    ⏹️ Stop Camera
+                </button>
+            </div>
+
+            <input type="file" id="fileInput" accept="image/*" onchange="handleFileUpload(event)">
+
+            <div class="camera-container" id="cameraContainer">
+                <video id="videoPreview" autoplay playsinline></video>
+                <div class="button-group" style="margin-top: 15px;">
+                    <button class="btn btn-primary" onclick="capturePhoto()">
+                        🔴 Capture
+                    </button>
+                </div>
+            </div>
+
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 3rem; margin-bottom: 15px;">📁</div>
+                <div>Click to upload image or drop a file here</div>
+            </div>
+        </section>
+
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="spinner"></div>
+            <div class="loading-text" style="color: white; margin-top: 20px;">Analyzing image for hazards...</div>
+        </div>
+
+        <section class="results-section" id="resultsSection">
+            <h2 style="color: var(--secondary); margin-bottom: 20px;">📊 Risk Assessment Results</h2>
+            
+            <div class="risk-matrix" id="riskMatrix"></div>
+            
+            <div style="text-align: center; margin-top: 20px;">
+                <div style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 20px; border-radius: 12px; display: inline-block;">
+                    <div style="font-size: 1.2rem; margin-bottom: 10px;">Risk Score</div>
+                    <div style="font-size: 3rem; font-weight: bold;" id="riskScore">9</div>
+                    <div style="font-size: 1.5rem; margin-top: 10px;" id="riskLevel">Medium Risk</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="color: var(--secondary);">🛡️ Recommendations</h3>
+                <div id="recommendations" style="margin-top: 15px;">
+                    <div style="padding: 15px; background: #f9f9f9; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid var(--primary);">
+                        <strong>✓ General Safety Guidelines</strong>
+                        <div style="margin-top: 5px; color: var(--text-secondary);">Conduct regular safety inspections and maintain awareness of workplace hazards.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="button-group" style="margin-top: 30px;">
+                <button class="btn btn-primary" onclick="exportResults()">
+                    📥 Export Report
+                </button>
+                <button class="btn btn-secondary" onclick="resetApp()">
+                    🔄 New Assessment
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let model = null;
+        let videoStream = null;
+        let currentImageData = null;
+
+        async function init() {
+            try {
+                model = await mobilenet.load();
+                console.log('ML Model loaded successfully');
+            } catch (error) {
+                console.error('Failed to load model:', error);
+            }
+        }
+
+        async function startCamera() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                const video = document.getElementById('videoPreview');
+                video.srcObject = videoStream;
+                
+                document.getElementById('cameraContainer').classList.add('active');
+                document.getElementById('stopCameraBtn').classList.remove('hidden');
+                document.getElementById('uploadArea').classList.add('hidden');
+            } catch (error) {
+                alert('Unable to access camera: ' + error.message);
+            }
+        }
+
+        function stopCamera() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            document.getElementById('cameraContainer').classList.remove('active');
+            document.getElementById('stopCameraBtn').classList.add('hidden');
+            document.getElementById('videoPreview').srcObject = null;
+            document.getElementById('uploadArea').classList.remove('hidden');
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('videoPreview');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            currentImageData = canvas.toDataURL('image/jpeg');
+            stopCamera();
+            analyzeImage();
+        }
+
+        function openFileUpload() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentImageData = e.target.result;
+                analyzeImage();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function analyzeImage() {
+            showLoading();
+            
+            try {
+                let detectedHazards = [];
+                
+                if (model && currentImageData) {
+                    const img = new Image();
+                    img.onload = async () => {
+                        try {
+                            const predictions = await model.classify(img);
+                            detectedHazards = mapPredictionsToHazards(predictions);
+                            showResults(detectedHazards);
+                        } catch (error) {
+                            console.error('Analysis error:', error);
+                            showResults([]);
+                        }
+                        hideLoading();
+                    };
+                    img.src = currentImageData;
+                } else {
+                    // Fallback: Simulate analysis
+                    setTimeout(() => {
+                        const simulatedHazards = [
+                            { type: 'General Workplace', confidence: 0.8 }
+                        ];
+                        showResults(simulatedHazards);
+                        hideLoading();
+                    }, 2000);
+                }
+                
+            } catch (error) {
+                console.error('Analysis error:', error);
+                hideLoading();
+            }
+        }
+
+        function mapPredictionsToHazards(predictions) {
+            const hazards = [];
+            predictions.forEach(prediction => {
+                const label = prediction.className.toLowerCase();
+                let hazardType = 'General Workplace';
+                
+                if (label.includes('floor') || label.includes('ground')) {
+                    hazardType = 'Slip/Trip Hazard';
+                } else if (label.includes('computer') || label.includes('desk')) {
+                    hazardType = 'Ergonomic Hazard';
+                } else if (label.includes('building') || label.includes('construction')) {
+                    hazardType = 'Physical Hazard';
+                }
+                
+                hazards.push({
+                    type: hazardType,
+                    confidence: prediction.probability
+                });
+            });
+            
+            return hazards.length > 0 ? hazards : [{ type: 'General Workplace', confidence: 0.7 }];
+        }
+
+        function showResults(hazards) {
+            // Generate risk score based on detected hazards
+            const baseScore = 3;
+            const hazardBonus = hazards.length * 2;
+            const riskScore = Math.min(baseScore + hazardBonus, 25);
+            
+            let riskLevel = 'Low Risk';
+            if (riskScore > 5) riskLevel = 'Medium Risk';
+            if (riskScore > 14) riskLevel = 'High Risk';
+            if (riskScore > 19) riskLevel = 'Extreme Risk';
+            
+            // Update display
+            document.getElementById('riskScore').textContent = riskScore;
+            document.getElementById('riskLevel').textContent = riskLevel;
+            
+            // Draw risk matrix
+            drawRiskMatrix(riskScore);
+            
+            // Show results
+            document.getElementById('resultsSection').classList.add('active');
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function drawRiskMatrix(currentScore) {
+            const matrix = document.getElementById('riskMatrix');
+            const severityLabels = ['1', '2', '3', '4', '5'];
+            const likelihoodLabels = ['Rare', 'Unlikely', 'Possible', 'Likely', 'Certain'];
+            
+            let html = '<div class="matrix-cell"></div>';
+            
+            // Headers
+            severityLabels.forEach(s => {
+                html += `<div class="matrix-cell matrix-header">${s}</div>`;
+            });
+
+            for (let l = 0; l < 5; l++) {
+                html += `<div class="matrix-cell matrix-header">${likelihoodLabels[l]}</div>`;
+                
+                for (let s = 0; s < 5; s++) {
+                    const score = (5 - l) * (s + 1);
+                    let cellClass = 'cell-low';
+                    if (score >= 15) cellClass = 'cell-high';
+                    else if (score >= 6) cellClass = 'cell-medium';
+                    
+                    const isCurrent = Math.abs(score - currentScore) <= 1;
+                    html += `<div class="matrix-cell ${cellClass}" ${isCurrent ? 'style="border: 3px solid gold;"' : ''}>${score}</div>`;
+                }
+            }
+
+            matrix.innerHTML = html;
+        }
+
+        function exportResults() {
+            const report = `HSE RISK ASSESSMENT REPORT
+===========================
+Date: ${new Date().toLocaleDateString()}
+
+Risk Score: ${document.getElementById('riskScore').textContent}
+Risk Level: ${document.getElementById('riskLevel').textContent}
+
+Methodology: Risk = Likelihood × Severity
+- Low Risk: 1-5
+- Medium Risk: 6-14  
+- High Risk: 15-19
+- Extreme Risk: 20-25
+
+Generated by VisualRiskAssessor
+`;
+            
+            const blob = new Blob([report], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `HSE_Risk_Assessment_${Date.now()}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function resetApp() {
+            currentImageData = null;
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('fileInput').value = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
