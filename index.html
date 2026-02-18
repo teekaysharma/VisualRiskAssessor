@@ -93,7 +93,7 @@
                 <button class="btn btn-outline hidden" onclick="stopCam()" id="stopBtn">⏹️ Stop Camera</button>
             </div>
             <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
-            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
+            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline mutedwebkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"><div class="upload-icon">📁</div><div class="instr">Click to upload or drag image<br><small>JPEG, PNG, WEBP</small></div></div>
         </section>
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
