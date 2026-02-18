@@ -1,13 +1,9 @@
 package com.hse.visualriskassessor.ui.results
 
-import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.MediaStore
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -22,8 +18,6 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.hse.visualriskassessor.R
 import com.hse.visualriskassessor.analysis.RiskAssessmentEngine
-import com.hse.visualriskassessor.data.database.AppDatabase
-import com.hse.visualriskassessor.data.repository.AssessmentRepository
 import com.hse.visualriskassessor.model.AssessmentResult
 import com.hse.visualriskassessor.model.RiskLevel
 import com.hse.visualriskassessor.ui.MainActivity
@@ -32,16 +26,10 @@ import com.hse.visualriskassessor.utils.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.OutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class ResultsActivity : AppCompatActivity() {
 
     private lateinit var assessmentEngine: RiskAssessmentEngine
-    private lateinit var repository: AssessmentRepository
     private var assessmentResult: AssessmentResult? = null
 
     private lateinit var analyzedImage: ImageView
@@ -58,8 +46,6 @@ class ResultsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_results)
 
         assessmentEngine = RiskAssessmentEngine(this)
-        val db = AppDatabase.getInstance(applicationContext)
-        repository = AssessmentRepository(db.assessmentDao())
 
         setupViews()
         processImage()
@@ -105,7 +91,7 @@ class ResultsActivity : AppCompatActivity() {
         }
 
         val imageUri = Uri.parse(imageUriString)
-
+        
         analyzedImage.load(imageUri)
 
         showLoading(true, getString(R.string.analyzing_image))
@@ -113,7 +99,7 @@ class ResultsActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 updateLoadingMessage(getString(R.string.detecting_hazards))
-
+                
                 val result = withContext(Dispatchers.Default) {
                     val bitmap = ImageUtils.loadBitmapFromUri(this@ResultsActivity, imageUri)
                     if (bitmap != null) {
@@ -124,11 +110,10 @@ class ResultsActivity : AppCompatActivity() {
                 }
 
                 updateLoadingMessage(getString(R.string.calculating_risk))
-
+                
                 assessmentResult = result
-                saveAssessmentToHistory(result)
                 displayResults(result)
-
+                
                 showLoading(false)
             } catch (e: Exception) {
                 showLoading(false)
@@ -139,14 +124,6 @@ class ResultsActivity : AppCompatActivity() {
                 ).show()
                 finish()
             }
-        }
-    }
-
-    private suspend fun saveAssessmentToHistory(result: AssessmentResult) {
-        try {
-            repository.saveAssessment(result)
-        } catch (e: Exception) {
-            // History save failure is non-critical - results still shown
         }
     }
 
@@ -191,110 +168,17 @@ class ResultsActivity : AppCompatActivity() {
 
     private fun saveReport() {
         val result = assessmentResult ?: return
-
-        lifecycleScope.launch {
-            try {
-                val reportContent = buildReportContent(result)
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = "HSE_Risk_Report_$timestamp.txt"
-
-                withContext(Dispatchers.IO) {
-                    writeReportToDownloads(fileName, reportContent)
-                }
-
-                Toast.makeText(this@ResultsActivity, getString(R.string.report_saved), Toast.LENGTH_LONG).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@ResultsActivity, getString(R.string.report_save_failed), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    private fun writeReportToDownloads(fileName: String, content: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                put(MediaStore.Downloads.MIME_TYPE, "text/plain")
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
-                ?: throw Exception("Failed to create file in Downloads")
-            contentResolver.openOutputStream(uri)?.use { stream ->
-                writeContent(stream, content)
-            }
-        } else {
-            val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            if (!downloadsDir.exists()) downloadsDir.mkdirs()
-            val file = File(downloadsDir, fileName)
-            file.writeText(content)
-        }
-    }
-
-    private fun writeContent(stream: OutputStream, content: String) {
-        stream.write(content.toByteArray(Charsets.UTF_8))
-    }
-
-    private fun buildReportContent(result: AssessmentResult): String {
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        return buildString {
-            appendLine("=" .repeat(60))
-            appendLine("HSE RISK ASSESSMENT REPORT")
-            appendLine("Visual Risk Assessor - ISO 45001 Aligned")
-            appendLine("=".repeat(60))
-            appendLine()
-            appendLine("Date: ${dateFormat.format(result.timestamp)}")
-            appendLine("Assessment ID: ${result.id}")
-            appendLine("Analysis Time: ${result.analysisTimeMs}ms")
-            appendLine()
-            appendLine("-".repeat(60))
-            appendLine("OVERALL RISK LEVEL: ${result.overallRiskLevel.displayName}")
-            appendLine("-".repeat(60))
-            appendLine()
-            appendLine(result.getSummary())
-            appendLine()
-            appendLine("-".repeat(60))
-            appendLine("HAZARDS IDENTIFIED (${result.hazards.size})")
-            appendLine("-".repeat(60))
-            appendLine()
-            if (result.hazards.isEmpty()) {
-                appendLine("No significant hazards detected.")
-            } else {
-                result.hazards.forEachIndexed { index, hazard ->
-                    appendLine("${index + 1}. ${hazard.type.displayName}")
-                    appendLine("   Risk Level: ${hazard.riskLevel.displayName}")
-                    appendLine("   Likelihood: ${hazard.likelihood}/5")
-                    appendLine("   Severity:   ${hazard.severity}/5")
-                    appendLine("   Risk Score: ${hazard.riskScore}/25")
-                    appendLine("   Confidence: ${(hazard.confidence * 100).toInt()}%")
-                    hazard.details?.let { appendLine("   Details: $it") }
-                    hazard.location?.let { appendLine("   Location: $it") }
-                    appendLine()
-                }
-            }
-            appendLine("-".repeat(60))
-            appendLine("RECOMMENDED CONTROL MEASURES")
-            appendLine("-".repeat(60))
-            appendLine()
-            val recommendations = result.getAllRecommendations()
-            if (recommendations.isEmpty()) {
-                appendLine("Continue regular safety monitoring procedures.")
-            } else {
-                recommendations.forEachIndexed { index, rec ->
-                    appendLine("${index + 1}. $rec")
-                }
-            }
-            appendLine()
-            appendLine("=".repeat(60))
-            appendLine("DISCLAIMER: This report is generated by an automated")
-            appendLine("system and should be reviewed by a qualified safety")
-            appendLine("professional. Always follow your organisation's safety")
-            appendLine("procedures and local regulations.")
-            appendLine("=".repeat(60))
-        }
+        
+        Toast.makeText(
+            this,
+            "Report saved: ${result.hazards.size} hazards detected",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun shareReport() {
         val result = assessmentResult ?: return
-
+        
         val shareText = buildString {
             append("HSE Risk Assessment Report\n\n")
             append("Overall Risk: ${result.overallRiskLevel.displayName}\n\n")
