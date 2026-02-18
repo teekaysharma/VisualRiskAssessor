@@ -93,7 +93,7 @@
                 <button class="btn btn-outline hidden" onclick="stopCam()" id="stopBtn">⏹️ Stop Camera</button>
             </div>
             <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
-            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
+            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline mutedwebkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"><div class="upload-icon">📁</div><div class="instr">Click to upload or drag image<br><small>JPEG, PNG, WEBP</small></div></div>
         </section>
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
@@ -124,7 +124,59 @@
     };
     let model=null,video=null,imgData=null,hazards=[],overallScore=0;
     async function init(){try{model=await mobilenet.load();console.log('Model loaded')}catch(e){console.log('Model failed')}}
-    async function startCam(){try{video=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});document.getElementById('videoPreview').srcObject=video;document.getElementById('camSec').classList.add('active');document.getElementById('uploadArea').classList.add('hidden');document.getElementById('stopBtn').classList.remove('hidden');}catch(e){alert('Camera error: '+e.message)}}
+    async function startCam(){
+        const constraints = {
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: "environment"
+            }
+        };
+        
+        try {
+            // Try with rear camera first
+            let stream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // If rear camera fails, try front camera
+            if (!stream.getVideoTracks().length) {
+                stream.getTracks().forEach(track => track.stop());
+                constraints.video.facingMode = "user";
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+            }
+            
+            const videoEl = document.getElementById("videoPreview");
+            videoEl.srcObject = stream;
+            
+            // Wait for video to load
+            videoEl.onloadedmetadata = () => {
+                videoEl.play();
+                document.getElementById("camSec").classList.add("active");
+                document.getElementById("uploadArea").classList.add("hidden");
+                document.getElementById("stopBtn").classList.remove("hidden");
+            };
+            
+        } catch (error) {
+            console.error("Camera error:", error);
+            
+            let errorMessage = "Unable to access camera. ";
+            
+            if (error.name === "NotAllowedError") {
+                errorMessage += "Please allow camera permission and try again.";
+            } else if (error.name === "NotFoundError") {
+                errorMessage += "No camera found on this device.";
+            } else if (error.name === "NotReadableError") {
+                errorMessage += "Camera is being used by another application.";
+            } else {
+                errorMessage += "Please use the upload feature instead.";
+            }
+            
+            // Show more detailed error and suggest upload
+            const shouldUpload = confirm(errorMessage + "\n\nWould you like to upload an image instead?");
+            if (shouldUpload) {
+                document.getElementById("fileInput").click();
+            }
+        }
+    }
     function stopCam(){if(video){video.getTracks().forEach(t=>t.stop());video=null;}document.getElementById('camSec').classList.remove('active');document.getElementById('uploadArea').classList.remove('hidden');document.getElementById('stopBtn').classList.add('hidden');}
     function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
     function handleFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=function(e){imgData=e.target.result;analyze(imgData);};r.readAsDataURL(f);}
@@ -136,11 +188,113 @@
     function display(){document.getElementById('resultImg').src=imgData;const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
     function drawMatrix(){const m=document.getElementById('riskMatrix');let html='<div class="matrix-cell"></div>';['1','2','3','4','5'].forEach(s=>html+=`<div class="matrix-cell matrix-header">S:${s}</div>`);for(let l=0;l<5;l++){html+=`<div class="matrix-cell matrix-header">L:${l+1}</div>`;for(let s=0;s<5;s++){const sc=(l+1)*(s+1),cls=sc>=20?'cell-extreme':sc>=15?'cell-high':sc>=6?'cell-medium':'cell-low',mk=hazards.some(h=>h.risk===sc)?'current-marker':'';html+=`<div class="matrix-cell ${cls} ${mk}">${sc}</div>`;}}m.innerHTML=html;}
     function dispRecs(){const recs=[];hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!recs.find(x=>x.t===r.t))recs.push(r);});});recs.push({i:"📋",t:"Regular Audits",d:"Conduct routine safety inspections"},{i:"📢",t:"Report Hazards",d:"Encourage immediate hazard reporting"});document.getElementById('recsList').innerHTML=recs.map(r=>`<div class="rec-item"><div class="rec-icon">${r.i}</div><div class="rec-content"><h4>${r.t}</h4><p>${r.d}</p></div></div>`).join('');}
-    function exportReport(){const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'],r=getRisk(overallScore);let rep=`╔═══════════════════════════════════════════════════════════════╗\n║              HSE RISK ASSESSMENT REPORT                       ║\n╚═══════════════════════════════════════════════════════════════╝\n\nDate: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n\n═══════════════════════════════════════════════════════════════\n                    OVERALL RISK ASSESSMENT\n═══════════════════════════════════════════════════════════════\n\nRISK SCORE: ${overallScore}\nRISK LEVEL: ${r.l.toUpperCase()} RISK\n\n═══════════════════════════════════════════════════════════════\n                    DETECTED HAZARDS\n═══════════════════════════════════════════════════════════════\n\n`;hazards.forEach((h,i)=>{const r=getRisk(h.risk);rep+=`\nHAZARD #${i+1}: ${h.name}\n─────────────────────────────────────────\nCategory: ${h.name.includes('Electrical')?'Electrical':h.name.includes('Fire')?'Fire':h.name.includes('Floor')||h.name.includes('Stair')?'Slip/Trip':h.name.includes('Chemical')?'Chemical':h.name.includes('Machine')?'Machinery':h.name.includes('Height')?'Physical':h.name.includes('ergo')?'Ergonomic':'General'}\nConfidence: ${Math.round(h.conf*100)}%\nLikelihood: ${h.L} - ${L[h.L-1]}\nSeverity: ${h.S} - ${S[h.S]}\nRisk Score: ${h.risk}\nRisk Level: ${r.l}\n\n`;});rep+=`\n═══════════════════════════════════════════════════════════════\n                    RISK MATRIX\n═══════════════════════════════════════════════════════════════\n\n        Severity →\nLikelihood   1   2   3   4   5\n──────────────────────────────────\n    1       1   2   3   4   5\n    2       2   4   6   8  10\n    3       3   6   9  12  15\n    4       4   8  12  16  20\n    5       5  10  15  20  25\n\nLegend: 🟢 Low(1-5) | 🟡 Medium(6-14) | 🔴 High(15-19) | ⚫ Extreme(20-25)\n\n═══════════════════════════════════════════════════════════════\n                    RECOMMENDATIONS\n═══════════════════════════════════════════════════════════════\n\n`;const recs=[];hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!recs.find(x=>x.t===r.t))recs.push(r);});});recs.forEach((r,i)=>{rep+=`\n${i+1}. ${r.t}\n   ${r.d}\n`;});rep+="\n\n═══════════════════════════════════════════════════════════════\n                    METHODOLOGY\n═══════════════════════════════════════════════════════════════\n\nRisk = Likelihood × Severity\n\nLikelihood: 1=Rare,2=Unlikely,3=Possible,4=Likely,5=Almost Certain\nSeverity: 1=Insignificant,2=Minor,3=Moderate,4=Major,5=Catastrophic\n\nGenerated by VisualRiskAssessor\n";const b=new Blob([rep],{type:'text/plain'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=`HSE_Risk_Assessment_${new Date().toISOString().slice(0,10)}.txt`;a.click();URL.revokeObjectURL(u);}
-    function showLoad(){document.getElementById('loading').classList.add('active');}
-    function hideLoad(){document.getElementById('loading').classList.remove('active');}
-    function resetApp(){imgData=null;hazards=[];overallScore=0;document.getElementById('results').classList.remove('active');document.getElementById('inputSec').classList.remove('hidden');document.getElementById('fileInput').value='';window.scrollTo({top:0,behavior:'smooth'});}
-    window.addEventListener('load',init);
-    </script>
-</body>
-</html>
+    function exportReport(){
+        const L=['Rare','Unlikely','Possible','Likely','Certain'];
+        const S=[ '','Insignificant','Minor','Moderate','Major','Catastrophic'];
+        const now=new Date();
+        const r=getRisk(overallScore);
+        let rep=`
+
+                    OCCUPATIONAL HEALTH & SAFETY RISK ASSESSMENT
+                              ISO 45001:2018 COMPLIANT
+
+
+DOCUMENT REFERENCE:    HSE-RA-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${(now.getDate()).toString().padStart(2,'0')}-${Date.now().toString().slice(-6)}
+ASSESSMENT DATE:     ${now.toLocaleDateString()}
+ASSESSMENT TIME:     ${now.toLocaleTimeString()}
+METHODOLOGY:         ISO 45001:2018 / ISO 31000:2018
+
+
+                          ASSESSMENT SUMMARY
+
+
+OVERALL RISK RATING:     ${r.l.toUpperCase()}
+RISK SCORE:             ${overallScore} / 25
+HAZARDS IDENTIFIED:     ${hazards.length}
+
+
+RISK MATRIX
+
+        Severity  1    2    3    4    5
+Likelihood
+    1         1    2    3    4    5   Rare
+    2         2    4    6    8   10   Unlikely
+    3         3    6    9   12   15   Possible
+    4         4    8   12   16   20   Likely
+    5         5   10   15   20   25   Certain
+
+
+                          HAZARDS IDENTIFIED
+
+`;
+        hazards.forEach((h,i)=>{
+            const risk=getRisk(h.risk);
+            rep+=`
+--------------------------------------------------------------------------------
+HAZARD #${i+1}: ${h.name.toUpperCase()}
+--------------------------------------------------------------------------------
+CATEGORY:              ${h.category || 'Workplace Hazard'}
+CONFIDENCE:           ${Math.round(h.conf*100)}%
+
+RISK ANALYSIS:
+  Likelihood:       ${h.L} - ${L[h.L-1]}
+  Severity:         ${h.S} - ${S[h.S]}
+  Risk Score:       ${h.risk}
+  Risk Level:       ${risk.l.toUpperCase()}
+
+CONTROLS REQUIRED:
+`;
+            if(h.recs){h.recs.forEach((rec,idx)=>{rep+=`  ${idx+1}. ${rec.t} - ${rec.d}`;});}
+            rep+="
+";
+        });
+        rep+=`
+
+
+                          RISK CLASSIFICATION
+
+
+ EXTREME (20-25): Immediate action - STOP WORK until controlled
+
+
+                          RECOMMENDATIONS
+
+`;
+        const uniqueRecs=[];
+        hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!uniqueRecs.find(x=>x.t===r.t))uniqueRecs.push(r);});});
+        uniqueRecs.forEach((rec,i)=>{const priority=i<3?'HIGH':i<6?'MEDIUM':'LOW';rep+=`
+${i+1}. [${priority}] ${rec.t}
+   Action: ${rec.d}`;});
+        rep+=`
+
+
+                          ISO 45001:2018 COMPLIANCE
+
+
+This assessment complies with:
+ ISO 45001:2018 - Occupational health and safety management
+ ISO 31000:2018 - Risk management
+ ISO 45002:2021 - OHS management in practice
+
+KEY CLAUSES: 6.1.2 Hazard ID, 6.1.2.2 Risk Assessment, 8.1.1 Planning
+
+
+                          SIGNATURES
+
+
+Assessor: __________________  Date: __________
+Manager:  __________________  Date: __________
+Next Review: ${new Date(now.getTime()+90*24*60*60*1000).toLocaleDateString()} (90 days)
+
+
+                    Generated: ${now.toLocaleString()}
+              VisualRiskAssessor - ISO 45001 Compliant
+`;
+        const b=new Blob([rep],{type:'text/plain'});
+        const u=URL.createObjectURL(b);
+        const a=document.createElement('a');
+        a.href=u;
+        a.download=`HSE_Risk_Assessment_${now.toISOString().slice(0,10)}_ISO45001.txt`;
+        a.click();
+        URL.revokeObjectURL(u);
+    }
