@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Visual Risk Assessor</string>
+    
+    <!-- Main Screen -->
+    <string name="main_title">HSE Risk Assessment</string>
+    <string name="main_subtitle">Assess workplace hazards instantly</string>
+    <string name="btn_take_photo">Take Photo</string>
+    <string name="btn_choose_photo">Choose from Library</string>
+    <string name="btn_view_history">View History</string>
+    <string name="btn_about">About</string>
+    
+    <!-- Permissions -->
+    <string name="permission_camera_title">Camera Permission Required</string>
+    <string name="permission_camera_message">Camera access is needed to capture workplace images for risk assessment.</string>
+    <string name="permission_storage_title">Storage Permission Required</string>
+    <string name="permission_storage_message">Storage access is needed to select images from your photo library.</string>
+    <string name="permission_denied">Permission denied. Please enable in settings.</string>
+    <string name="btn_grant_permission">Grant Permission</string>
+    <string name="btn_settings">Open Settings</string>
+    
+    <!-- Camera Screen -->
+    <string name="camera_instructions">Point camera at workplace area to assess</string>
+    <string name="btn_capture">Capture</string>
+    <string name="btn_flash">Flash</string>
+    <string name="btn_switch_camera">Switch</string>
+    <string name="camera_error">Camera initialization failed</string>
+    
+    <!-- Analysis -->
+    <string name="analyzing_image">Analyzing image for hazards…</string>
+    <string name="detecting_hazards">Detecting potential hazards…</string>
+    <string name="calculating_risk">Calculating risk levels…</string>
+    <string name="generating_report">Generating assessment report…</string>
+    <string name="analysis_complete">Analysis complete</string>
+    <string name="analysis_error">Analysis failed. Please try again.</string>
+    
+    <!-- Results Screen -->
+    <string name="results_title">Risk Assessment Report</string>
+    <string name="hazards_detected">Hazards Detected</string>
+    <string name="overall_risk_level">Overall Risk Level</string>
+    <string name="risk_matrix">Risk Matrix</string>
+    <string name="recommendations">Recommendations</string>
+    <string name="btn_save_report">Save Report</string>
+    <string name="btn_share_report">Share Report</string>
+    <string name="btn_new_assessment">New Assessment</string>
+    <string name="no_hazards_detected">No significant hazards detected</string>
+    <string name="no_hazards_message">The analyzed image appears to show a low-risk environment. Continue regular safety monitoring.</string>
+    
+    <!-- Risk Levels -->
+    <string name="risk_low">Low Risk</string>
+    <string name="risk_medium">Medium Risk</string>
+    <string name="risk_high">High Risk</string>
+    <string name="risk_very_high">Very High Risk</string>
+    <string name="risk_extreme">Extreme Risk</string>
+    
+    <!-- Hazard Types -->
+    <string name="hazard_slip_trip">Slip, Trip &amp; Fall</string>
+    <string name="hazard_electrical">Electrical Hazard</string>
+    <string name="hazard_chemical">Chemical Exposure</string>
+    <string name="hazard_fire">Fire Hazard</string>
+    <string name="hazard_machinery">Machinery Risk</string>
+    <string name="hazard_height">Working at Height</string>
+    <string name="hazard_ergonomic">Ergonomic Issue</string>
+    <string name="hazard_ppe">PPE Missing</string>
+    <string name="hazard_other">Other Hazard</string>
+    
+    <!-- Risk Matrix Labels -->
+    <string name="likelihood">Likelihood</string>
+    <string name="severity">Severity</string>
+    <string name="likelihood_rare">Rare</string>
+    <string name="likelihood_unlikely">Unlikely</string>
+    <string name="likelihood_possible">Possible</string>
+    <string name="likelihood_likely">Likely</string>
+    <string name="likelihood_certain">Certain</string>
+    <string name="severity_negligible">Negligible</string>
+    <string name="severity_minor">Minor</string>
+    <string name="severity_moderate">Moderate</string>
+    <string name="severity_major">Major</string>
+    <string name="severity_catastrophic">Catastrophic</string>
+    
+    <!-- History -->
+    <string name="history_title">Assessment History</string>
+    <string name="history_empty">No assessments yet</string>
+    <string name="history_empty_message">Start by taking a photo or selecting from your library</string>
+    <string name="btn_delete">Delete</string>
+    <string name="delete_confirmation">Delete this assessment?</string>
+    
+    <!-- General -->
+    <string name="btn_close">Close</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_ok">OK</string>
+    <string name="btn_retry">Retry</string>
+    <string name="loading">Loading…</string>
+    <string name="error_occurred">An error occurred</string>
+    <string name="success">Success</string>
+    
+    <!-- About -->
+    <string name="about_title">About Visual Risk Assessor</string>
+    <string name="about_description">Visual Risk Assessor uses advanced computer vision and machine learning to identify workplace hazards and assess HSE risks in real-time.</string>
+    <string name="about_version">Version %s</string>
+    <string name="about_disclaimer">This tool provides guidance only. Always follow your organization\'s safety procedures and consult qualified safety professionals.</string>
+</resources>
