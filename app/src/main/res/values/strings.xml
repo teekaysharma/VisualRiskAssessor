@@ -94,9 +94,15 @@
     <string name="error_occurred">An error occurred</string>
     <string name="success">Success</string>
     
+    <!-- Report -->
+    <string name="report_saved">Report saved to Downloads</string>
+    <string name="report_save_failed">Failed to save report</string>
+    <string name="report_filename_prefix">HSE_Risk_Report</string>
+    
     <!-- About -->
     <string name="about_title">About Visual Risk Assessor</string>
     <string name="about_description">Visual Risk Assessor uses advanced computer vision and machine learning to identify workplace hazards and assess HSE risks in real-time.</string>
     <string name="about_version">Version %s</string>
     <string name="about_disclaimer">This tool provides guidance only. Always follow your organization\'s safety procedures and consult qualified safety professionals.</string>
+
 </resources>
