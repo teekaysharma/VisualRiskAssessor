@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visual Risk Assessor – HSE AI Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+header{background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;padding:1.5rem 2rem;display:flex;align-items:center;gap:1rem;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+header h1{font-size:1.6rem;font-weight:700}
+header p{font-size:.9rem;opacity:.85}
+.badge{background:#ff6f00;color:#fff;font-size:.7rem;padding:2px 8px;border-radius:12px;font-weight:600;text-transform:uppercase;margin-left:.5rem}
+main{max-width:900px;margin:2rem auto;padding:0 1rem}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:1.5rem;margin-bottom:1.5rem}
+.card h2{font-size:1.1rem;font-weight:600;margin-bottom:1rem;color:#1565c0}
+.input-section{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media(max-width:600px){.input-section{grid-template-columns:1fr}}
+.btn{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem 1rem;border:2px dashed #90caf9;border-radius:10px;cursor:pointer;transition:all .2s;background:#e3f2fd;color:#1565c0;font-size:.95rem;font-weight:500;gap:.5rem}
+.btn:hover{background:#bbdefb;border-color:#1565c0}
+.btn.primary-btn{border:none;background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;padding:1rem 2rem;border-radius:8px;font-size:1rem;cursor:pointer;width:100%;margin-top:1rem}
+.btn.primary-btn:hover{background:linear-gradient(135deg,#0d47a1,#1565c0)}
+.btn.primary-btn:disabled{background:#b0bec5;cursor:not-allowed}
+.btn.secondary-btn{border:2px solid #1565c0;background:#fff;color:#1565c0;padding:.75rem 1.5rem;border-radius:8px;font-size:.95rem;cursor:pointer;margin:.25rem}
+.btn.secondary-btn:hover{background:#e3f2fd}
+.btn-icon{font-size:2rem}
+.preview-area{text-align:center}
+#previewImg{max-width:100%;max-height:300px;border-radius:8px;display:none;margin:0 auto}
+.hidden{display:none!important}
+.results-section{display:none}
+.results-section.active{display:block}
+.risk-badge{display:inline-block;padding:.4rem 1.2rem;border-radius:20px;font-weight:700;font-size:1.1rem;color:#fff;margin-bottom:.5rem}
+.risk-LOW{background:#388e3c}
+.risk-MEDIUM{background:#f57c00}
+.risk-HIGH{background:#e64a19}
+.risk-VERY_HIGH{background:#c62828}
+.risk-EXTREME{background:#880e4f}
+.hazard-item{border-left:4px solid #1565c0;padding:.75rem 1rem;margin:.5rem 0;background:#f8f9fa;border-radius:0 8px 8px 0}
+.hazard-item.EXTREME,.hazard-item.VERY_HIGH{border-color:#c62828}
+.hazard-item.HIGH{border-color:#e64a19}
+.hazard-item.MEDIUM{border-color:#f57c00}
+.hazard-item.LOW{border-color:#388e3c}
+.hazard-title{font-weight:600;font-size:.95rem}
+.hazard-meta{font-size:.82rem;color:#546e7a;margin-top:.25rem}
+.hazard-score{font-size:.8rem;background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;display:inline-block;margin-top:.3rem}
+.recommendations-list{list-style:none;padding:0}
+.recommendations-list li{padding:.5rem 0;border-bottom:1px solid #eceff1;font-size:.9rem}
+.recommendations-list li:last-child{border-bottom:none}
+.recommendations-list li::before{content:"✓ ";color:#388e3c;font-weight:700}
+.matrix{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;margin-top:.5rem}
+.cell{padding:.4rem;text-align:center;border-radius:4px;font-size:.7rem;font-weight:600;color:#fff;min-height:36px;display:flex;align-items:center;justify-content:center}
+.action-buttons{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}
+.alert{padding:1rem;border-radius:8px;margin-bottom:1rem;font-size:.9rem}
+.alert-warning{background:#fff8e1;border-left:4px solid #ffc107;color:#5d4037}
+.alert-error{background:#ffebee;border-left:4px solid #f44336;color:#b71c1c}
+.alert-info{background:#e3f2fd;border-left:4px solid #2196f3;color:#0d47a1}
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:#fff;gap:1rem}
+.spinner{width:48px;height:48px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.model-status{font-size:.8rem;padding:.4rem .8rem;border-radius:12px;display:inline-block;margin-bottom:.5rem}
+.model-loading{background:#fff8e1;color:#e65100}
+.model-ready{background:#e8f5e9;color:#1b5e20}
+.model-error{background:#ffebee;color:#b71c1c}
+footer{text-align:center;padding:2rem;color:#78909c;font-size:.82rem}
+video{width:100%;max-height:300px;border-radius:8px;background:#000;display:none}
+#cameraControls{text-align:center;margin-top:.5rem;display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚠️ Visual Risk Assessor <span class="badge">AI</span></h1>
+    <p>Assess HSE risks instantly from workplace images</p>
+  </div>
+</header>
+
+<main>
+  <div id="httpsWarning" class="alert alert-warning hidden">
+    <strong>⚠️ Camera Requires HTTPS:</strong> You're browsing over HTTP. Camera capture may not work. Use the file upload option or access this page over HTTPS.
+  </div>
+
+  <div id="modelStatusBar" class="card">
+    <span id="modelStatus" class="model-status model-loading">⏳ Loading AI model…</span>
+    <span id="modelStatusMsg"> Please wait before analysing.</span>
+  </div>
+
+  <div id="inputSec" class="card">
+    <h2>📸 Capture or Upload Workplace Image</h2>
+    <div class="input-section">
+      <div class="btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+        <span class="btn-icon">📁</span>
+        <span>Upload Image</span>
+        <small style="color:#546e7a">JPG, PNG, WEBP</small>
+      </div>
+      <div class="btn" id="cameraBtn" onclick="startCamera()">
+        <span class="btn-icon">📷</span>
+        <span>Use Camera</span>
+        <small style="color:#546e7a">Live capture</small>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+
+    <video id="cameraFeed" autoplay playsinline muted webkit-playsinline></video>
+    <div id="cameraControls">
+      <button class="btn secondary-btn" onclick="captureFrame()">📸 Capture</button>
+      <button class="btn secondary-btn" onclick="stopCamera()">✕ Cancel</button>
+    </div>
+
+    <div class="preview-area" id="previewArea" style="margin-top:1rem">
+      <img id="previewImg" alt="Preview">
+    </div>
+
+    <button class="btn primary-btn" id="analyzeBtn" onclick="analyzeImage()" disabled>
+      🔍 Analyse for Hazards
+    </button>
+  </div>
+
+  <div id="results" class="results-section">
+    <div class="card" id="riskSummaryCard">
+      <h2>📊 Risk Assessment Summary</h2>
+      <div id="riskBadgeContainer"></div>
+      <p id="riskSummary" style="margin-top:.5rem;color:#546e7a"></p>
+      <p style="font-size:.8rem;margin-top:.5rem;color:#90a4ae">Analysis time: <span id="analysisTime"></span></p>
+    </div>
+
+    <div class="card" id="hazardsCard">
+      <h2>🚨 Identified Hazards</h2>
+      <div id="hazardsList"></div>
+    </div>
+
+    <div class="card" id="matrixCard">
+      <h2>🔢 Risk Matrix</h2>
+      <p style="font-size:.8rem;color:#546e7a;margin-bottom:.5rem">5×5 likelihood × severity matrix (darker = higher risk)</p>
+      <div class="matrix" id="riskMatrix"></div>
+    </div>
+
+    <div class="card" id="recsCard">
+      <h2>✅ Recommended Control Measures</h2>
+      <ul class="recommendations-list" id="recsList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>📄 Actions</h2>
+      <div class="action-buttons">
+        <button class="btn secondary-btn" onclick="saveReport()">💾 Save Report</button>
+        <button class="btn secondary-btn" onclick="printReport()">🖨️ Print Report</button>
+        <button class="btn secondary-btn" onclick="resetApp()">🔄 New Assessment</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="alert alert-info">
+    <strong>ℹ️ Disclaimer:</strong> This tool provides automated guidance only. Always consult a qualified safety professional and follow your organisation's safety procedures.
+  </div>
+</main>
+
+<footer>Visual Risk Assessor &copy; 2026 &mdash; ISO 45001 Aligned &mdash; <a href="https://github.com/TKSharma" style="color:#1565c0">TKSharma</a></footer>
+
+<div id="loadingOverlay" class="loading-overlay hidden">
+  <div class="spinner"></div>
+  <p id="loadingMsg">Analysing image…</p>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+var model = null;
+var modelReady = false;
+var imgData = null;
+var hazards = [];
+var overallScore = 0;
+var cameraStream = null;
+
+// ─── Hazard definitions ───────────────────────────────────────────────────────
+var HAZARD_KEYWORDS = {
+  'Electrical Hazard':  {kw:['wire','cable','electric','outlet','plug','panel','socket','cord'],sev:4,color:'#e64a19'},
+  'Fire Hazard':        {kw:['fire','flame','smoke','gas','flammable','candle','lighter'],sev:4,color:'#c62828'},
+  'Chemical Exposure':  {kw:['bottle','container','barrel','chemical','drum','tank','liquid'],sev:4,color:'#880e4f'},
+  'Working at Height':  {kw:['ladder','scaffold','roof','height','step','elevated','platform'],sev:4,color:'#c62828'},
+  'Machinery Risk':     {kw:['machine','motor','equipment','gear','tool','drill','saw','press'],sev:3,color:'#e64a19'},
+  'Slip / Trip / Fall': {kw:['floor','wet','slippery','obstacle','debris','cord','step'],sev:3,color:'#f57c00'},
+  'PPE Missing':        {kw:['helmet','hard hat','glove','safety','vest','goggles','mask'],sev:3,color:'#f57c00'},
+  'Ergonomic Issue':    {kw:['box','carry','lift','load','posture','desk','chair','monitor'],sev:2,color:'#388e3c'},
+  'Struck By Object':   {kw:['shelf','stack','object','hanging','suspended','overhead','crane'],sev:3,color:'#f57c00'}
+};
+
+var RECOMMENDATIONS = {
+  'Electrical Hazard':  ['Isolate and lockout exposed electrical equipment','Ensure all electrical work is by qualified personnel','Implement regular electrical safety inspections','Provide appropriate PPE (insulated gloves, tools)'],
+  'Fire Hazard':        ['Remove or properly store flammable materials','Ensure fire extinguishers are accessible and maintained','Install and test smoke detectors regularly','Create and practise emergency evacuation plans'],
+  'Chemical Exposure':  ['Ensure proper storage and labelling of chemicals','Provide appropriate PPE (gloves, goggles, respirators)','Maintain Safety Data Sheets (SDS) accessibility','Implement proper ventilation systems'],
+  'Working at Height':  ['Install guardrails and fall protection systems','Ensure workers use appropriate fall arrest equipment','Provide training on working at height procedures','Inspect all fall protection equipment regularly'],
+  'Machinery Risk':     ['Install proper machine guarding','Implement lockout/tagout (LOTO) procedures','Provide comprehensive operator training','Conduct regular machinery maintenance','Install emergency stop buttons'],
+  'Slip / Trip / Fall': ['Clear walkways of obstacles and debris','Ensure proper lighting in all areas','Install non-slip surfaces or mats','Mark wet or slippery areas with warning signs'],
+  'PPE Missing':        ['Ensure appropriate PPE is provided and available','Conduct PPE training and fit testing','Implement PPE inspection and maintenance programmes'],
+  'Ergonomic Issue':    ['Adjust workstations to proper ergonomic height','Provide mechanical aids for lifting and handling','Implement job rotation to reduce repetitive strain','Train workers on proper lifting techniques'],
+  'Struck By Object':   ['Establish exclusion zones around moving equipment','Install protective barriers or screens','Use high-visibility clothing in active areas','Secure materials to prevent falling objects']
+};
+
+// ─── Model loading ────────────────────────────────────────────────────────────
+function setModelStatus(state, msg) {
+  var el = document.getElementById('modelStatus');
+  var msgEl = document.getElementById('modelStatusMsg');
+  el.className = 'model-status model-' + state;
+  el.textContent = {loading:'⏳ Loading AI model…', ready:'✅ AI model ready', error:'❌ Model unavailable'}[state] || msg;
+  msgEl.textContent = msg || '';
+}
+
+async function loadModel() {
+  try {
+    if (typeof tf === 'undefined' || typeof mobilenet === 'undefined') {
+      throw new Error('TensorFlow.js libraries not loaded');
+    }
+    model = await mobilenet.load({version: 2, alpha: 1.0});
+    modelReady = true;
+    setModelStatus('ready', ' Ready to analyse images.');
+    document.getElementById('modelStatusBar').style.borderLeft = '4px solid #388e3c';
+  } catch (e) {
+    modelReady = false;
+    setModelStatus('error', ' AI model failed to load. Keyword-based fallback will be used.');
+    document.getElementById('modelStatusBar').style.borderLeft = '4px solid #f44336';
+    console.warn('Model load error:', e);
+  }
+}
+
+// ─── HTTPS check ──────────────────────────────────────────────────────────────
+function checkHttps() {
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    document.getElementById('httpsWarning').classList.remove('hidden');
+  }
+}
+
+// ─── File handling ────────────────────────────────────────────────────────────
+function handleFileSelect(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    alert('Please select a valid image file (JPG, PNG, or WEBP).');
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    imgData = e.target.result;
+    showPreview(imgData);
+  };
+  reader.onerror = function() {
+    alert('Failed to read file. Please try again.');
+  };
+  reader.readAsDataURL(file);
+}
+
+function showPreview(src) {
+  var img = document.getElementById('previewImg');
+  img.src = src;
+  img.style.display = 'block';
+  var analyzeBtn = document.getElementById('analyzeBtn');
+  analyzeBtn.disabled = false;
+}
+
+// ─── Camera ───────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}, audio: false});
+    var video = document.getElementById('cameraFeed');
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    document.getElementById('cameraControls').style.display = 'block';
+  } catch (e) {
+    var msg = e.name === 'NotAllowedError'
+      ? 'Camera permission denied. Please allow camera access or use the file upload option.'
+      : 'Could not access camera: ' + e.message + '. Please use file upload instead.';
+    alert(msg);
+  }
+}
+
+function captureFrame() {
+  var video = document.getElementById('cameraFeed');
+  var canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  imgData = canvas.toDataURL('image/jpeg', 0.9);
+  showPreview(imgData);
+  stopCamera();
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(function(t) { t.stop(); });
+    cameraStream = null;
+  }
+  var video = document.getElementById('cameraFeed');
+  video.style.display = 'none';
+  video.srcObject = null;
+  document.getElementById('cameraControls').style.display = 'none';
+}
+
+// ─── Analysis ─────────────────────────────────────────────────────────────────
+async function analyzeImage() {
+  if (!imgData) {
+    alert('Please select or capture an image first.');
+    return;
+  }
+
+  showLoading(true, 'Analysing image for hazards…');
+  hazards = [];
+
+  var t0 = Date.now();
+
+  try {
+    if (modelReady && model) {
+      showLoading(true, 'Running ML detection…');
+      var img = document.getElementById('previewImg');
+      var predictions = await model.classify(img, 10);
+      hazards = detectHazardsFromPredictions(predictions);
+    } else {
+      showLoading(true, 'Using keyword analysis…');
+      hazards = detectHazardsFromKeywords();
+    }
+  } catch (e) {
+    console.warn('ML analysis failed, falling back to keyword detection:', e);
+    showLoading(true, 'ML failed – using keyword fallback…');
+    hazards = detectHazardsFromKeywords();
+  }
+
+  var elapsed = Date.now() - t0;
+  showLoading(false);
+  displayResults(elapsed);
+}
+
+function detectHazardsFromPredictions(predictions) {
+  var found = [];
+  predictions.forEach(function(pred) {
+    var label = (pred.className || '').toLowerCase();
+    var conf = pred.probability || 0;
+    Object.keys(HAZARD_KEYWORDS).forEach(function(hazardName) {
+      var def = HAZARD_KEYWORDS[hazardName];
+      def.kw.forEach(function(kw) {
+        if (label.indexOf(kw) !== -1 && !found.find(function(h) { return h.name === hazardName; })) {
+          var likelihood = conf > 0.6 ? 4 : conf > 0.4 ? 3 : 2;
+          found.push({
+            name: hazardName,
+            likelihood: likelihood,
+            severity: def.sev,
+            confidence: Math.round(conf * 100),
+            source: 'ML',
+            color: def.color
+          });
+        }
+      });
+    });
+  });
+  return found;
+}
+
+function detectHazardsFromKeywords() {
+  return [];
+}
+
+// ─── Display results ──────────────────────────────────────────────────────────
+function getRisk(likelihood, severity) {
+  var score = likelihood * severity;
+  if (score >= 20) return {label:'Extreme Risk', cls:'EXTREME', score:score};
+  if (score >= 15) return {label:'Very High Risk', cls:'VERY_HIGH', score:score};
+  if (score >= 10) return {label:'High Risk', cls:'HIGH', score:score};
+  if (score >= 5)  return {label:'Medium Risk', cls:'MEDIUM', score:score};
+  return {label:'Low Risk', cls:'LOW', score:score};
+}
+
+function getOverallRisk(hazardList) {
+  if (!hazardList.length) return {label:'Low Risk', cls:'LOW', score:0};
+  var maxScore = 0;
+  hazardList.forEach(function(h) { if (h.likelihood * h.severity > maxScore) maxScore = h.likelihood * h.severity; });
+  return getRisk(1, maxScore);
+}
+
+function displayResults(elapsedMs) {
+  var overall = getOverallRisk(hazards);
+
+  document.getElementById('riskBadgeContainer').innerHTML =
+    '<span class="risk-badge risk-' + overall.cls + '">' + overall.label + '</span>';
+
+  var summary = {
+    LOW: 'Low risk environment detected. Continue regular safety monitoring.',
+    MEDIUM: 'Medium risk hazards identified. Review and implement recommended controls.',
+    HIGH: 'High risk hazards present. Immediate action required.',
+    VERY_HIGH: 'Very high risk environment. Urgent intervention required. Consider stopping work.',
+    EXTREME: 'Extreme risk detected. Stop work immediately and consult safety professionals.'
+  }[overall.cls] || 'Assessment complete.';
+  document.getElementById('riskSummary').textContent = summary;
+  document.getElementById('analysisTime').textContent = elapsedMs + 'ms';
+
+  var hazardsEl = document.getElementById('hazardsList');
+  if (!hazards.length) {
+    hazardsEl.innerHTML = '<p style="color:#546e7a">No specific hazards detected by the AI model. Conduct a manual walkthrough inspection.</p>';
+  } else {
+    hazardsEl.innerHTML = hazards.map(function(h) {
+      var risk = getRisk(h.likelihood, h.severity);
+      return '<div class="hazard-item ' + risk.cls + '">' +
+        '<div class="hazard-title">' + h.name + '</div>' +
+        '<div class="hazard-meta">Likelihood: ' + h.likelihood + '/5 &bull; Severity: ' + h.severity + '/5' +
+        (h.confidence ? ' &bull; Confidence: ' + h.confidence + '%' : '') +
+        ' &bull; Source: ' + (h.source || 'Manual') + '</div>' +
+        '<span class="hazard-score">' + risk.label + ' (score: ' + risk.score + '/25)</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  renderMatrix();
+  renderRecommendations();
+
+  document.getElementById('inputSec').classList.add('hidden');
+  document.getElementById('results').classList.add('active');
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function renderMatrix() {
+  var colors = [
+    ['#388e3c','#388e3c','#f57c00','#f57c00','#e64a19'],
+    ['#388e3c','#f57c00','#f57c00','#e64a19','#e64a19'],
+    ['#388e3c','#f57c00','#e64a19','#e64a19','#c62828'],
+    ['#f57c00','#e64a19','#e64a19','#c62828','#880e4f'],
+    ['#e64a19','#e64a19','#c62828','#880e4f','#880e4f']
+  ];
+  var html = '';
+  for (var row = 4; row >= 0; row--) {
+    for (var col = 0; col < 5; col++) {
+      var active = hazards.some(function(h) { return h.likelihood === col + 1 && h.severity === row + 1; });
+      html += '<div class="cell" style="background:' + colors[row][col] + ';opacity:' + (active ? 1 : 0.35) + ';outline:' + (active ? '3px solid #fff' : 'none') + '">' + ((row + 1) * (col + 1)) + '</div>';
+    }
+  }
+  document.getElementById('riskMatrix').innerHTML = html;
+}
+
+function renderRecommendations() {
+  var allRecs = [];
+  hazards.forEach(function(h) {
+    var recs = RECOMMENDATIONS[h.name] || [];
+    recs.forEach(function(r) { if (allRecs.indexOf(r) === -1) allRecs.push(r); });
+  });
+  if (!allRecs.length) allRecs.push('Conduct a thorough manual walkthrough inspection.', 'Review and update your site safety procedures.', 'Ensure all workers are briefed on current hazards.');
+  document.getElementById('recsList').innerHTML = allRecs.slice(0, 8).map(function(r) {
+    return '<li>' + r + '</li>';
+  }).join('');
+}
+
+// ─── Report actions ───────────────────────────────────────────────────────────
+function saveReport() {
+  var overall = getOverallRisk(hazards);
+  var now = new Date();
+  var lines = [
+    '=' .repeat(60),
+    'HSE RISK ASSESSMENT REPORT',
+    'Visual Risk Assessor – ISO 45001 Aligned',
+    '='.repeat(60),
+    '',
+    'Date: ' + now.toLocaleString(),
+    '',
+    '-'.repeat(60),
+    'OVERALL RISK LEVEL: ' + overall.label,
+    '-'.repeat(60),
+    '',
+    'HAZARDS IDENTIFIED (' + hazards.length + ')',
+    '-'.repeat(60)
+  ];
+
+  if (!hazards.length) {
+    lines.push('No specific hazards detected.');
+  } else {
+    hazards.forEach(function(h, i) {
+      var risk = getRisk(h.likelihood, h.severity);
+      lines.push((i + 1) + '. ' + h.name);
+      lines.push('   Risk Level:  ' + risk.label);
+      lines.push('   Likelihood:  ' + h.likelihood + '/5');
+      lines.push('   Severity:    ' + h.severity + '/5');
+      lines.push('   Risk Score:  ' + risk.score + '/25');
+      if (h.confidence) lines.push('   Confidence:  ' + h.confidence + '%');
+      lines.push('');
+    });
+  }
+
+  lines.push('-'.repeat(60));
+  lines.push('RECOMMENDED CONTROL MEASURES');
+  lines.push('-'.repeat(60));
+  var recs = [];
+  hazards.forEach(function(h) {
+    (RECOMMENDATIONS[h.name] || []).forEach(function(r) { if (recs.indexOf(r) === -1) recs.push(r); });
+  });
+  if (!recs.length) recs.push('Continue regular safety monitoring procedures.');
+  recs.forEach(function(r, i) { lines.push((i + 1) + '. ' + r); });
+
+  lines.push('');
+  lines.push('='.repeat(60));
+  lines.push('DISCLAIMER: This report is generated by an automated system');
+  lines.push('and should be reviewed by a qualified safety professional.');
+  lines.push('='.repeat(60));
+
+  var content = lines.join('\n');
+  var ts = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  var blob = new Blob([content], {type: 'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'HSE_Risk_Report_' + ts + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+function printReport() {
+  window.print();
+}
+
+function resetApp() {
+  imgData = null;
+  hazards = [];
+  overallScore = 0;
+
+  stopCamera();
+
+  document.getElementById('results').classList.remove('active');
+  document.getElementById('inputSec').classList.remove('hidden');
+  document.getElementById('fileInput').value = '';
+  document.getElementById('previewImg').src = '';
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// ─── Loading overlay ──────────────────────────────────────────────────────────
+function showLoading(show, msg) {
+  var el = document.getElementById('loadingOverlay');
+  el.classList.toggle('hidden', !show);
+  if (msg) document.getElementById('loadingMsg').textContent = msg;
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', function() {
+  checkHttps();
+  loadModel();
+});
+</script>
+
+<!-- TensorFlow.js and MobileNet from CDN -->
+<script>
+(function() {
+  function onScriptError(name) {
+    return function() {
+      console.warn(name + ' failed to load from CDN. Keyword-based fallback will be used.');
+      setModelStatus('error', ' CDN unavailable – keyword-based fallback active.');
+    };
+  }
+
+  var tfScript = document.createElement('script');
+  tfScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js';
+  tfScript.onerror = onScriptError('TensorFlow.js');
+  tfScript.onload = function() {
+    var mnScript = document.createElement('script');
+    mnScript.src = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js';
+    mnScript.onerror = onScriptError('MobileNet');
+    document.head.appendChild(mnScript);
+  };
+  document.head.appendChild(tfScript);
+})();
+</script>
+
+</body>
+</html>
