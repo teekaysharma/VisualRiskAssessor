@@ -1,6 +1,5 @@
 package com.hse.visualriskassessor.model
 
-import android.graphics.Bitmap
 import java.util.Date
 
 data class AssessmentResult(

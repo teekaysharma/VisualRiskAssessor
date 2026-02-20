@@ -31,6 +31,7 @@
     <string name="detecting_hazards">Detecting potential hazards…</string>
     <string name="calculating_risk">Calculating risk levels…</string>
     <string name="generating_report">Generating assessment report…</string>
+    <string name="saving_report">Saving assessment report…</string>
     <string name="analysis_complete">Analysis complete</string>
     <string name="analysis_error">Analysis failed. Please try again.</string>
     
@@ -43,6 +44,8 @@
     <string name="btn_save_report">Save Report</string>
     <string name="btn_share_report">Share Report</string>
     <string name="btn_new_assessment">New Assessment</string>
+    <string name="report_saved">Report saved successfully</string>
+    <string name="report_save_failed">Unable to save report. Please try again.</string>
     <string name="no_hazards_detected">No significant hazards detected</string>
     <string name="no_hazards_message">The analyzed image appears to show a low-risk environment. Continue regular safety monitoring.</string>
     

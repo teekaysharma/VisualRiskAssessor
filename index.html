@@ -93,7 +93,7 @@
                 <button class="btn btn-outline hidden" onclick="stopCam()" id="stopBtn">⏹️ Stop Camera</button>
             </div>
             <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
-            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline mutedwebkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
+            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline muted webkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"><div class="upload-icon">📁</div><div class="instr">Click to upload or drag image<br><small>JPEG, PNG, WEBP</small></div></div>
         </section>
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
@@ -123,7 +123,42 @@
         general:{name:"General Workplace",kw:["office","room","indoor","workspace"],L:3,S:2,recs:[{i:"🧹",t:"Housekeeping",d:"Clean organized areas"},{i:"🪜",t:"Clear Walkways",d:"No obstructions"},{i:"🔦",t:"Emergency Lighting",d:"Functional lighting"}]}
     };
     let model=null,video=null,imgData=null,hazards=[],overallScore=0;
-    async function init(){try{model=await mobilenet.load();console.log('Model loaded')}catch(e){console.log('Model failed')}}
+    async function init(){
+        try{
+            model=await mobilenet.load();
+            console.log('Model loaded');
+        }catch(e){
+            console.error('Model failed', e);
+        }
+    }
+    function showLoad(message){
+        const loading=document.getElementById('loading');
+        const loadText=document.getElementById('loadText');
+        if(message){
+            loadText.textContent=message;
+        }
+        loading.classList.add('active');
+    }
+    function hideLoad(){document.getElementById('loading').classList.remove('active');}
+    function ensureSecureContext(){
+        const isLocalhost=['localhost','127.0.0.1'].includes(window.location.hostname);
+        if(window.location.protocol!=='https:'&&!isLocalhost){
+            const httpsUrl=`https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
+            if(window.location.hostname.endsWith('github.io')){
+                window.location.replace(httpsUrl);
+                return;
+            }
+            showHttpsBanner(httpsUrl);
+        }
+    }
+    function showHttpsBanner(httpsUrl){
+        if(document.getElementById('httpsNotice')){return;}
+        const banner=document.createElement('div');
+        banner.id='httpsNotice';
+        banner.style.cssText='background:#0D47A1;color:white;padding:12px 20px;text-align:center;font-weight:600;';
+        banner.innerHTML=`Secure HTTPS is required for camera access. <a href="${httpsUrl}" style="color:#FFD54F;text-decoration:underline;">Switch to HTTPS</a>`;
+        document.body.insertBefore(banner, document.body.firstChild);
+    }
     async function startCam(){
         const constraints = {
             video: {
@@ -178,8 +213,42 @@
         }
     }
     function stopCam(){if(video){video.getTracks().forEach(t=>t.stop());video=null;}document.getElementById('camSec').classList.remove('active');document.getElementById('uploadArea').classList.remove('hidden');document.getElementById('stopBtn').classList.add('hidden');}
+    function resetApp(){
+        stopCam();
+        hazards=[];
+        overallScore=0;
+        imgData=null;
+        document.getElementById('fileInput').value='';
+        document.getElementById('hazardsList').innerHTML='';
+        document.getElementById('recsList').innerHTML='';
+        document.getElementById('riskMatrix').innerHTML='';
+        document.getElementById('overallScore').textContent='0';
+        document.getElementById('overallLevel').textContent='Assessing...';
+        document.getElementById('overallLevel').style.background='';
+        document.getElementById('resultImg').removeAttribute('src');
+        document.getElementById('results').classList.remove('active');
+        document.getElementById('inputSec').classList.remove('hidden');
+        window.scrollTo({top:0,behavior:'smooth'});
+    }
     function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
-    function handleFile(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=function(e){imgData=e.target.result;analyze(imgData);};r.readAsDataURL(f);}
+    function handleFile(e){
+        const f=e.target.files[0];
+        if(!f)return;
+        if(!f.type.startsWith('image/')){
+            alert('Please upload a valid image file.');
+            e.target.value='';
+            return;
+        }
+        if(f.size>10*1024*1024){
+            alert('Please upload an image under 10MB.');
+            e.target.value='';
+            return;
+        }
+        const r=new FileReader();
+        r.onload=function(e){imgData=e.target.result;analyze(imgData);};
+        r.onerror=function(){alert('Unable to read the selected file.');};
+        r.readAsDataURL(f);
+    }
     async function analyze(img){showLoad();hazards=[];try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
     function mapHazards(preds){const found=new Set();preds.forEach(p=>{const l=p.className.toLowerCase();Object.entries(hazardDB).forEach(([k,h])=>{h.kw.forEach(kw=>{if(l.includes(kw)&&!found.has(k)){found.add(k);hazards.push({id:k,...h,conf:p.probability,risk:h.L*h.S});}});});});if(hazards.length===0)hazards.push({...hazardDB.general,conf:0.8,risk:6});}
     function fallback(){hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];}
@@ -298,3 +367,4 @@ Next Review: ${new Date(now.getTime()+90*24*60*60*1000).toLocaleDateString()} (9
         a.click();
         URL.revokeObjectURL(u);
     }
+    window.addEventListener('load',()=>{ensureSecureContext();init();});

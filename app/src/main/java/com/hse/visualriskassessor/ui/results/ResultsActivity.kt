@@ -17,8 +17,10 @@ import coil.load
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.hse.visualriskassessor.R
+import com.hse.visualriskassessor.HSEApplication
 import com.hse.visualriskassessor.analysis.RiskAssessmentEngine
 import com.hse.visualriskassessor.model.AssessmentResult
+import com.hse.visualriskassessor.model.OperationResult
 import com.hse.visualriskassessor.model.RiskLevel
 import com.hse.visualriskassessor.ui.MainActivity
 import com.hse.visualriskassessor.ui.widget.RiskMatrixView
@@ -31,6 +33,10 @@ class ResultsActivity : AppCompatActivity() {
 
     private lateinit var assessmentEngine: RiskAssessmentEngine
     private var assessmentResult: AssessmentResult? = null
+
+    private val assessmentRepository by lazy {
+        (application as HSEApplication).assessmentRepository
+    }
 
     private lateinit var analyzedImage: ImageView
     private lateinit var riskLevelText: TextView
@@ -168,12 +174,34 @@ class ResultsActivity : AppCompatActivity() {
 
     private fun saveReport() {
         val result = assessmentResult ?: return
-        
-        Toast.makeText(
-            this,
-            "Report saved: ${result.hazards.size} hazards detected",
-            Toast.LENGTH_SHORT
-        ).show()
+
+        showLoading(true, getString(R.string.saving_report))
+
+        lifecycleScope.launch {
+            val saveResult = withContext(Dispatchers.IO) {
+                assessmentRepository.saveAssessment(result)
+            }
+
+            showLoading(false)
+
+            when (saveResult) {
+                is OperationResult.Success -> {
+                    Toast.makeText(
+                        this@ResultsActivity,
+                        getString(R.string.report_saved),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                is OperationResult.Error -> {
+                    Toast.makeText(
+                        this@ResultsActivity,
+                        getString(R.string.report_save_failed),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                OperationResult.Loading -> Unit
+            }
+        }
     }
 
     private fun shareReport() {
