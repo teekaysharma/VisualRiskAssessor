@@ -5,14 +5,15 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.hse.visualriskassessor.data.converter.AnalysisModeConverter
 import com.hse.visualriskassessor.data.converter.DateConverter
 import com.hse.visualriskassessor.data.converter.HazardListConverter
 import com.hse.visualriskassessor.data.converter.RiskLevelConverter
 import com.hse.visualriskassessor.data.dao.AssessmentDao
 import com.hse.visualriskassessor.data.entity.AssessmentEntity
 
-@Database(entities = [AssessmentEntity::class], version = 1, exportSchema = false)
-@TypeConverters(DateConverter::class, HazardListConverter::class, RiskLevelConverter::class)
+@Database(entities = [AssessmentEntity::class], version = 2, exportSchema = false)
+@TypeConverters(DateConverter::class, HazardListConverter::class, RiskLevelConverter::class, AnalysisModeConverter::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun assessmentDao(): AssessmentDao
