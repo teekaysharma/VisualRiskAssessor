@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import com.hse.visualriskassessor.analysis.HazardDetector.AnalysisStatus
 import com.hse.visualriskassessor.model.AnalysisMode
 import com.hse.visualriskassessor.model.AssessmentResult
 import com.hse.visualriskassessor.model.Hazard
@@ -37,7 +36,7 @@ class RiskAssessmentEngine(private val context: Context) {
             hazards = hazards,
             overallRiskLevel = overallRisk,
             analysisTimeMs = analysisTime,
-            analysisMode = detectionResult.mode
+            analysisMode = detectionResult.mode.toEngineMode()
         )
     }
 
@@ -58,16 +57,14 @@ class RiskAssessmentEngine(private val context: Context) {
             hazards = hazards,
             overallRiskLevel = overallRisk,
             analysisTimeMs = analysisTime,
-            analysisMode = detectionResult.mode
+            analysisMode = detectionResult.mode.toEngineMode()
         )
     }
 
-    private fun AnalysisStatus.toAnalysisMode(): AnalysisMode {
-        return when (this) {
-            AnalysisStatus.SUCCESS -> AnalysisMode.SUCCESS
-            AnalysisStatus.PARTIAL -> AnalysisMode.PARTIAL
-            AnalysisStatus.FALLBACK -> AnalysisMode.FALLBACK
-        }
+    private fun AnalysisMode.toEngineMode(): AnalysisMode = when (this) {
+        AnalysisMode.ML_DETECTION -> AnalysisMode.SUCCESS
+        AnalysisMode.HEURISTIC_FALLBACK -> AnalysisMode.FALLBACK
+        else -> this
     }
 
     private fun loadBitmap(uri: Uri): Bitmap {

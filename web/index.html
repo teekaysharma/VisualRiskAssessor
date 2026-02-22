@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VisualRiskAssessor - HSE Risk Assessment</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   <style>
     :root { --p:#ff6d00; --s:#1565c0; --ok:#4caf50; --mid:#ffc107; --hi:#f44336; --x:#b71c1c; }
     * { box-sizing:border-box; }
@@ -18,12 +18,14 @@
     .btn-primary { background:var(--p); color:#fff; }
     .btn-secondary { background:var(--s); color:#fff; }
     .btn-outline { background:#fff; color:var(--s); border:2px solid var(--s); }
+    .btn-ai { background:#6a1b9a; color:#fff; }
     .hidden { display:none !important; }
     #uploadArea { border:2px dashed var(--s); border-radius:10px; padding:20px; margin-top:12px; background:#eef6ff; cursor:pointer; }
     #uploadArea:focus-visible { outline:3px solid #000; }
     #cameraSection { text-align:center; margin-top:12px; }
     #videoPreview,#resultImg { width:100%; max-width:620px; border-radius:10px; background:#000; }
     .warning { background:#fff3cd; color:#694f00; border-radius:8px; padding:10px; margin-bottom:10px; }
+    .info { background:#e3f2fd; color:#0d47a1; border-radius:8px; padding:10px; margin-bottom:10px; }
     .result-chip { display:inline-block; padding:6px 10px; border-radius:999px; color:#fff; font-weight:700; }
     .hazard-item { border-left:5px solid var(--mid); background:#fafafa; padding:10px; border-radius:8px; margin-bottom:8px; }
     .risk-low { border-left-color:var(--ok); }
@@ -38,14 +40,22 @@
     .high { background:var(--hi); color:#fff; }
     .ext { background:var(--x); color:#fff; }
     .mark { outline:3px solid #000; }
+    .mode-badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; margin-left:8px; vertical-align:middle; }
+    .mode-ai { background:#6a1b9a; color:#fff; }
+    .mode-ml { background:#1565c0; color:#fff; }
+    .mode-heuristic { background:#757575; color:#fff; }
+    #apiKeySection { border:1px solid #ce93d8; border-radius:10px; padding:14px; background:#f3e5f5; margin-top:12px; }
+    #apiKeySection label { font-weight:600; display:block; margin-bottom:6px; color:#4a148c; }
+    #apiKeyInput { width:100%; padding:8px 10px; border:1px solid #ba68c8; border-radius:6px; font-size:.95rem; }
     #loading { position:fixed; inset:0; background:rgba(0,0,0,.72); color:#fff; display:none; place-items:center; font-size:1.1rem; z-index:999; }
     #loading.active { display:grid; }
+    #loadingMsg { text-align:center; }
   </style>
 </head>
 <body>
   <header class="header">
     <h1 style="margin:0">VisualRiskAssessor</h1>
-    <p style="margin:8px 0 0">GitHub Pages HSE visual risk tool</p>
+    <p style="margin:8px 0 0">HSE visual risk assessment — AI powered</p>
   </header>
 
   <main class="container">
@@ -64,15 +74,21 @@
         <button class="btn btn-primary" id="btnCapture">Capture</button>
         <button class="btn btn-outline" id="btnStop">Stop Camera</button>
       </div>
+
+      <div id="apiKeySection">
+        <label for="apiKeyInput">🤖 Gemini Vision API Key (optional — enables deep AI analysis)</label>
+        <input id="apiKeyInput" type="password" placeholder="Paste your Google Gemini API key here..." autocomplete="off" />
+        <p style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only. Enables scene-understanding beyond object labels. <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get a free key →</a></p>
+      </div>
     </section>
 
     <section id="results" class="card hidden" aria-live="polite">
       <h2 style="margin-top:0">Assessment Results</h2>
-      <div id="fallbackWarning" class="warning hidden">ML model unavailable. Showing heuristic risk estimation.</div>
+      <div id="fallbackWarning" class="warning hidden">⚠️ ML model unavailable. Showing heuristic risk estimation only.</div>
+      <div id="aiInfo" class="info hidden">🤖 AI Vision analysis used for enhanced hazard identification.</div>
       <img id="resultImg" alt="Analyzed image" />
-      <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span></p>
-      <p><strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span></p>
-      <h3>Hazards</h3>
+      <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span> &nbsp;<strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span> <span id="modeBadge" class="mode-badge"></span></p>
+      <h3>Detected Hazards</h3>
       <div id="hazardsList"></div>
       <h3>Risk Matrix</h3>
       <div id="riskMatrix" class="matrix"></div>
@@ -83,150 +99,297 @@
     </section>
   </main>
 
-  <div id="loading" aria-live="assertive">Analyzing image...</div>
+  <div id="loading" aria-live="assertive"><div id="loadingMsg">Analyzing image...</div></div>
 
 <script>
 (() => {
-  const $ = (id) => document.getElementById(id);
+  const $ = id => document.getElementById(id);
   const els = {
     envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
     cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
-    overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'), riskMatrix: $('riskMatrix'),
-    recsList: $('recsList'), fallbackWarning: $('fallbackWarning'), loading: $('loading'),
-    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset')
+    overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'),
+    riskMatrix: $('riskMatrix'), recsList: $('recsList'), fallbackWarning: $('fallbackWarning'),
+    aiInfo: $('aiInfo'), loading: $('loading'), loadingMsg: $('loadingMsg'), modeBadge: $('modeBadge'),
+    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'),
+    btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'),
+    apiKeyInput: $('apiKeyInput')
   };
 
-  let model = null, stream = null, imageData = null, hazards = [], overall = 0, usedFallback = false;
+  let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
+  let analysisMode = 'heuristic';
 
+  // All 11 HSE hazard types with COCO-SSD class mappings, pixel heuristic flags, likelihood, severity, and recommendations
   const hazardDB = {
-    electrical:{name:'Electrical Hazard',L:4,S:4,kw:['wire','cable','electric','plug'],recs:['Isolate exposed circuits','Use insulated PPE']},
-    slip:{name:'Slip/Trip/Fall Hazard',L:4,S:3,kw:['floor','ground','wet','slippery'],recs:['Dry floor immediately','Use anti-slip signage']},
-    machinery:{name:'Machinery Hazard',L:3,S:4,kw:['machine','equipment','tool','motor'],recs:['Install guarding','Apply lockout-tagout']},
-    fire:{name:'Fire Hazard',L:3,S:5,kw:['fire','flame','gas','smoke'],recs:['Remove ignition sources','Keep extinguisher nearby']}
+    electrical: {
+      name: 'Electrical Hazard', L: 4, S: 4,
+      cocoClasses: ['cell phone', 'remote', 'laptop', 'tv', 'microwave', 'toaster', 'hair drier'],
+      recs: ['Isolate and lock out exposed electrical equipment', 'Ensure all electrical work is done by qualified personnel', 'Install warning signs near electrical hazards', 'Provide insulated PPE (gloves, tools)', 'Schedule regular electrical safety inspections']
+    },
+    fire: {
+      name: 'Fire Hazard', L: 3, S: 5,
+      cocoClasses: ['oven', 'toaster', 'microwave'],
+      recs: ['Remove or properly store flammable materials', 'Ensure fire extinguishers are accessible and maintained', 'Install and test smoke detectors regularly', 'Create and practise emergency evacuation plans', 'Eliminate ignition sources in hazardous areas']
+    },
+    machinery: {
+      name: 'Machinery Risk', L: 3, S: 4,
+      cocoClasses: ['scissors', 'knife', 'fork', 'bicycle', 'motorcycle', 'car', 'truck', 'bus', 'train'],
+      recs: ['Install proper machine guarding', 'Implement lockout/tagout procedures', 'Provide comprehensive operator training', 'Conduct regular machinery maintenance', 'Install emergency stop buttons']
+    },
+    slip: {
+      name: 'Slip/Trip/Fall Hazard', L: 4, S: 3,
+      cocoClasses: ['banana', 'bottle', 'cup', 'wine glass', 'bowl'],
+      recs: ['Clear walkways of obstacles and debris', 'Ensure proper lighting in all areas', 'Install non-slip surfaces or mats', 'Mark wet or slippery areas with warning signs', 'Implement regular housekeeping inspections']
+    },
+    height: {
+      name: 'Working at Height', L: 3, S: 4,
+      cocoClasses: ['chair', 'couch', 'bed', 'dining table'],
+      recs: ['Install guardrails and fall protection systems', 'Ensure workers use appropriate fall arrest equipment', 'Provide training on working at height procedures', 'Inspect all fall protection equipment regularly', 'Use scaffolding or elevated work platforms properly']
+    },
+    chemical: {
+      name: 'Chemical Exposure', L: 2, S: 4,
+      cocoClasses: ['bottle', 'vase', 'wine glass', 'cup'],
+      recs: ['Ensure proper storage and labelling of chemicals', 'Provide appropriate PPE (gloves, goggles, respirators)', 'Maintain Safety Data Sheets (SDS) accessibility', 'Implement proper ventilation systems', 'Train workers on chemical handling procedures']
+    },
+    ppe: {
+      name: 'PPE Missing/Inadequate', L: 3, S: 3,
+      cocoClasses: ['person'],
+      recs: ['Ensure appropriate PPE is provided and available', 'Conduct PPE training and fit testing', 'Implement PPE inspection and maintenance programmes', 'Enforce PPE usage policies consistently', 'Assess workplace to determine required PPE types']
+    },
+    struck: {
+      name: 'Struck-By Object Risk', L: 3, S: 4,
+      cocoClasses: ['truck', 'car', 'bus', 'train', 'airplane', 'boat', 'bicycle', 'motorcycle', 'sports ball', 'baseball bat', 'tennis racket'],
+      recs: ['Establish exclusion zones around moving equipment', 'Install protective barriers or screens', 'Implement traffic management plans', 'Use high-visibility clothing in active areas', 'Secure materials to prevent falling objects']
+    },
+    confined: {
+      name: 'Confined Space Hazard', L: 2, S: 4,
+      cocoClasses: ['suitcase', 'refrigerator', 'oven'],
+      recs: ['Implement confined space entry procedures', 'Test atmosphere before and during entry', 'Provide adequate ventilation', 'Ensure rescue equipment is readily available', 'Assign trained attendants for confined space work']
+    },
+    ergonomic: {
+      name: 'Ergonomic Issue', L: 3, S: 2,
+      cocoClasses: ['laptop', 'keyboard', 'mouse', 'chair', 'couch', 'book'],
+      recs: ['Adjust workstations to proper ergonomic height', 'Provide mechanical aids for lifting and handling', 'Implement job rotation to reduce repetitive strain', 'Train workers on proper lifting techniques', 'Conduct ergonomic assessments regularly']
+    },
+    other: {
+      name: 'General Workplace Hazard', L: 2, S: 2,
+      cocoClasses: [],
+      recs: ['Conduct a detailed risk assessment', 'Consult with safety professionals', 'Implement appropriate control measures', 'Train workers on identified risks', 'Monitor and review controls regularly']
+    }
   };
 
-  function showWarning(msg){ els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
-  function setLoading(v){ els.loading.classList.toggle('active', v); }
-  function riskFor(score){ if(score<=5) return {label:'Low Risk', cls:'risk-low', color:'var(--ok)'}; if(score<=14) return {label:'Medium Risk', cls:'risk-medium', color:'var(--mid)'}; if(score<=19) return {label:'High Risk', cls:'risk-high', color:'var(--hi)'}; return {label:'Extreme Risk', cls:'risk-extreme', color:'var(--x)'}; }
+  // COCO class → hazard key lookup built once
+  const cocoToHazard = {};
+  Object.entries(hazardDB).forEach(([key, h]) => {
+    h.cocoClasses.forEach(cls => {
+      if (!cocoToHazard[cls]) cocoToHazard[cls] = [];
+      cocoToHazard[cls].push(key);
+    });
+  });
 
-  async function initModel(){
-    if (location.protocol === 'http:' && !['localhost','127.0.0.1'].includes(location.hostname)) {
-      showWarning('Use HTTPS on GitHub Pages for camera access. Upload still works.');
+  function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
+  function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
+  function riskFor(score) {
+    if (score <= 4) return { label: 'Low Risk', cls: 'risk-low', color: 'var(--ok)' };
+    if (score <= 9) return { label: 'Medium Risk', cls: 'risk-medium', color: 'var(--mid)' };
+    if (score <= 15) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)' };
+    return { label: 'Extreme Risk', cls: 'risk-extreme', color: 'var(--x)' };
+  }
+
+  async function initModel() {
+    if (location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(location.hostname)) {
+      showWarning('Use HTTPS for camera access. Image upload still works.');
     }
-    try { model = await mobilenet.load(); }
-    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
+    try {
+      cocoModel = await cocoSsd.load();
+    } catch {
+      showWarning('Object detection model failed to load. Using heuristic analysis as fallback.');
+    }
   }
 
   async function waitForVideoFrame(video, timeoutMs = 3000) {
     const start = Date.now();
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       function check() {
-        if (video.videoWidth > 0 && video.videoHeight > 0) {
-          resolve(true);
-          return;
-        }
-        if (Date.now() - start >= timeoutMs) {
-          resolve(false);
-          return;
-        }
+        if (video.videoWidth > 0 && video.videoHeight > 0) { resolve(true); return; }
+        if (Date.now() - start >= timeoutMs) { resolve(false); return; }
         requestAnimationFrame(check);
       }
       check();
     });
   }
 
-  async function startCamera(){
+  async function startCamera() {
     stopCamera();
-
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showWarning('Camera API is not available in this browser. Please use Upload Image.');
+      showWarning('Camera API not available. Please use Upload Image.');
       return;
     }
-
-    const constraintCandidates = [
+    const candidates = [
       { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
       { video: { facingMode: { ideal: 'user' } }, audio: false },
       { video: true, audio: false }
     ];
-
-    for (const constraints of constraintCandidates) {
+    for (const constraints of candidates) {
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         els.videoPreview.srcObject = stream;
         els.videoPreview.setAttribute('playsinline', 'true');
         els.videoPreview.muted = true;
         els.cameraSection.classList.remove('hidden');
-
-        try { await els.videoPreview.play(); } catch (_) { }
-
+        try { await els.videoPreview.play(); } catch (_) {}
         const hasFrame = await waitForVideoFrame(els.videoPreview, 3500);
-        if (hasFrame) {
-          return;
-        }
-
-        showWarning('Camera opened, waiting for frames... If preview stays black, use Upload Image.');
+        if (hasFrame) return;
+        showWarning('Camera opened. If preview stays black, use Upload Image.');
         return;
-      } catch (_) {
-      }
+      } catch (_) {}
     }
-
-    showWarning('Unable to start camera stream on this device/browser. Please use Upload Image.');
+    showWarning('Unable to start camera on this device/browser. Please use Upload Image.');
     stopCamera();
   }
 
-  function stopCamera(){
-    if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  function stopCamera() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (els.videoPreview) { els.videoPreview.pause(); els.videoPreview.srcObject = null; }
     els.cameraSection.classList.add('hidden');
   }
 
-  function openFilePicker(){ els.fileInput.click(); }
+  function openFilePicker() { els.fileInput.click(); }
 
-  function heuristicHazardsFromCanvas(canvas) {
+  // ── Heuristic analysis (pixel-level fallback) ──────────────────────────────
+  function heuristicHazards(canvas) {
     const ctx = canvas.getContext('2d');
     const { width, height } = canvas;
-    const img = ctx.getImageData(0, 0, width, height).data;
+    const px = ctx.getImageData(0, 0, width, height).data;
     let sum = 0, edge = 0;
-    for (let i = 0; i < img.length; i += 16) {
-      const v = (img[i] + img[i+1] + img[i+2]) / 3;
+    const samples = Math.floor(px.length / 16);
+    for (let i = 0; i < px.length; i += 16) {
+      const v = (px[i] + px[i + 1] + px[i + 2]) / 3;
       sum += v;
       if (i > 16) {
-        const pv = (img[i-16] + img[i-15] + img[i-14]) / 3;
+        const pv = (px[i - 16] + px[i - 15] + px[i - 14]) / 3;
         if (Math.abs(v - pv) > 45) edge++;
       }
     }
-    const samples = Math.floor(img.length / 16);
     const avg = sum / Math.max(samples, 1);
     const edgeRatio = edge / Math.max(samples, 1);
-
     const out = [];
-    if (avg < 80) out.push({name:'Low Visibility Hazard',L:3,S:3,risk:9,conf:0.72,recs:['Improve workplace lighting','Use high-visibility safety markers']});
-    if (edgeRatio > 0.2) out.push({name:'Clutter/Obstruction Hazard',L:3,S:2,risk:6,conf:0.69,recs:['Clear walk paths and floor obstructions','Apply 5S housekeeping checks']});
-    if (out.length === 0) out.push({name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.65,recs:['Run manual inspection','Verify with site supervisor']});
+    if (avg < 80) {
+      const h = hazardDB.slip;
+      out.push({ name: h.name, L: h.L, S: h.S, risk: h.L * h.S, conf: 0.7, recs: h.recs, source: 'heuristic' });
+    }
+    if (edgeRatio > 0.2) {
+      const h = hazardDB.machinery;
+      out.push({ name: h.name, L: 2, S: 3, risk: 6, conf: 0.65, recs: h.recs, source: 'heuristic' });
+    }
+    if (out.length === 0) {
+      const h = hazardDB.other;
+      out.push({ name: h.name, L: h.L, S: h.S, risk: h.L * h.S, conf: 0.5, recs: h.recs, source: 'heuristic' });
+    }
     return out;
   }
 
-  function mapPredictions(preds){
-    const found = new Set();
-    const out = [];
-    preds.forEach(p => {
-      const name = p.className.toLowerCase();
-      Object.entries(hazardDB).forEach(([key,h]) => {
-        h.kw.forEach(kw => {
-          if(name.includes(kw) && !found.has(key)) {
-            found.add(key);
-            out.push({name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:p.probability,recs:h.recs});
-          }
-        });
+  // ── COCO-SSD object detection ──────────────────────────────────────────────
+  async function cocoHazards(imgEl) {
+    if (!cocoModel) return [];
+    const predictions = await cocoModel.detect(imgEl);
+    const found = new Map();
+    predictions.forEach(p => {
+      const cls = p.class.toLowerCase();
+      const keys = cocoToHazard[cls] || [];
+      keys.forEach(key => {
+        if (!found.has(key) || found.get(key).conf < p.score) {
+          const h = hazardDB[key];
+          found.set(key, {
+            name: h.name, L: h.L, S: h.S, risk: h.L * h.S,
+            conf: p.score, recs: h.recs, source: 'coco',
+            detected: p.class
+          });
+        }
       });
     });
-    return out;
+    return [...found.values()];
   }
 
-  function render(){
+  // ── Gemini Vision API analysis ─────────────────────────────────────────────
+  async function geminiHazards(dataUrl) {
+    const apiKey = els.apiKeyInput.value.trim();
+    if (!apiKey) return null;
+
+    const base64 = dataUrl.split(',')[1];
+    const mimeType = dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
+
+    const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
+Analyse this workplace image and identify all visible hazards.
+
+For EACH hazard found, respond ONLY with a JSON array (no markdown, no prose) like:
+[
+  {
+    "name": "Electrical Hazard",
+    "key": "electrical",
+    "likelihood": 3,
+    "severity": 4,
+    "confidence": 0.85,
+    "details": "Exposed cable running across the floor"
+  }
+]
+
+Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, other
+Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
+Confidence must be 0.0-1.0.
+If no hazards are visible, return an empty array [].`;
+
+    const body = {
+      contents: [{
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType, data: base64 } }
+        ]
+      }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
+    };
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    const cleaned = text.replace(/```json|```/g, '').trim();
+    const raw = JSON.parse(cleaned);
+
+    return raw.map(item => {
+      const h = hazardDB[item.key] || hazardDB.other;
+      const L = Math.min(5, Math.max(1, Math.round(item.likelihood)));
+      const S = Math.min(5, Math.max(1, Math.round(item.severity)));
+      return {
+        name: item.name || h.name,
+        L, S, risk: L * S,
+        conf: Math.min(1, Math.max(0, item.confidence || 0.8)),
+        recs: h.recs,
+        source: 'ai',
+        details: item.details || ''
+      };
+    });
+  }
+
+  // ── Render results ─────────────────────────────────────────────────────────
+  function render() {
     els.results.classList.remove('hidden');
     els.resultImg.src = imageData;
-    els.fallbackWarning.classList.toggle('hidden', !usedFallback);
+
+    els.fallbackWarning.classList.toggle('hidden', analysisMode !== 'heuristic');
+    els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
+
+    const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'] };
+    const [modeText, modeCls] = modeLabels[analysisMode] || ['Unknown', 'mode-heuristic'];
+    els.modeBadge.textContent = modeText;
+    els.modeBadge.className = `mode-badge ${modeCls}`;
 
     overall = hazards.length ? Math.max(...hazards.map(h => h.risk)) : 0;
     const r = riskFor(overall);
@@ -240,24 +403,33 @@
       const item = document.createElement('div');
       item.className = `hazard-item ${hr.cls}`;
       const t = document.createElement('div');
-      t.textContent = `${h.name} (${Math.round((h.conf||0)*100)}%)`;
+      t.textContent = `${h.name} — ${Math.round((h.conf || 0) * 100)}% confidence`;
+      t.style.fontWeight = '700';
       const d = document.createElement('div');
-      d.textContent = `Likelihood ${h.L}, Severity ${h.S}, Risk ${h.risk} (${hr.label.replace(' Risk','')})`;
-      item.append(t,d);
+      d.textContent = `Likelihood ${h.L} × Severity ${h.S} = Risk ${h.risk} (${hr.label.replace(' Risk', '')})`;
+      item.append(t, d);
+      if (h.details) {
+        const det = document.createElement('div');
+        det.style.cssText = 'font-size:.85rem;color:#555;margin-top:4px';
+        det.textContent = h.details;
+        item.append(det);
+      }
       els.hazardsList.appendChild(item);
     });
 
     els.riskMatrix.textContent = '';
     const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
-    add('', ''); [1,2,3,4,5].forEach(s => add(`S${s}`, 'head'));
-    const likelihoodOrder = [5,4,3,2,1]; // bottom-left origin: L1 starts on the lowest row
-    likelihoodOrder.forEach((l) => {
+    add('', '');
+    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
+    [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
-      for(let s=1;s<=5;s++){
-        const score=l*s; const c=document.createElement('div');
-        let cls='low'; if(score>=20)cls='ext'; else if(score>=15)cls='high'; else if(score>=6)cls='med';
-        c.className=`cell ${cls}${hazards.some(h=>h.risk===score)?' mark':''}`;
-        c.textContent=String(score);
+      for (let s = 1; s <= 5; s++) {
+        const score = l * s;
+        let cls = 'low';
+        if (score >= 20) cls = 'ext'; else if (score >= 15) cls = 'high'; else if (score >= 6) cls = 'med';
+        const c = document.createElement('div');
+        c.className = `cell ${cls}${hazards.some(h => h.risk === score) ? ' mark' : ''}`;
+        c.textContent = String(score);
         els.riskMatrix.appendChild(c);
       }
     });
@@ -267,11 +439,13 @@
     recs.forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
   }
 
-  async function analyze(dataUrl){
-    setLoading(true);
+  // ── Main analysis orchestrator ─────────────────────────────────────────────
+  async function analyze(dataUrl) {
+    setLoading(true, 'Loading image...');
     try {
       imageData = dataUrl;
       hazards = [];
+      analysisMode = 'heuristic';
 
       const img = new Image();
       await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
@@ -280,52 +454,86 @@
       canvas.height = img.height;
       canvas.getContext('2d').drawImage(img, 0, 0);
 
-      if (model) {
+      const apiKey = els.apiKeyInput.value.trim();
+      if (apiKey) {
         try {
-          const preds = await model.classify(img);
-          hazards = mapPredictions(preds);
-        } catch {
-          usedFallback = true;
+          setLoading(true, '🤖 Running AI Vision analysis...');
+          const aiResult = await geminiHazards(dataUrl);
+          if (aiResult && aiResult.length > 0) {
+            hazards = aiResult;
+            analysisMode = 'ai';
+          } else if (aiResult !== null) {
+            // AI succeeded but found nothing — run COCO as supplement
+            setLoading(true, 'Running object detection...');
+            const cocoResult = await cocoHazards(img);
+            hazards = cocoResult.length > 0 ? cocoResult : heuristicHazards(canvas);
+            analysisMode = cocoResult.length > 0 ? 'coco' : 'heuristic';
+          }
+        } catch (aiErr) {
+          showWarning(`AI analysis error: ${aiErr.message}. Falling back to object detection.`);
+        }
+      }
+
+      if (hazards.length === 0 && cocoModel) {
+        setLoading(true, 'Running object detection...');
+        const cocoResult = await cocoHazards(img);
+        if (cocoResult.length > 0) {
+          hazards = cocoResult;
+          analysisMode = 'coco';
         }
       }
 
       if (hazards.length === 0) {
-        hazards = heuristicHazardsFromCanvas(canvas);
+        hazards = heuristicHazards(canvas);
+        analysisMode = 'heuristic';
       }
 
       render();
     } catch {
-      usedFallback = true;
-      hazards = [{name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.5,recs:['Run manual inspection','Repeat assessment with clearer image']}];
+      hazards = [{ name: 'General Workplace Hazard', L: 2, S: 2, risk: 4, conf: 0.5, recs: hazardDB.other.recs, source: 'heuristic' }];
+      analysisMode = 'heuristic';
       render();
     } finally {
       setLoading(false);
     }
   }
 
-  function exportReport(){
-    const risk = riskFor(overall).label;
-    let out = `HSE Risk Assessment\nDate: ${new Date().toISOString()}\nRisk: ${risk} (${overall}/25)\nHeuristic Mode: ${usedFallback?'YES':'NO'}\n\nHazards:\n`;
-    hazards.forEach((h,i)=> out += `${i+1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk}\n`);
-    out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h=>h.recs||[]))].map((r,i)=>`${i+1}. ${r}`).join('\n')}`;
-    const blob = new Blob([out], {type:'text/plain'});
-    const url = URL.createObjectURL(blob); const a = document.createElement('a');
-    a.href = url; a.download = `HSE_Risk_Assessment_${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+  function exportReport() {
+    const modeLabel = { ai: 'AI Vision (Gemini)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
+    const r = riskFor(overall).label;
+    let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${modeLabel}\n\nHazards Detected:\n`;
+    hazards.forEach((h, i) => out += `${i + 1}. ${h.name} | Likelihood=${h.L} Severity=${h.S} Risk=${h.risk}${h.details ? ' | ' + h.details : ''}\n`);
+    out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+    const blob = new Blob([out], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `HSE_Risk_Assessment_${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
-  function resetApp(){ stopCamera(); hazards=[]; overall=0; imageData=null; usedFallback=false; els.fileInput.value=''; els.results.classList.add('hidden'); }
+  function resetApp() {
+    stopCamera();
+    hazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
+    els.fileInput.value = '';
+    els.results.classList.add('hidden');
+    els.fallbackWarning.classList.add('hidden');
+    els.aiInfo.classList.add('hidden');
+    els.envWarning.classList.add('hidden');
+  }
 
-  function captureFromCamera(){
+  function captureFromCamera() {
     if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
-      showWarning('No camera frame available yet. If this persists, stop camera and use Upload Image.');
+      showWarning('No camera frame available yet. Stop camera and use Upload Image.');
       return;
     }
-    const c=document.createElement('canvas');
-    c.width=els.videoPreview.videoWidth;
-    c.height=els.videoPreview.videoHeight;
-    c.getContext('2d').drawImage(els.videoPreview,0,0);
+    const c = document.createElement('canvas');
+    c.width = els.videoPreview.videoWidth;
+    c.height = els.videoPreview.videoHeight;
+    c.getContext('2d').drawImage(els.videoPreview, 0, 0);
     stopCamera();
-    analyze(c.toDataURL('image/jpeg',0.9));
+    analyze(c.toDataURL('image/jpeg', 0.9));
   }
 
   els.btnCamera.addEventListener('click', startCamera);
@@ -334,25 +542,17 @@
   els.btnStop.addEventListener('click', stopCamera);
   els.btnExport.addEventListener('click', exportReport);
   els.btnReset.addEventListener('click', resetApp);
-  els.fileInput.addEventListener('change', (e) => {
+  els.fileInput.addEventListener('change', e => {
     const f = e.target.files?.[0];
-    if(!f) return;
-    if(!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value=''; return; }
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value = ''; return; }
     const reader = new FileReader();
-    reader.onload = (ev) => analyze(ev.target.result);
+    reader.onload = ev => analyze(ev.target.result);
     reader.onerror = () => showWarning('Failed to read selected image.');
     reader.readAsDataURL(f);
   });
   els.uploadArea.addEventListener('click', openFilePicker);
-  els.uploadArea.addEventListener('keydown', (e) => { if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openFilePicker(); }});
-
-  window.openFilePicker = openFilePicker;
-  window.startCam = startCamera;
-  window.stopCam = stopCamera;
-  window.capture = captureFromCamera;
-  window.analyze = analyze;
-  window.exportReport = exportReport;
-  window.resetApp = resetApp;
+  els.uploadArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFilePicker(); } });
 
   initModel();
 })();
