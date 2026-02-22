@@ -18,6 +18,17 @@ data class HazardDetectionResult(
 
 class HazardDetector {
 
+    enum class AnalysisStatus {
+        SUCCESS,
+        PARTIAL,
+        FALLBACK
+    }
+
+    data class HazardAnalysisResult(
+        val hazards: List<Hazard>,
+        val status: AnalysisStatus
+    )
+
     private val imageLabeler by lazy {
         val options = ImageLabelerOptions.Builder()
             .setConfidenceThreshold(0.5f)
@@ -37,10 +48,18 @@ class HazardDetector {
     suspend fun analyzeImage(bitmap: Bitmap): HazardDetectionResult {
         val inputImage = InputImage.fromBitmap(bitmap, 0)
         val hazards = mutableListOf<Hazard>()
+        var usedFallback = false
+        var partialFailure = false
 
         try {
             val labels = imageLabeler.process(inputImage).await()
-            val objects = objectDetector.process(inputImage).await()
+
+            val objects = try {
+                objectDetector.process(inputImage).await()
+            } catch (exception: Exception) {
+                partialFailure = true
+                emptyList()
+            }
 
             for (label in labels) {
                 val hazardType = mapLabelToHazard(label.text, label.confidence)
