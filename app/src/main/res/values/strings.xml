@@ -89,6 +89,15 @@
     <string name="btn_delete">Delete</string>
     <string name="delete_confirmation">Delete this assessment?</string>
     
+
+    <string name="btn_clear_all">Clear All</string>
+    <string name="clear_all_confirmation">Delete all saved assessments?</string>
+    <string name="clear_all_success">All assessments cleared</string>
+    <string name="clear_all_failed">Unable to clear assessments</string>
+    <string name="delete_success">Assessment deleted</string>
+    <string name="delete_failed">Unable to delete assessment</string>
+    <string name="fallback_analysis_warning">Fallback hazard estimation used due to model or image processing limitation.</string>
+
     <!-- General -->
     <string name="btn_close">Close</string>
     <string name="btn_cancel">Cancel</string>

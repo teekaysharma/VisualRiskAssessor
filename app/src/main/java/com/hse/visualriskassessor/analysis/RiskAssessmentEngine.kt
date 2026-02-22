@@ -16,50 +16,49 @@ import java.io.FileOutputStream
 
 class RiskAssessmentEngine(private val context: Context) {
 
-    private val hazardDetector = HazardDetector(context)
+    private val hazardDetector = HazardDetector()
 
     suspend fun assessImage(uri: Uri): AssessmentResult = withContext(Dispatchers.Default) {
         val startTime = System.currentTimeMillis()
-        
+
         val bitmap = loadBitmap(uri)
         val processedBitmap = preprocessImage(bitmap)
-        
+
         val savedPath = saveImage(processedBitmap)
-        
-        val analysisResult = hazardDetector.analyzeImage(processedBitmap)
-        val hazards = analysisResult.hazards
-        
+
+        val detectionResult = hazardDetector.analyzeImage(processedBitmap)
+        val hazards = detectionResult.hazards
         val overallRisk = calculateOverallRisk(hazards)
-        
+
         val analysisTime = System.currentTimeMillis() - startTime
-        
+
         AssessmentResult(
             imagePath = savedPath,
             hazards = hazards,
             overallRiskLevel = overallRisk,
             analysisTimeMs = analysisTime,
-            analysisMode = analysisResult.status.toAnalysisMode()
+            analysisMode = detectionResult.mode
         )
     }
 
     suspend fun assessImage(bitmap: Bitmap): AssessmentResult = withContext(Dispatchers.Default) {
         val startTime = System.currentTimeMillis()
-        
+
         val processedBitmap = preprocessImage(bitmap)
         val savedPath = saveImage(processedBitmap)
-        
-        val analysisResult = hazardDetector.analyzeImage(processedBitmap)
-        val hazards = analysisResult.hazards
+
+        val detectionResult = hazardDetector.analyzeImage(processedBitmap)
+        val hazards = detectionResult.hazards
         val overallRisk = calculateOverallRisk(hazards)
-        
+
         val analysisTime = System.currentTimeMillis() - startTime
-        
+
         AssessmentResult(
             imagePath = savedPath,
             hazards = hazards,
             overallRiskLevel = overallRisk,
             analysisTimeMs = analysisTime,
-            analysisMode = analysisResult.status.toAnalysisMode()
+            analysisMode = detectionResult.mode
         )
     }
 
@@ -85,13 +84,13 @@ class RiskAssessmentEngine(private val context: Context) {
             maxSize.toFloat() / bitmap.height,
             1f
         )
-        
+
         if (scale < 1f) {
             val newWidth = (bitmap.width * scale).toInt()
             val newHeight = (bitmap.height * scale).toInt()
             return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
         }
-        
+
         return bitmap
     }
 
@@ -100,14 +99,14 @@ class RiskAssessmentEngine(private val context: Context) {
         if (!imagesDir.exists()) {
             imagesDir.mkdirs()
         }
-        
+
         val timestamp = System.currentTimeMillis()
         val imageFile = File(imagesDir, "assessment_$timestamp.jpg")
-        
+
         FileOutputStream(imageFile).use { out ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
         }
-        
+
         return imageFile.absolutePath
     }
 
@@ -115,14 +114,14 @@ class RiskAssessmentEngine(private val context: Context) {
         if (hazards.isEmpty()) {
             return RiskLevel.LOW
         }
-        
+
         val maxRiskScore = hazards.maxOf { it.riskScore }
         val avgRiskScore = hazards.map { it.riskScore }.average().toInt()
-        
+
         val extremeCount = hazards.count { it.riskLevel == RiskLevel.EXTREME }
         val veryHighCount = hazards.count { it.riskLevel == RiskLevel.VERY_HIGH }
         val highCount = hazards.count { it.riskLevel == RiskLevel.HIGH }
-        
+
         return when {
             extremeCount > 0 || maxRiskScore >= 20 -> RiskLevel.EXTREME
             veryHighCount >= 2 || maxRiskScore >= 16 -> RiskLevel.VERY_HIGH

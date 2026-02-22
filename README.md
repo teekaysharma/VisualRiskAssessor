@@ -79,3 +79,10 @@ The app will analyze and provide risk assessments based on detected objects and 
 ---
 
 **Note:** This is a fully functional web application that works entirely in your browser - no installation required!
+
+## Source of Truth for GitHub Pages
+
+- Canonical web app file: `web/index.html`
+- Root `index.html` is deployment mirror for GitHub Pages compatibility.
+- Run `./scripts_sync_web.sh` after web edits to sync the root copy.
+

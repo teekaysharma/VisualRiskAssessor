@@ -42,6 +42,7 @@ class ResultsActivity : AppCompatActivity() {
     private lateinit var analyzedImage: ImageView
     private lateinit var riskLevelText: TextView
     private lateinit var riskDescriptionText: TextView
+    private lateinit var fallbackWarningText: TextView
     private lateinit var hazardsRecyclerView: RecyclerView
     private lateinit var riskMatrixView: RiskMatrixView
     private lateinit var recommendationsText: TextView
@@ -69,6 +70,7 @@ class ResultsActivity : AppCompatActivity() {
         analyzedImage = findViewById(R.id.analyzedImage)
         riskLevelText = findViewById(R.id.riskLevelText)
         riskDescriptionText = findViewById(R.id.riskDescriptionText)
+        fallbackWarningText = findViewById(R.id.fallbackWarningText)
         hazardsRecyclerView = findViewById(R.id.hazardsRecyclerView)
         riskMatrixView = findViewById(R.id.riskMatrixView)
         recommendationsText = findViewById(R.id.recommendationsText)
@@ -141,6 +143,7 @@ class ResultsActivity : AppCompatActivity() {
         riskLevelText.setTextColor(getRiskColor(result.overallRiskLevel))
 
         riskDescriptionText.text = result.getSummary()
+        fallbackWarningText.visibility = if (result.usedFallbackAnalysis) View.VISIBLE else View.GONE
 
         analysisWarningBanner.visibility = if (result.analysisMode != AnalysisMode.SUCCESS) {
             View.VISIBLE
@@ -223,6 +226,9 @@ class ResultsActivity : AppCompatActivity() {
                 append("⚠️ Analysis Warning: Some or all hazards are estimated placeholders due to analysis failure.\n\n")
             }
             append("Hazards Detected: ${result.hazards.size}\n\n")
+            if (result.usedFallbackAnalysis) {
+                append("⚠ ${getString(R.string.fallback_analysis_warning)}\n\n")
+            }
             result.hazards.forEach { hazard ->
                 append("• ${hazard.type.displayName} - ${hazard.riskLevel.displayName}\n")
             }
