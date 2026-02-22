@@ -18,7 +18,7 @@ data class AssessmentResult(
         get() = hazards.maxOfOrNull { it.riskScore } ?: 0
 
     val usedFallbackAnalysis: Boolean
-        get() = analysisMode == AnalysisMode.HEURISTIC_FALLBACK
+        get() = analysisMode == AnalysisMode.HEURISTIC_FALLBACK || analysisMode == AnalysisMode.FALLBACK
 
     fun getAllRecommendations(): List<String> {
         return hazards.flatMap { it.getRecommendations() }.distinct()
