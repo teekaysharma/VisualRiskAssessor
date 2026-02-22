@@ -250,7 +250,8 @@
     els.riskMatrix.textContent = '';
     const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
     add('', ''); [1,2,3,4,5].forEach(s => add(`S${s}`, 'head'));
-    for(let l=1;l<=5;l++){
+    const likelihoodOrder = [5,4,3,2,1]; // bottom-left origin: L1 starts on the lowest row
+    likelihoodOrder.forEach((l) => {
       add(`L${l}`, 'head');
       for(let s=1;s<=5;s++){
         const score=l*s; const c=document.createElement('div');
@@ -259,7 +260,7 @@
         c.textContent=String(score);
         els.riskMatrix.appendChild(c);
       }
-    }
+    });
 
     els.recsList.textContent = '';
     const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
