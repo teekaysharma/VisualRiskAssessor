@@ -250,7 +250,7 @@
     els.riskMatrix.textContent = '';
     const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
     add('', ''); [1,2,3,4,5].forEach(s => add(`S${s}`, 'head'));
-    for(let l=1;l<=5;l++){
+    for(let l=5;l>=1;l--){
       add(`L${l}`, 'head');
       for(let s=1;s<=5;s++){
         const score=l*s; const c=document.createElement('div');
