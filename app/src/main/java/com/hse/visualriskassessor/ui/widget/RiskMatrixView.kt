@@ -115,6 +115,17 @@ class RiskMatrixView @JvmOverloads constructor(
         }
 
         labelPaint.textAlign = Paint.Align.CENTER
+        for (col in 0..4) {
+            val labelX = startX + col * cellSize + cellSize / 2
+            val labelY = startY + 5 * cellSize + 20f
+            canvas.drawText(
+                severityLabels[col],
+                labelX,
+                labelY,
+                labelPaint
+            )
+        }
+
         canvas.drawText(
             "Severity →",
             width / 2f,
