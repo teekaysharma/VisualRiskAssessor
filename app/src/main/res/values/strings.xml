@@ -48,6 +48,7 @@
     <string name="report_save_failed">Unable to save report. Please try again.</string>
     <string name="no_hazards_detected">No significant hazards detected</string>
     <string name="no_hazards_message">The analyzed image appears to show a low-risk environment. Continue regular safety monitoring.</string>
+    <string name="fallback_warning_banner">⚠️ Warning: Analysis completed using estimated hazards due to an image analysis issue. Review results carefully before making safety decisions.</string>
     
     <!-- Risk Levels -->
     <string name="risk_low">Low Risk</string>
@@ -88,6 +89,15 @@
     <string name="btn_delete">Delete</string>
     <string name="delete_confirmation">Delete this assessment?</string>
     
+
+    <string name="btn_clear_all">Clear All</string>
+    <string name="clear_all_confirmation">Delete all saved assessments?</string>
+    <string name="clear_all_success">All assessments cleared</string>
+    <string name="clear_all_failed">Unable to clear assessments</string>
+    <string name="delete_success">Assessment deleted</string>
+    <string name="delete_failed">Unable to delete assessment</string>
+    <string name="fallback_analysis_warning">Fallback hazard estimation used due to model or image processing limitation.</string>
+
     <!-- General -->
     <string name="btn_close">Close</string>
     <string name="btn_cancel">Cancel</string>

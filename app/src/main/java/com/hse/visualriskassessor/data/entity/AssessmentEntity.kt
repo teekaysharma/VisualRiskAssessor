@@ -2,6 +2,7 @@ package com.hse.visualriskassessor.data.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.hse.visualriskassessor.model.AnalysisMode
 import com.hse.visualriskassessor.model.Hazard
 import com.hse.visualriskassessor.model.RiskLevel
 import java.util.Date
@@ -14,5 +15,6 @@ data class AssessmentEntity(
     val imagePath: String,
     val hazards: List<Hazard>,
     val overallRiskLevel: RiskLevel,
-    val analysisTimeMs: Long
+    val analysisTimeMs: Long,
+    val analysisMode: AnalysisMode = AnalysisMode.ML_DETECTION
 )

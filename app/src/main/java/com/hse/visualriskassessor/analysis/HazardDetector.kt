@@ -1,17 +1,33 @@
 package com.hse.visualriskassessor.analysis
 
-import android.content.Context
 import android.graphics.Bitmap
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import com.hse.visualriskassessor.model.AnalysisMode
 import com.hse.visualriskassessor.model.Hazard
 import com.hse.visualriskassessor.model.HazardType
 import kotlinx.coroutines.tasks.await
 
-class HazardDetector(private val context: Context) {
+data class HazardDetectionResult(
+    val hazards: List<Hazard>,
+    val mode: AnalysisMode
+)
+
+class HazardDetector {
+
+    enum class AnalysisStatus {
+        SUCCESS,
+        PARTIAL,
+        FALLBACK
+    }
+
+    data class HazardAnalysisResult(
+        val hazards: List<Hazard>,
+        val status: AnalysisStatus
+    )
 
     private val imageLabeler by lazy {
         val options = ImageLabelerOptions.Builder()
@@ -29,13 +45,21 @@ class HazardDetector(private val context: Context) {
         ObjectDetection.getClient(options)
     }
 
-    suspend fun analyzeImage(bitmap: Bitmap): List<Hazard> {
+    suspend fun analyzeImage(bitmap: Bitmap): HazardDetectionResult {
         val inputImage = InputImage.fromBitmap(bitmap, 0)
         val hazards = mutableListOf<Hazard>()
+        var usedFallback = false
+        var partialFailure = false
 
         try {
             val labels = imageLabeler.process(inputImage).await()
-            val objects = objectDetector.process(inputImage).await()
+
+            val objects = try {
+                objectDetector.process(inputImage).await()
+            } catch (exception: Exception) {
+                partialFailure = true
+                emptyList()
+            }
 
             for (label in labels) {
                 val hazardType = mapLabelToHazard(label.text, label.confidence)
@@ -73,41 +97,41 @@ class HazardDetector(private val context: Context) {
             }
 
             if (hazards.isEmpty()) {
-                hazards.addAll(generateSampleHazards(bitmap))
+                return HazardDetectionResult(
+                    hazards = generateSampleHazards(bitmap).distinctBy { it.type },
+                    mode = AnalysisMode.HEURISTIC_FALLBACK
+                )
             }
 
-        } catch (e: Exception) {
-            hazards.addAll(generateSampleHazards(bitmap))
+            return HazardDetectionResult(
+                hazards = hazards.distinctBy { it.type },
+                mode = AnalysisMode.ML_DETECTION
+            )
+        } catch (_: Exception) {
+            return HazardDetectionResult(
+                hazards = generateSampleHazards(bitmap).distinctBy { it.type },
+                mode = AnalysisMode.HEURISTIC_FALLBACK
+            )
         }
-
-        return hazards.distinctBy { it.type }
     }
 
     private fun mapLabelToHazard(label: String, confidence: Float): HazardType? {
         val lowerLabel = label.lowercase()
         return when {
-            lowerLabel.contains("wire") || lowerLabel.contains("cable") || 
-            lowerLabel.contains("electric") || lowerLabel.contains("plug") -> HazardType.ELECTRICAL
-            
-            lowerLabel.contains("ladder") || lowerLabel.contains("height") || 
-            lowerLabel.contains("scaffold") || lowerLabel.contains("roof") -> HazardType.HEIGHT
-            
-            lowerLabel.contains("machine") || lowerLabel.contains("equipment") || 
-            lowerLabel.contains("tool") || lowerLabel.contains("motor") -> HazardType.MACHINERY
-            
-            lowerLabel.contains("chemical") || lowerLabel.contains("bottle") || 
-            lowerLabel.contains("container") || lowerLabel.contains("barrel") -> HazardType.CHEMICAL
-            
-            lowerLabel.contains("fire") || lowerLabel.contains("flame") || 
-            lowerLabel.contains("gas") || lowerLabel.contains("flammable") -> HazardType.FIRE
-            
-            lowerLabel.contains("floor") || lowerLabel.contains("ground") || 
-            lowerLabel.contains("wet") || lowerLabel.contains("slippery") -> HazardType.SLIP_TRIP_FALL
-            
-            lowerLabel.contains("hard hat") || lowerLabel.contains("helmet") || 
-            lowerLabel.contains("glove") || lowerLabel.contains("safety") -> 
-                if (confidence < 0.7f) HazardType.PPE_MISSING else null
-            
+            lowerLabel.contains("wire") || lowerLabel.contains("cable") ||
+                lowerLabel.contains("electric") || lowerLabel.contains("plug") -> HazardType.ELECTRICAL
+            lowerLabel.contains("ladder") || lowerLabel.contains("height") ||
+                lowerLabel.contains("scaffold") || lowerLabel.contains("roof") -> HazardType.HEIGHT
+            lowerLabel.contains("machine") || lowerLabel.contains("equipment") ||
+                lowerLabel.contains("tool") || lowerLabel.contains("motor") -> HazardType.MACHINERY
+            lowerLabel.contains("chemical") || lowerLabel.contains("bottle") ||
+                lowerLabel.contains("container") || lowerLabel.contains("barrel") -> HazardType.CHEMICAL
+            lowerLabel.contains("fire") || lowerLabel.contains("flame") ||
+                lowerLabel.contains("gas") || lowerLabel.contains("flammable") -> HazardType.FIRE
+            lowerLabel.contains("floor") || lowerLabel.contains("ground") ||
+                lowerLabel.contains("wet") || lowerLabel.contains("slippery") -> HazardType.SLIP_TRIP_FALL
+            lowerLabel.contains("hard hat") || lowerLabel.contains("helmet") ||
+                lowerLabel.contains("glove") || lowerLabel.contains("safety") -> if (confidence < 0.7f) HazardType.PPE_MISSING else null
             else -> null
         }
     }
@@ -142,45 +166,32 @@ class HazardDetector(private val context: Context) {
                     type = HazardType.SLIP_TRIP_FALL,
                     likelihood = 3,
                     severity = 3,
-                    confidence = 0.72f,
-                    details = "Low lighting detected - increased risk of slips, trips, and falls"
-                )
-            )
-        }
-
-        if (metrics.redDominance > 25) {
-            hazards.add(
-                Hazard(
-                    type = HazardType.FIRE,
-                    likelihood = 2,
-                    severity = 4,
                     confidence = 0.65f,
-                    details = "Warm color dominance detected - verify presence of heat or flammable sources"
+                    details = "Low visibility conditions may increase slip/trip hazards"
                 )
             )
         }
 
-        if (metrics.contrast > 60) {
+        if (metrics.edgeDensity > 0.15f) {
             hazards.add(
                 Hazard(
                     type = HazardType.MACHINERY,
                     likelihood = 2,
                     severity = 3,
-                    confidence = 0.6f,
-                    details = "High contrast scene suggests equipment or moving parts - review guarding and controls"
+                    confidence = 0.55f,
+                    details = "Complex visual environment suggests machinery/equipment presence"
                 )
             )
         }
 
-        val imageComplexity = bitmap.width * bitmap.height
-        if (imageComplexity > 1000000) {
+        if (metrics.colorVariance > 40f) {
             hazards.add(
                 Hazard(
                     type = HazardType.OTHER,
                     likelihood = 2,
                     severity = 2,
-                    confidence = 0.62f,
-                    details = "Complex work environment - comprehensive assessment recommended"
+                    confidence = 0.5f,
+                    details = "General workplace assessment - manual verification recommended"
                 )
             )
         }
@@ -189,10 +200,10 @@ class HazardDetector(private val context: Context) {
             hazards.add(
                 Hazard(
                     type = HazardType.OTHER,
-                    likelihood = 2,
+                    likelihood = 1,
                     severity = 2,
-                    confidence = 0.6f,
-                    details = "No specific hazards detected - continue routine safety monitoring"
+                    confidence = 0.4f,
+                    details = "No specific hazards automatically detected - fallback estimation used"
                 )
             )
         }
@@ -202,52 +213,59 @@ class HazardDetector(private val context: Context) {
 
     private data class ImageMetrics(
         val averageBrightness: Int,
-        val contrast: Double,
-        val redDominance: Double
+        val edgeDensity: Float,
+        val colorVariance: Float
     )
 
     private fun calculateImageMetrics(bitmap: Bitmap): ImageMetrics {
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val width = bitmap.width
+        val height = bitmap.height
+        val sampleSize = 10
 
         var totalBrightness = 0L
-        var totalRed = 0L
-        var totalGreen = 0L
-        var totalBlue = 0L
+        var pixelCount = 0
+        var edgeCount = 0
 
-        for (pixel in pixels) {
-            val r = (pixel shr 16) and 0xff
-            val g = (pixel shr 8) and 0xff
-            val b = pixel and 0xff
-            totalRed += r
-            totalGreen += g
-            totalBlue += b
-            totalBrightness += (r + g + b) / 3
+        for (x in 0 until width step sampleSize) {
+            for (y in 0 until height step sampleSize) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                val brightness = (r + g + b) / 3
+                totalBrightness += brightness
+                pixelCount++
+
+                if (x > 0 && y > 0) {
+                    val prevPixel = bitmap.getPixel(x - sampleSize.coerceAtMost(x), y)
+                    val prevR = (prevPixel shr 16) and 0xFF
+                    val diff = kotlin.math.abs(r - prevR)
+                    if (diff > 30) edgeCount++
+                }
+            }
         }
 
-        val averageBrightness = (totalBrightness / pixels.size).toInt()
-        val averageRed = totalRed.toDouble() / pixels.size
-        val averageGreen = totalGreen.toDouble() / pixels.size
-        val averageBlue = totalBlue.toDouble() / pixels.size
+        val averageBrightness = if (pixelCount > 0) (totalBrightness / pixelCount).toInt() else 128
+        val edgeDensity = if (pixelCount > 0) edgeCount.toFloat() / pixelCount else 0f
+        val colorVariance = calculateColorVariance(bitmap, sampleSize)
 
-        var varianceSum = 0.0
-        for (pixel in pixels) {
-            val r = (pixel shr 16) and 0xff
-            val g = (pixel shr 8) and 0xff
-            val b = pixel and 0xff
-            val brightness = (r + g + b) / 3.0
-            val diff = brightness - averageBrightness
-            varianceSum += diff * diff
+        return ImageMetrics(averageBrightness, edgeDensity, colorVariance)
+    }
+
+    private fun calculateColorVariance(bitmap: Bitmap, sampleSize: Int): Float {
+        val colors = mutableListOf<Int>()
+        for (x in 0 until bitmap.width step sampleSize) {
+            for (y in 0 until bitmap.height step sampleSize) {
+                val pixel = bitmap.getPixel(x, y)
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                colors.add((r + g + b) / 3)
+            }
         }
-
-        val contrast = kotlin.math.sqrt(varianceSum / pixels.size)
-        val redDominance = averageRed - ((averageGreen + averageBlue) / 2.0)
-
-        return ImageMetrics(
-            averageBrightness = averageBrightness,
-            contrast = contrast,
-            redDominance = redDominance
-        )
+        if (colors.isEmpty()) return 0f
+        val mean = colors.average()
+        return kotlin.math.sqrt(colors.map { (it - mean) * (it - mean) }.average()).toFloat()
     }
 
     fun release() {

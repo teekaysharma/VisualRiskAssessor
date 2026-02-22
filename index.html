@@ -47,6 +47,8 @@
         .photo-ref img { max-width: 100%; max-height: 400px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
         .photo-label { display: inline-block; background: var(--secondary); color: white; padding: 8px 20px; border-radius: 20px; margin-top: 15px; font-weight: 600; }
         .overall-risk { text-align: center; margin: 25px 0; padding: 30px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border-radius: 16px; }
+        .fallback-warning { display: none; margin: 15px 0 20px; padding: 16px; border-radius: 12px; border: 2px solid #f57c00; background: #fff3e0; color: #7a3e00; font-weight: 700; }
+        .fallback-warning.active { display: block; }
         .overall-score { font-size: 4rem; font-weight: 800; }
         .overall-level { font-size: 1.8rem; font-weight: 700; margin-top: 10px; }
         .hazard-item { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 15px; border-left: 5px solid var(--med); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
@@ -111,6 +113,7 @@
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
         <section class="results" id="results">
             <div class="card photo-ref"><img id="resultImg"><div class="photo-label">📸 Reference Image</div></div>
+            <div class="fallback-warning" id="fallbackWarning">⚠️ Estimated hazards only: automatic analysis failed and placeholder hazards are being shown. Verify conditions manually before acting on this report.</div>
             <div class="overall-risk"><div>OVERALL RISK SCORE</div><div class="overall-score" id="overallScore">0</div><div class="overall-level" id="overallLevel">Assessing...</div></div>
             <div class="card"><h2>🚨 Hazards Identified</h2><p class="instr">The following hazards were detected:</p><div id="hazardsList"></div></div>
             <div class="card"><h2>📊 Risk Assessment Matrix</h2><div class="matrix-sec"><div class="matrix-title">Likelihood × Severity = Risk</div><div class="risk-matrix" id="riskMatrix"></div></div><div class="methodology"><h4>📖 HSE Methodology</h4><p><strong>Risk = Likelihood × Severity</strong></p><p>🟢 Low (1-5) - Acceptable | 🟡 Medium (6-14) - Additional controls | 🔴 High (15-19) - Urgent action | ⚫ Extreme (20-25) - Immediate action</p></div></div>
@@ -171,47 +174,58 @@
             console.error('Model failed', e);
         }
     }
-    function showLoad(message){
-        const loading=document.getElementById('loading');
-        const loadText=document.getElementById('loadText');
-        if(message){
-            loadText.textContent=message;
+    try { model = await mobilenet.load(); }
+    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
+  }
+
+  async function refreshCameraOptions() {
+    if (!navigator.mediaDevices?.enumerateDevices || !els.cameraSelect) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === 'videoinput');
+      const current = els.cameraSelect.value;
+      els.cameraSelect.textContent = '';
+      const auto = document.createElement('option');
+      auto.value = '';
+      auto.textContent = 'Auto camera';
+      els.cameraSelect.appendChild(auto);
+      cams.forEach((cam, idx) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${idx + 1}`;
+        els.cameraSelect.appendChild(opt);
+      });
+      els.cameraSelect.value = cams.some(c => c.deviceId === current) ? current : '';
+      selectedDeviceId = els.cameraSelect.value;
+    } catch (_) {}
+  }
+
+  async function waitForVideoFrame(video, timeoutMs = 3000) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      function check() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve(true);
+          return;
         }
-        loading.classList.add('active');
-    }
-    function hideLoad(){document.getElementById('loading').classList.remove('active');}
-    function ensureSecureContext(){
-        const isLocalhost=['localhost','127.0.0.1'].includes(window.location.hostname);
-        if(window.location.protocol!=='https:'&&!isLocalhost){
-            const httpsUrl=`https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
-            if(window.location.hostname.endsWith('github.io')){
-                window.location.replace(httpsUrl);
-                return;
-            }
-            showHttpsBanner(httpsUrl);
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
         }
+        requestAnimationFrame(check);
+      }
+      check();
+    });
+  }
+
+  async function startCamera(){
+    stopCamera();
+
+    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+    if (!navigator.mediaDevices?.getUserMedia && !legacyGetUserMedia) {
+      showWarning('Camera API is not available in this browser. Please use Upload Image.');
+      return;
     }
-    function showHttpsBanner(httpsUrl){
-        if(document.getElementById('httpsNotice')){return;}
-        const banner=document.createElement('div');
-        banner.id='httpsNotice';
-        banner.style.cssText='background:#0D47A1;color:white;padding:12px 20px;text-align:center;font-weight:600;';
-        banner.innerHTML=`Secure HTTPS is required for camera access. <a href="${httpsUrl}" style="color:#FFD54F;text-decoration:underline;">Switch to HTTPS</a>`;
-        document.body.insertBefore(banner, document.body.firstChild);
-    }
-    async function startCam(){
-        if(!detectBrowserSupport()){
-            alert("Camera is not supported in this browser. Please upload an image instead.");
-            return;
-        }
-        setDiag('diagCamera','Requesting camera permission…','diag-warn');
-        let constraints = {
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: "environment"
-            }
-        };
 
         try {
             // Try with rear camera first
@@ -268,6 +282,7 @@
         stopCam();
         hazards=[];
         overallScore=0;
+        analysisUsedFallback=false;
         imgData=null;
         document.getElementById('fileInput').value='';
         document.getElementById('hazardsList').innerHTML='';
@@ -276,36 +291,70 @@
         document.getElementById('overallScore').textContent='0';
         document.getElementById('overallLevel').textContent='Assessing...';
         document.getElementById('overallLevel').style.background='';
+        document.getElementById('fallbackWarning').classList.remove('active');
         document.getElementById('resultImg').removeAttribute('src');
         document.getElementById('results').classList.remove('active');
         document.getElementById('inputSec').classList.remove('hidden');
         window.scrollTo({top:0,behavior:'smooth'});
     }
-    function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
-    function handleFile(e){
-        const f=e.target.files[0];
-        if(!f)return;
-        if(!f.type.startsWith('image/')){
-            alert('Please upload a valid image file.');
-            e.target.value='';
-            return;
+    try { model = await mobilenet.load(); }
+    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
+  }
+
+  async function refreshCameraOptions() {
+    if (!navigator.mediaDevices?.enumerateDevices || !els.cameraSelect) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === 'videoinput');
+      const current = els.cameraSelect.value;
+      els.cameraSelect.textContent = '';
+      const auto = document.createElement('option');
+      auto.value = '';
+      auto.textContent = 'Auto camera';
+      els.cameraSelect.appendChild(auto);
+      cams.forEach((cam, idx) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${idx + 1}`;
+        els.cameraSelect.appendChild(opt);
+      });
+      els.cameraSelect.value = cams.some(c => c.deviceId === current) ? current : '';
+      selectedDeviceId = els.cameraSelect.value;
+    } catch (_) {}
+  }
+
+  async function waitForVideoFrame(video, timeoutMs = 3000) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      function check() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve(true);
+          return;
         }
-        if(f.size>10*1024*1024){
-            alert('Please upload an image under 10MB.');
-            e.target.value='';
-            return;
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
         }
-        const r=new FileReader();
-        r.onload=function(e){imgData=e.target.result;analyze(imgData);};
-        r.onerror=function(){alert('Unable to read the selected file.');};
-        r.readAsDataURL(f);
+        requestAnimationFrame(check);
+      }
+      check();
+    });
+  }
+
+  async function startCamera(){
+    stopCamera();
+
+    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+    if (!navigator.mediaDevices?.getUserMedia && !legacyGetUserMedia) {
+      showWarning('Camera API is not available in this browser. Please use Upload Image.');
+      return;
     }
-    async function analyze(img){showLoad();hazards=[];try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
+    async function analyze(img){showLoad();hazards=[];analysisUsedFallback=false;try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
     function mapHazards(preds){const found=new Set();preds.forEach(p=>{const l=p.className.toLowerCase();Object.entries(hazardDB).forEach(([k,h])=>{h.kw.forEach(kw=>{if(l.includes(kw)&&!found.has(k)){found.add(k);hazards.push({id:k,...h,conf:p.probability,risk:h.L*h.S});}});});});if(hazards.length===0)hazards.push({...hazardDB.general,conf:0.8,risk:6});}
-    function fallback(){hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];}
+    function fallback(){analysisUsedFallback=true;hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];calcOverall();display();}
     function calcOverall(){overallScore=hazards.length?Math.max(...hazards.map(h=>h.risk)):0;}
     function getRisk(s){if(s<=5)return{l:'Low',c:'#4CAF50'};if(s<=14)return{l:'Medium',c:'#FFC107'};if(s<=19)return{l:'High',c:'#F44336'};return{l:'Extreme',c:'#B71C1C'};}
-    function display(){document.getElementById('resultImg').src=imgData;const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
+    function display(){document.getElementById('resultImg').src=imgData;document.getElementById('fallbackWarning').classList.toggle('active',analysisUsedFallback);const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
     function drawMatrix(){const m=document.getElementById('riskMatrix');let html='<div class="matrix-cell"></div>';['1','2','3','4','5'].forEach(s=>html+=`<div class="matrix-cell matrix-header">S:${s}</div>`);for(let l=0;l<5;l++){html+=`<div class="matrix-cell matrix-header">L:${l+1}</div>`;for(let s=0;s<5;s++){const sc=(l+1)*(s+1),cls=sc>=20?'cell-extreme':sc>=15?'cell-high':sc>=6?'cell-medium':'cell-low',mk=hazards.some(h=>h.risk===sc)?'current-marker':'';html+=`<div class="matrix-cell ${cls} ${mk}">${sc}</div>`;}}m.innerHTML=html;}
     function dispRecs(){const recs=[];hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!recs.find(x=>x.t===r.t))recs.push(r);});});recs.push({i:"📋",t:"Regular Audits",d:"Conduct routine safety inspections"},{i:"📢",t:"Report Hazards",d:"Encourage immediate hazard reporting"});document.getElementById('recsList').innerHTML=recs.map(r=>`<div class="rec-item"><div class="rec-icon">${r.i}</div><div class="rec-content"><h4>${r.t}</h4><p>${r.d}</p></div></div>`).join('');}
     function exportReport(){
@@ -331,6 +380,11 @@ METHODOLOGY:         ISO 45001:2018 / ISO 31000:2018
 OVERALL RISK RATING:     ${r.l.toUpperCase()}
 RISK SCORE:             ${overallScore} / 25
 HAZARDS IDENTIFIED:     ${hazards.length}
+
+${analysisUsedFallback ? `ANALYSIS NOTICE:
+  Hazard entries are ESTIMATED PLACEHOLDERS because automated
+  image analysis failed. Manual verification is required.
+` : ''}
 
 
 RISK MATRIX
@@ -375,46 +429,238 @@ CONTROLS REQUIRED:
 
  EXTREME (20-25): Immediate action - STOP WORK until controlled
 
+    setCameraStatus('Opening camera...');
 
-                          RECOMMENDATIONS
+    const attempts = [
+      { video: true, audio: false },
+      { video: { facingMode: 'environment' }, audio: false },
+      { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      { video: { facingMode: { ideal: 'user' } }, audio: false }
+    ];
 
-`;
-        const uniqueRecs=[];
-        hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!uniqueRecs.find(x=>x.t===r.t))uniqueRecs.push(r);});});
-        uniqueRecs.forEach((rec,i)=>{const priority=i<3?'HIGH':i<6?'MEDIUM':'LOW';rep+=`
-${i+1}. [${priority}] ${rec.t}
-   Action: ${rec.d}`;});
-        rep+=`
-
-
-                          ISO 45001:2018 COMPLIANCE
-
-
-This assessment complies with:
- ISO 45001:2018 - Occupational health and safety management
- ISO 31000:2018 - Risk management
- ISO 45002:2021 - OHS management in practice
-
-KEY CLAUSES: 6.1.2 Hazard ID, 6.1.2.2 Risk Assessment, 8.1.1 Planning
-
-
-                          SIGNATURES
-
-
-Assessor: __________________  Date: __________
-Manager:  __________________  Date: __________
-Next Review: ${new Date(now.getTime()+90*24*60*60*1000).toLocaleDateString()} (90 days)
-
-
-                    Generated: ${now.toLocaleString()}
-              VisualRiskAssessor - ISO 45001 Compliant
-`;
-        const b=new Blob([rep],{type:'text/plain'});
-        const u=URL.createObjectURL(b);
-        const a=document.createElement('a');
-        a.href=u;
-        a.download=`HSE_Risk_Assessment_${now.toISOString().slice(0,10)}_ISO45001.txt`;
-        a.click();
-        URL.revokeObjectURL(u);
+    async function getStream(constraints) {
+      if (navigator.mediaDevices?.getUserMedia) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+      return new Promise((resolve, reject) => legacyGetUserMedia.call(navigator, constraints, resolve, reject));
     }
-    window.addEventListener('load',()=>{ensureSecureContext();init();});
+
+    for (const constraints of attempts) {
+      try {
+        stream = await getStream(constraints);
+        els.videoPreview.srcObject = stream;
+        els.videoPreview.muted = true;
+        els.videoPreview.setAttribute('playsinline', 'true');
+        els.cameraSection.classList.remove('hidden');
+
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 2500);
+          els.videoPreview.onloadedmetadata = () => { clearTimeout(timer); resolve(); };
+        });
+
+        try { await els.videoPreview.play(); } catch (_) { }
+
+        const hasFrame = await waitForVideoFrame(els.videoPreview, 4000);
+        if (hasFrame) {
+          setCameraStatus('Camera ready.');
+          setTimeout(() => setCameraStatus(''), 1500);
+          return;
+        }
+
+        // still keep stream open; some devices are slow to first frame
+        setCameraStatus('Camera connected. Waiting for first frame...');
+        return;
+      } catch (_) {
+      }
+    }
+
+    showWarning('Unable to start camera stream. Check browser permissions, close other camera apps, and try again.');
+    setCameraStatus('');
+    stopCamera();
+  }
+
+  function stopCamera(){
+    setCameraStatus('');
+    if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (els.videoPreview) { els.videoPreview.pause(); els.videoPreview.srcObject = null; }
+    els.cameraSection.classList.add('hidden');
+  }
+
+  function openFilePicker(){ els.fileInput.click(); }
+
+  function heuristicHazardsFromCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const img = ctx.getImageData(0, 0, width, height).data;
+    let sum = 0, edge = 0;
+    for (let i = 0; i < img.length; i += 16) {
+      const v = (img[i] + img[i+1] + img[i+2]) / 3;
+      sum += v;
+      if (i > 16) {
+        const pv = (img[i-16] + img[i-15] + img[i-14]) / 3;
+        if (Math.abs(v - pv) > 45) edge++;
+      }
+    }
+    const samples = Math.floor(img.length / 16);
+    const avg = sum / Math.max(samples, 1);
+    const edgeRatio = edge / Math.max(samples, 1);
+
+    const out = [];
+    if (avg < 80) out.push({name:'Low Visibility Hazard',L:3,S:3,risk:9,conf:0.72,recs:['Improve workplace lighting','Use high-visibility safety markers']});
+    if (edgeRatio > 0.2) out.push({name:'Clutter/Obstruction Hazard',L:3,S:2,risk:6,conf:0.69,recs:['Clear walk paths and floor obstructions','Apply 5S housekeeping checks']});
+    if (out.length === 0) out.push({name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.65,recs:['Run manual inspection','Verify with site supervisor']});
+    return out;
+  }
+
+  function mapPredictions(preds){
+    const found = new Set();
+    const out = [];
+    preds.forEach(p => {
+      const name = p.className.toLowerCase();
+      Object.entries(hazardDB).forEach(([key,h]) => {
+        h.kw.forEach(kw => {
+          if(name.includes(kw) && !found.has(key)) {
+            found.add(key);
+            out.push({name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:p.probability,recs:h.recs});
+          }
+        });
+      });
+    });
+    return out;
+  }
+
+  function render(){
+    els.results.classList.remove('hidden');
+    els.resultImg.src = imageData;
+    els.fallbackWarning.classList.toggle('hidden', !usedFallback);
+
+    overall = hazards.length ? Math.max(...hazards.map(h => h.risk)) : 0;
+    const r = riskFor(overall);
+    els.overallScore.textContent = String(overall);
+    els.overallLevel.textContent = r.label;
+    els.overallLevel.style.background = r.color;
+
+    els.hazardsList.textContent = '';
+    hazards.forEach(h => {
+      const hr = riskFor(h.risk);
+      const item = document.createElement('div');
+      item.className = `hazard-item ${hr.cls}`;
+      const t = document.createElement('div');
+      t.textContent = `${h.name} (${Math.round((h.conf||0)*100)}%)`;
+      const d = document.createElement('div');
+      d.textContent = `Likelihood ${h.L}, Severity ${h.S}, Risk ${h.risk} (${hr.label.replace(' Risk','')})`;
+      item.append(t,d);
+      els.hazardsList.appendChild(item);
+    });
+
+    els.riskMatrix.textContent = '';
+    const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
+    add('', ''); [1,2,3,4,5].forEach(s => add(`S${s}`, 'head'));
+    for(let l=1;l<=5;l++){
+      add(`L${l}`, 'head');
+      for(let s=1;s<=5;s++){
+        const score=l*s; const c=document.createElement('div');
+        let cls='low'; if(score>=20)cls='ext'; else if(score>=15)cls='high'; else if(score>=6)cls='med';
+        c.className=`cell ${cls}${hazards.some(h=>h.risk===score)?' mark':''}`;
+        c.textContent=String(score);
+        els.riskMatrix.appendChild(c);
+      }
+    }
+
+    els.recsList.textContent = '';
+    const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
+    recs.forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
+  }
+
+  async function analyze(dataUrl){
+    setLoading(true);
+    try {
+      imageData = dataUrl;
+      hazards = [];
+
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+
+      if (model) {
+        try {
+          const preds = await model.classify(img);
+          hazards = mapPredictions(preds);
+        } catch {
+          usedFallback = true;
+        }
+      }
+
+      if (hazards.length === 0) {
+        hazards = heuristicHazardsFromCanvas(canvas);
+      }
+
+      render();
+    } catch {
+      usedFallback = true;
+      hazards = [{name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.5,recs:['Run manual inspection','Repeat assessment with clearer image']}];
+      render();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function exportReport(){
+    const risk = riskFor(overall).label;
+    let out = `HSE Risk Assessment\nDate: ${new Date().toISOString()}\nRisk: ${risk} (${overall}/25)\nHeuristic Mode: ${usedFallback?'YES':'NO'}\n\nHazards:\n`;
+    hazards.forEach((h,i)=> out += `${i+1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk}\n`);
+    out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h=>h.recs||[]))].map((r,i)=>`${i+1}. ${r}`).join('\n')}`;
+    const blob = new Blob([out], {type:'text/plain'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = `HSE_Risk_Assessment_${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+  }
+
+  function resetApp(){ stopCamera(); hazards=[]; overall=0; imageData=null; usedFallback=false; els.fileInput.value=''; els.results.classList.add('hidden'); }
+
+  function captureFromCamera(){
+    if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
+      showWarning('No camera frame available yet. If this persists, stop camera and use Upload Image.');
+      return;
+    }
+    const c=document.createElement('canvas');
+    c.width=els.videoPreview.videoWidth;
+    c.height=els.videoPreview.videoHeight;
+    c.getContext('2d').drawImage(els.videoPreview,0,0);
+    stopCamera();
+    analyze(c.toDataURL('image/jpeg',0.9));
+  }
+
+  els.btnCamera.addEventListener('click', startCamera);
+  els.btnUpload.addEventListener('click', openFilePicker);
+  els.btnCapture.addEventListener('click', captureFromCamera);
+  els.btnStop.addEventListener('click', stopCamera);
+  els.btnExport.addEventListener('click', exportReport);
+  els.btnReset.addEventListener('click', resetApp);
+  els.fileInput.addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if(!f) return;
+    if(!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => analyze(ev.target.result);
+    reader.onerror = () => showWarning('Failed to read selected image.');
+    reader.readAsDataURL(f);
+  });
+  els.uploadArea.addEventListener('click', openFilePicker);
+  els.uploadArea.addEventListener('keydown', (e) => { if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openFilePicker(); }});
+
+  window.openFilePicker = openFilePicker;
+  window.startCam = startCamera;
+  window.stopCam = stopCamera;
+  window.capture = captureFromCamera;
+  window.analyze = analyze;
+  window.exportReport = exportReport;
+  window.resetApp = resetApp;
+
+  initModel();
+})();
+</script>
+</body>
+</html>
