@@ -79,3 +79,22 @@ The app will analyze and provide risk assessments based on detected objects and 
 ---
 
 **Note:** This is a fully functional web application that works entirely in your browser - no installation required!
+
+## Source of Truth for GitHub Pages
+
+- Canonical web app file: `web/index.html`
+- Root `index.html` is deployment mirror for GitHub Pages compatibility.
+- Run `./scripts_sync_web.sh` after web edits to sync the root copy.
+
+
+## Camera stability lock
+- `web/index.html` contains a `CAMERA_STABILITY_LOCK` marker around the camera startup path.
+- Keep that flow intact unless cross-device validated (Android Chrome, iOS Safari, desktop Chrome/Edge/Firefox).
+- If you must refactor, preserve: basic `{video:true}` fallback, deviceId/facingMode retries, explicit `video.play()`, and frame-readiness checks.
+- UI now includes **Open Camera (Compat)** to force minimal constraints when standard camera open fails.
+
+- Runtime status banner now surfaces camera/file-picker errors directly in-page to aid troubleshooting.
+- Upload validation now accepts extension-based image detection (including HEIC/HEIF) when MIME type is missing.
+- `CAMERA_STATE_LOCK` in `web/index.html` protects deterministic state transitions (`idle/requesting_camera/camera_ready/...`).
+- Added **Run Diagnostics** button to print origin/security/camera/file-input checks directly in-page for faster issue triage.
+- Added **Copy Diagnostics** button to quickly share runtime checks during support/debugging.

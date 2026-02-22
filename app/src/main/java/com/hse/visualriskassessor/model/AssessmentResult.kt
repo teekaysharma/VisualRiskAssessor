@@ -8,7 +8,8 @@ data class AssessmentResult(
     val imagePath: String,
     val hazards: List<Hazard>,
     val overallRiskLevel: RiskLevel,
-    val analysisTimeMs: Long = 0
+    val analysisTimeMs: Long = 0,
+    val analysisMode: AnalysisMode = AnalysisMode.ML_DETECTION
 ) {
     val hasHazards: Boolean
         get() = hazards.isNotEmpty()
@@ -16,11 +17,18 @@ data class AssessmentResult(
     val highestRiskScore: Int
         get() = hazards.maxOfOrNull { it.riskScore } ?: 0
 
+    val usedFallbackAnalysis: Boolean
+        get() = analysisMode == AnalysisMode.HEURISTIC_FALLBACK
+
     fun getAllRecommendations(): List<String> {
         return hazards.flatMap { it.getRecommendations() }.distinct()
     }
 
     fun getSummary(): String {
+        if (usedFallbackAnalysis) {
+            return "Assessment used fallback hazard estimation due to a model or image-processing limitation. Re-run analysis with a clearer image for higher confidence."
+        }
+
         return when {
             !hasHazards -> "No significant hazards detected. Continue regular safety monitoring."
             overallRiskLevel == RiskLevel.LOW -> "Low risk environment detected. Maintain current safety standards."

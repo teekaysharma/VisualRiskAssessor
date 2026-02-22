@@ -16,6 +16,9 @@ interface AssessmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAssessment(assessment: AssessmentEntity)
 
+    @Query("DELETE FROM assessments WHERE id = :assessmentId")
+    suspend fun deleteAssessmentById(assessmentId: String)
+
     @Query("DELETE FROM assessments")
     suspend fun clearAssessments()
 }
