@@ -93,6 +93,18 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <TextView
+                android:id="@+id/analysisWarningBanner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_md"
+                android:background="#FFF3CD"
+                android:padding="@dimen/spacing_md"
+                android:text="@string/fallback_warning_banner"
+                android:textColor="#8A6D3B"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <!-- Hazards Detected -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/hazardsCard"

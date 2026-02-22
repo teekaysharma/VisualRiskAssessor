@@ -40,6 +40,8 @@
         .photo-ref img { max-width: 100%; max-height: 400px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
         .photo-label { display: inline-block; background: var(--secondary); color: white; padding: 8px 20px; border-radius: 20px; margin-top: 15px; font-weight: 600; }
         .overall-risk { text-align: center; margin: 25px 0; padding: 30px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border-radius: 16px; }
+        .fallback-warning { display: none; margin: 15px 0 20px; padding: 16px; border-radius: 12px; border: 2px solid #f57c00; background: #fff3e0; color: #7a3e00; font-weight: 700; }
+        .fallback-warning.active { display: block; }
         .overall-score { font-size: 4rem; font-weight: 800; }
         .overall-level { font-size: 1.8rem; font-weight: 700; margin-top: 10px; }
         .hazard-item { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 15px; border-left: 5px solid var(--med); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
@@ -99,6 +101,7 @@
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
         <section class="results" id="results">
             <div class="card photo-ref"><img id="resultImg"><div class="photo-label">📸 Reference Image</div></div>
+            <div class="fallback-warning" id="fallbackWarning">⚠️ Estimated hazards only: automatic analysis failed and placeholder hazards are being shown. Verify conditions manually before acting on this report.</div>
             <div class="overall-risk"><div>OVERALL RISK SCORE</div><div class="overall-score" id="overallScore">0</div><div class="overall-level" id="overallLevel">Assessing...</div></div>
             <div class="card"><h2>🚨 Hazards Identified</h2><p class="instr">The following hazards were detected:</p><div id="hazardsList"></div></div>
             <div class="card"><h2>📊 Risk Assessment Matrix</h2><div class="matrix-sec"><div class="matrix-title">Likelihood × Severity = Risk</div><div class="risk-matrix" id="riskMatrix"></div></div><div class="methodology"><h4>📖 HSE Methodology</h4><p><strong>Risk = Likelihood × Severity</strong></p><p>🟢 Low (1-5) - Acceptable | 🟡 Medium (6-14) - Additional controls | 🔴 High (15-19) - Urgent action | ⚫ Extreme (20-25) - Immediate action</p></div></div>
@@ -122,7 +125,7 @@
         height:{name:"Working at Height",kw:["ladder","scaffold","building","construction"],L:2,S:5,recs:[{i:"🦺",t:"Fall Protection",d:"Use fall protection"},{i:"🏗️",t:"Scaffold",d:"Proper scaffold inspection"},{i:"✅",t:"Daily Checks",d:"Documented daily inspections"}]},
         general:{name:"General Workplace",kw:["office","room","indoor","workspace"],L:3,S:2,recs:[{i:"🧹",t:"Housekeeping",d:"Clean organized areas"},{i:"🪜",t:"Clear Walkways",d:"No obstructions"},{i:"🔦",t:"Emergency Lighting",d:"Functional lighting"}]}
     };
-    let model=null,video=null,imgData=null,hazards=[],overallScore=0;
+    let model=null,video=null,imgData=null,hazards=[],overallScore=0,analysisUsedFallback=false;
     async function init(){
         try{
             model=await mobilenet.load();
@@ -218,6 +221,7 @@
         stopCam();
         hazards=[];
         overallScore=0;
+        analysisUsedFallback=false;
         imgData=null;
         document.getElementById('fileInput').value='';
         document.getElementById('hazardsList').innerHTML='';
@@ -226,6 +230,7 @@
         document.getElementById('overallScore').textContent='0';
         document.getElementById('overallLevel').textContent='Assessing...';
         document.getElementById('overallLevel').style.background='';
+        document.getElementById('fallbackWarning').classList.remove('active');
         document.getElementById('resultImg').removeAttribute('src');
         document.getElementById('results').classList.remove('active');
         document.getElementById('inputSec').classList.remove('hidden');
@@ -250,12 +255,12 @@
         r.onerror=function(){alert('Unable to read the selected file.');};
         r.readAsDataURL(f);
     }
-    async function analyze(img){showLoad();hazards=[];try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
+    async function analyze(img){showLoad();hazards=[];analysisUsedFallback=false;try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
     function mapHazards(preds){const found=new Set();preds.forEach(p=>{const l=p.className.toLowerCase();Object.entries(hazardDB).forEach(([k,h])=>{h.kw.forEach(kw=>{if(l.includes(kw)&&!found.has(k)){found.add(k);hazards.push({id:k,...h,conf:p.probability,risk:h.L*h.S});}});});});if(hazards.length===0)hazards.push({...hazardDB.general,conf:0.8,risk:6});}
-    function fallback(){hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];}
+    function fallback(){analysisUsedFallback=true;hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];calcOverall();display();}
     function calcOverall(){overallScore=hazards.length?Math.max(...hazards.map(h=>h.risk)):0;}
     function getRisk(s){if(s<=5)return{l:'Low',c:'#4CAF50'};if(s<=14)return{l:'Medium',c:'#FFC107'};if(s<=19)return{l:'High',c:'#F44336'};return{l:'Extreme',c:'#B71C1C'};}
-    function display(){document.getElementById('resultImg').src=imgData;const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
+    function display(){document.getElementById('resultImg').src=imgData;document.getElementById('fallbackWarning').classList.toggle('active',analysisUsedFallback);const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
     function drawMatrix(){const m=document.getElementById('riskMatrix');let html='<div class="matrix-cell"></div>';['1','2','3','4','5'].forEach(s=>html+=`<div class="matrix-cell matrix-header">S:${s}</div>`);for(let l=0;l<5;l++){html+=`<div class="matrix-cell matrix-header">L:${l+1}</div>`;for(let s=0;s<5;s++){const sc=(l+1)*(s+1),cls=sc>=20?'cell-extreme':sc>=15?'cell-high':sc>=6?'cell-medium':'cell-low',mk=hazards.some(h=>h.risk===sc)?'current-marker':'';html+=`<div class="matrix-cell ${cls} ${mk}">${sc}</div>`;}}m.innerHTML=html;}
     function dispRecs(){const recs=[];hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!recs.find(x=>x.t===r.t))recs.push(r);});});recs.push({i:"📋",t:"Regular Audits",d:"Conduct routine safety inspections"},{i:"📢",t:"Report Hazards",d:"Encourage immediate hazard reporting"});document.getElementById('recsList').innerHTML=recs.map(r=>`<div class="rec-item"><div class="rec-icon">${r.i}</div><div class="rec-content"><h4>${r.t}</h4><p>${r.d}</p></div></div>`).join('');}
     function exportReport(){
@@ -281,6 +286,11 @@ METHODOLOGY:         ISO 45001:2018 / ISO 31000:2018
 OVERALL RISK RATING:     ${r.l.toUpperCase()}
 RISK SCORE:             ${overallScore} / 25
 HAZARDS IDENTIFIED:     ${hazards.length}
+
+${analysisUsedFallback ? `ANALYSIS NOTICE:
+  Hazard entries are ESTIMATED PLACEHOLDERS because automated
+  image analysis failed. Manual verification is required.
+` : ''}
 
 
 RISK MATRIX

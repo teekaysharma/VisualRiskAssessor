@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import com.hse.visualriskassessor.analysis.HazardDetector.AnalysisStatus
+import com.hse.visualriskassessor.model.AnalysisMode
 import com.hse.visualriskassessor.model.AssessmentResult
 import com.hse.visualriskassessor.model.Hazard
 import com.hse.visualriskassessor.model.RiskLevel
@@ -24,7 +26,8 @@ class RiskAssessmentEngine(private val context: Context) {
         
         val savedPath = saveImage(processedBitmap)
         
-        val hazards = hazardDetector.analyzeImage(processedBitmap)
+        val analysisResult = hazardDetector.analyzeImage(processedBitmap)
+        val hazards = analysisResult.hazards
         
         val overallRisk = calculateOverallRisk(hazards)
         
@@ -34,7 +37,8 @@ class RiskAssessmentEngine(private val context: Context) {
             imagePath = savedPath,
             hazards = hazards,
             overallRiskLevel = overallRisk,
-            analysisTimeMs = analysisTime
+            analysisTimeMs = analysisTime,
+            analysisMode = analysisResult.status.toAnalysisMode()
         )
     }
 
@@ -44,7 +48,8 @@ class RiskAssessmentEngine(private val context: Context) {
         val processedBitmap = preprocessImage(bitmap)
         val savedPath = saveImage(processedBitmap)
         
-        val hazards = hazardDetector.analyzeImage(processedBitmap)
+        val analysisResult = hazardDetector.analyzeImage(processedBitmap)
+        val hazards = analysisResult.hazards
         val overallRisk = calculateOverallRisk(hazards)
         
         val analysisTime = System.currentTimeMillis() - startTime
@@ -53,8 +58,17 @@ class RiskAssessmentEngine(private val context: Context) {
             imagePath = savedPath,
             hazards = hazards,
             overallRiskLevel = overallRisk,
-            analysisTimeMs = analysisTime
+            analysisTimeMs = analysisTime,
+            analysisMode = analysisResult.status.toAnalysisMode()
         )
+    }
+
+    private fun AnalysisStatus.toAnalysisMode(): AnalysisMode {
+        return when (this) {
+            AnalysisStatus.SUCCESS -> AnalysisMode.SUCCESS
+            AnalysisStatus.PARTIAL -> AnalysisMode.PARTIAL
+            AnalysisStatus.FALLBACK -> AnalysisMode.FALLBACK
+        }
     }
 
     private fun loadBitmap(uri: Uri): Bitmap {

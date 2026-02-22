@@ -13,6 +13,17 @@ import kotlinx.coroutines.tasks.await
 
 class HazardDetector(private val context: Context) {
 
+    enum class AnalysisStatus {
+        SUCCESS,
+        PARTIAL,
+        FALLBACK
+    }
+
+    data class HazardAnalysisResult(
+        val hazards: List<Hazard>,
+        val status: AnalysisStatus
+    )
+
     private val imageLabeler by lazy {
         val options = ImageLabelerOptions.Builder()
             .setConfidenceThreshold(0.5f)
@@ -29,13 +40,21 @@ class HazardDetector(private val context: Context) {
         ObjectDetection.getClient(options)
     }
 
-    suspend fun analyzeImage(bitmap: Bitmap): List<Hazard> {
+    suspend fun analyzeImage(bitmap: Bitmap): HazardAnalysisResult {
         val inputImage = InputImage.fromBitmap(bitmap, 0)
         val hazards = mutableListOf<Hazard>()
+        var usedFallback = false
+        var partialFailure = false
 
         try {
             val labels = imageLabeler.process(inputImage).await()
-            val objects = objectDetector.process(inputImage).await()
+
+            val objects = try {
+                objectDetector.process(inputImage).await()
+            } catch (exception: Exception) {
+                partialFailure = true
+                emptyList()
+            }
 
             for (label in labels) {
                 val hazardType = mapLabelToHazard(label.text, label.confidence)
@@ -73,14 +92,25 @@ class HazardDetector(private val context: Context) {
             }
 
             if (hazards.isEmpty()) {
+                usedFallback = true
                 hazards.addAll(generateSampleHazards(bitmap))
             }
 
         } catch (e: Exception) {
+            usedFallback = true
             hazards.addAll(generateSampleHazards(bitmap))
         }
 
-        return hazards.distinctBy { it.type }
+        val status = when {
+            usedFallback -> AnalysisStatus.FALLBACK
+            partialFailure -> AnalysisStatus.PARTIAL
+            else -> AnalysisStatus.SUCCESS
+        }
+
+        return HazardAnalysisResult(
+            hazards = hazards.distinctBy { it.type },
+            status = status
+        )
     }
 
     private fun mapLabelToHazard(label: String, confidence: Float): HazardType? {

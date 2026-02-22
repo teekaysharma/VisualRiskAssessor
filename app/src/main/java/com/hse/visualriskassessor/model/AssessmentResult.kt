@@ -8,13 +8,17 @@ data class AssessmentResult(
     val imagePath: String,
     val hazards: List<Hazard>,
     val overallRiskLevel: RiskLevel,
-    val analysisTimeMs: Long = 0
+    val analysisTimeMs: Long = 0,
+    val analysisMode: AnalysisMode = AnalysisMode.SUCCESS
 ) {
     val hasHazards: Boolean
         get() = hazards.isNotEmpty()
 
     val highestRiskScore: Int
         get() = hazards.maxOfOrNull { it.riskScore } ?: 0
+
+    val isFallback: Boolean
+        get() = analysisMode == AnalysisMode.FALLBACK
 
     fun getAllRecommendations(): List<String> {
         return hazards.flatMap { it.getRecommendations() }.distinct()

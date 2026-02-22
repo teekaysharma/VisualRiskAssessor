@@ -20,6 +20,7 @@ import com.hse.visualriskassessor.R
 import com.hse.visualriskassessor.HSEApplication
 import com.hse.visualriskassessor.analysis.RiskAssessmentEngine
 import com.hse.visualriskassessor.model.AssessmentResult
+import com.hse.visualriskassessor.model.AnalysisMode
 import com.hse.visualriskassessor.model.OperationResult
 import com.hse.visualriskassessor.model.RiskLevel
 import com.hse.visualriskassessor.ui.MainActivity
@@ -46,6 +47,7 @@ class ResultsActivity : AppCompatActivity() {
     private lateinit var recommendationsText: TextView
     private lateinit var loadingOverlay: FrameLayout
     private lateinit var loadingText: TextView
+    private lateinit var analysisWarningBanner: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +74,7 @@ class ResultsActivity : AppCompatActivity() {
         recommendationsText = findViewById(R.id.recommendationsText)
         loadingOverlay = findViewById(R.id.loadingOverlay)
         loadingText = findViewById(R.id.loadingText)
+        analysisWarningBanner = findViewById(R.id.analysisWarningBanner)
 
         hazardsRecyclerView.layoutManager = LinearLayoutManager(this)
 
@@ -138,6 +141,12 @@ class ResultsActivity : AppCompatActivity() {
         riskLevelText.setTextColor(getRiskColor(result.overallRiskLevel))
 
         riskDescriptionText.text = result.getSummary()
+
+        analysisWarningBanner.visibility = if (result.analysisMode != AnalysisMode.SUCCESS) {
+            View.VISIBLE
+        } else {
+            View.GONE
+        }
 
         if (result.hasHazards) {
             hazardsRecyclerView.adapter = HazardAdapter(result.hazards)
@@ -210,6 +219,9 @@ class ResultsActivity : AppCompatActivity() {
         val shareText = buildString {
             append("HSE Risk Assessment Report\n\n")
             append("Overall Risk: ${result.overallRiskLevel.displayName}\n\n")
+            if (result.analysisMode != AnalysisMode.SUCCESS) {
+                append("⚠️ Analysis Warning: Some or all hazards are estimated placeholders due to analysis failure.\n\n")
+            }
             append("Hazards Detected: ${result.hazards.size}\n\n")
             result.hazards.forEach { hazard ->
                 append("• ${hazard.type.displayName} - ${hazard.riskLevel.displayName}\n")
