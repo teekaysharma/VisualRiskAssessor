@@ -59,7 +59,7 @@
       <div id="uploadArea" tabindex="0" role="button" aria-label="Upload an image">Click or press Enter/Space to upload an image.</div>
 
       <div id="cameraSection" class="hidden">
-        <video id="videoPreview" autoplay playsinline></video><br/><br/>
+        <video id="videoPreview" autoplay playsinline muted></video><br/><br/>
         <button class="btn btn-primary" id="btnCapture">Capture</button>
         <button class="btn btn-outline" id="btnStop">Stop Camera</button>
       </div>
@@ -67,20 +67,16 @@
 
     <section id="results" class="card hidden" aria-live="polite">
       <h2 style="margin-top:0">Assessment Results</h2>
-      <div id="fallbackWarning" class="warning hidden">Fallback hazard estimation used due to model/runtime limitations.</div>
+      <div id="fallbackWarning" class="warning hidden">ML model unavailable. Showing heuristic risk estimation.</div>
       <img id="resultImg" alt="Analyzed image" />
       <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span></p>
       <p><strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span></p>
-
       <h3>Hazards</h3>
       <div id="hazardsList"></div>
-
       <h3>Risk Matrix</h3>
       <div id="riskMatrix" class="matrix"></div>
-
       <h3>Recommendations</h3>
       <div id="recsList"></div>
-
       <button class="btn btn-secondary" id="btnExport">Export Report</button>
       <button class="btn btn-outline" id="btnReset">New Assessment</button>
     </section>
@@ -92,12 +88,11 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const els = {
-    envWarning: $('envWarning'), inputSec: $('inputSec'), results: $('results'), fileInput: $('fileInput'),
-    uploadArea: $('uploadArea'), cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
+    envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
+    cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
     overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'), riskMatrix: $('riskMatrix'),
     recsList: $('recsList'), fallbackWarning: $('fallbackWarning'), loading: $('loading'),
-    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'),
-    btnExport: $('btnExport'), btnReset: $('btnReset')
+    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset')
   };
 
   let model = null, stream = null, imageData = null, hazards = [], overall = 0, usedFallback = false;
@@ -106,8 +101,7 @@
     electrical:{name:'Electrical Hazard',L:4,S:4,kw:['wire','cable','electric','plug'],recs:['Isolate exposed circuits','Use insulated PPE']},
     slip:{name:'Slip/Trip/Fall Hazard',L:4,S:3,kw:['floor','ground','wet','slippery'],recs:['Dry floor immediately','Use anti-slip signage']},
     machinery:{name:'Machinery Hazard',L:3,S:4,kw:['machine','equipment','tool','motor'],recs:['Install guarding','Apply lockout-tagout']},
-    fire:{name:'Fire Hazard',L:3,S:5,kw:['fire','flame','gas','smoke'],recs:['Remove ignition sources','Keep extinguisher nearby']},
-    general:{name:'General Workplace Hazard',L:2,S:3,kw:[],recs:['Run manual inspection','Repeat assessment with clearer image']}
+    fire:{name:'Fire Hazard',L:3,S:5,kw:['fire','flame','gas','smoke'],recs:['Remove ignition sources','Keep extinguisher nearby']}
   };
 
   function showWarning(msg){ els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
@@ -115,40 +109,88 @@
   function riskFor(score){ if(score<=5) return {label:'Low Risk', cls:'risk-low', color:'var(--ok)'}; if(score<=14) return {label:'Medium Risk', cls:'risk-medium', color:'var(--mid)'}; if(score<=19) return {label:'High Risk', cls:'risk-high', color:'var(--hi)'}; return {label:'Extreme Risk', cls:'risk-extreme', color:'var(--x)'}; }
 
   async function initModel(){
-    if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    if (location.protocol === 'http:' && !['localhost','127.0.0.1'].includes(location.hostname)) {
       showWarning('Use HTTPS on GitHub Pages for camera access. Upload still works.');
     }
     try { model = await mobilenet.load(); }
-    catch { showWarning('ML model failed to load. App will use fallback hazard estimation.'); }
+    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
   }
 
   async function startCamera(){
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      els.videoPreview.srcObject = stream;
-      els.cameraSection.classList.remove('hidden');
-    } catch { showWarning('Camera unavailable. Use upload instead.'); }
+    stopCamera();
+    const constraintCandidates = [
+      { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      { video: true, audio: false }
+    ];
+
+    for (const constraints of constraintCandidates) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        els.videoPreview.srcObject = stream;
+        els.videoPreview.setAttribute('playsinline', 'true');
+        els.videoPreview.muted = true;
+        await els.videoPreview.play();
+        await new Promise(r => setTimeout(r, 400));
+        if (els.videoPreview.videoWidth > 0 && els.videoPreview.videoHeight > 0) {
+          els.cameraSection.classList.remove('hidden');
+          return;
+        }
+      } catch (_) {
+        // try next
+      }
+    }
+
+    showWarning('Camera opened but no frames received (black preview). Please use Upload Image.');
+    stopCamera();
   }
 
-  function stopCamera(){ if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; } els.cameraSection.classList.add('hidden'); }
+  function stopCamera(){
+    if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (els.videoPreview) { els.videoPreview.pause(); els.videoPreview.srcObject = null; }
+    els.cameraSection.classList.add('hidden');
+  }
+
   function openFilePicker(){ els.fileInput.click(); }
 
-  function fallback(){ usedFallback = true; const h = hazardDB.general; hazards = [{name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:0.5,recs:h.recs}]; }
+  function heuristicHazardsFromCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const img = ctx.getImageData(0, 0, width, height).data;
+    let sum = 0, edge = 0;
+    for (let i = 0; i < img.length; i += 16) {
+      const v = (img[i] + img[i+1] + img[i+2]) / 3;
+      sum += v;
+      if (i > 16) {
+        const pv = (img[i-16] + img[i-15] + img[i-14]) / 3;
+        if (Math.abs(v - pv) > 45) edge++;
+      }
+    }
+    const samples = Math.floor(img.length / 16);
+    const avg = sum / Math.max(samples, 1);
+    const edgeRatio = edge / Math.max(samples, 1);
+
+    const out = [];
+    if (avg < 80) out.push({name:'Low Visibility Hazard',L:3,S:3,risk:9,conf:0.72,recs:['Improve workplace lighting','Use high-visibility safety markers']});
+    if (edgeRatio > 0.2) out.push({name:'Clutter/Obstruction Hazard',L:3,S:2,risk:6,conf:0.69,recs:['Clear walk paths and floor obstructions','Apply 5S housekeeping checks']});
+    if (out.length === 0) out.push({name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.65,recs:['Run manual inspection','Verify with site supervisor']});
+    return out;
+  }
 
   function mapPredictions(preds){
-    const found = new Set(); hazards = [];
+    const found = new Set();
+    const out = [];
     preds.forEach(p => {
       const name = p.className.toLowerCase();
       Object.entries(hazardDB).forEach(([key,h]) => {
         h.kw.forEach(kw => {
-          if(name.includes(kw) && !found.has(key)){
+          if(name.includes(kw) && !found.has(key)) {
             found.add(key);
-            hazards.push({name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:p.probability,recs:h.recs});
+            out.push({name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:p.probability,recs:h.recs});
           }
         });
       });
     });
-    if(!hazards.length) fallback();
+    return out;
   }
 
   function render(){
@@ -171,7 +213,8 @@
       t.textContent = `${h.name} (${Math.round((h.conf||0)*100)}%)`;
       const d = document.createElement('div');
       d.textContent = `Likelihood ${h.L}, Severity ${h.S}, Risk ${h.risk} (${hr.label.replace(' Risk','')})`;
-      item.append(t,d); els.hazardsList.appendChild(item);
+      item.append(t,d);
+      els.hazardsList.appendChild(item);
     });
 
     els.riskMatrix.textContent = '';
@@ -182,37 +225,56 @@
       for(let s=1;s<=5;s++){
         const score=l*s; const c=document.createElement('div');
         let cls='low'; if(score>=20)cls='ext'; else if(score>=15)cls='high'; else if(score>=6)cls='med';
-        c.className=`cell ${cls}${hazards.some(h=>h.risk===score)?' mark':''}`; c.textContent=String(score); els.riskMatrix.appendChild(c);
+        c.className=`cell ${cls}${hazards.some(h=>h.risk===score)?' mark':''}`;
+        c.textContent=String(score);
+        els.riskMatrix.appendChild(c);
       }
     }
 
     els.recsList.textContent = '';
-    [...new Set(hazards.flatMap(h => h.recs || []))].forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
+    const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
+    recs.forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
   }
 
   async function analyze(dataUrl){
-    setLoading(true); usedFallback = false;
+    setLoading(true);
     try {
-      if(model){
-        const img = new Image();
-        await new Promise((resolve,reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
-        const preds = await model.classify(img);
-        mapPredictions(preds);
-      } else {
-        fallback();
-      }
-    } catch {
-      fallback();
-    } finally {
       imageData = dataUrl;
+      hazards = [];
+
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+
+      if (model) {
+        try {
+          const preds = await model.classify(img);
+          hazards = mapPredictions(preds);
+        } catch {
+          usedFallback = true;
+        }
+      }
+
+      if (hazards.length === 0) {
+        hazards = heuristicHazardsFromCanvas(canvas);
+      }
+
       render();
+    } catch {
+      usedFallback = true;
+      hazards = [{name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.5,recs:['Run manual inspection','Repeat assessment with clearer image']}];
+      render();
+    } finally {
       setLoading(false);
     }
   }
 
   function exportReport(){
     const risk = riskFor(overall).label;
-    let out = `HSE Risk Assessment\nDate: ${new Date().toISOString()}\nRisk: ${risk} (${overall}/25)\nFallback Used: ${usedFallback?'YES':'NO'}\n\nHazards:\n`;
+    let out = `HSE Risk Assessment\nDate: ${new Date().toISOString()}\nRisk: ${risk} (${overall}/25)\nHeuristic Mode: ${usedFallback?'YES':'NO'}\n\nHazards:\n`;
     hazards.forEach((h,i)=> out += `${i+1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk}\n`);
     out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h=>h.recs||[]))].map((r,i)=>`${i+1}. ${r}`).join('\n')}`;
     const blob = new Blob([out], {type:'text/plain'});
@@ -221,7 +283,19 @@
   }
 
   function resetApp(){ stopCamera(); hazards=[]; overall=0; imageData=null; usedFallback=false; els.fileInput.value=''; els.results.classList.add('hidden'); }
-  function captureFromCamera(){ const v=els.videoPreview; const c=document.createElement('canvas'); c.width=v.videoWidth; c.height=v.videoHeight; c.getContext('2d').drawImage(v,0,0); stopCamera(); analyze(c.toDataURL('image/jpeg',0.9)); }
+
+  function captureFromCamera(){
+    if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
+      showWarning('No video frame available yet. Please wait or use upload.');
+      return;
+    }
+    const c=document.createElement('canvas');
+    c.width=els.videoPreview.videoWidth;
+    c.height=els.videoPreview.videoHeight;
+    c.getContext('2d').drawImage(els.videoPreview,0,0);
+    stopCamera();
+    analyze(c.toDataURL('image/jpeg',0.9));
+  }
 
   els.btnCamera.addEventListener('click', startCamera);
   els.btnUpload.addEventListener('click', openFilePicker);
