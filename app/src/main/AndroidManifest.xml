@@ -12,11 +12,6 @@
 
     <uses-permission android:name="android.permission.CAMERA" />
     
-    <!-- Photo library permissions -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    
     <!-- Optional: for saving reports -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28"

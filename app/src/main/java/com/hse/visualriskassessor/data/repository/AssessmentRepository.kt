@@ -6,6 +6,7 @@ import com.hse.visualriskassessor.model.AssessmentResult
 import com.hse.visualriskassessor.model.OperationResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.io.File
 
 class AssessmentRepository(private val assessmentDao: AssessmentDao) {
 
@@ -24,6 +25,35 @@ class AssessmentRepository(private val assessmentDao: AssessmentDao) {
         }
     }
 
+    suspend fun deleteAssessment(result: AssessmentResult): OperationResult<Unit> {
+        return try {
+            assessmentDao.deleteAssessmentById(result.id)
+            deleteImageIfExists(result.imagePath)
+            OperationResult.Success(Unit)
+        } catch (exception: Exception) {
+            OperationResult.Error("Unable to delete assessment.", exception)
+        }
+    }
+
+    suspend fun clearAssessments(results: List<AssessmentResult>): OperationResult<Unit> {
+        return try {
+            assessmentDao.clearAssessments()
+            results.forEach { deleteImageIfExists(it.imagePath) }
+            OperationResult.Success(Unit)
+        } catch (exception: Exception) {
+            OperationResult.Error("Unable to clear assessments.", exception)
+        }
+    }
+
+    private fun deleteImageIfExists(path: String) {
+        kotlin.runCatching {
+            val file = File(path)
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+    }
+
     private fun AssessmentEntity.toModel(): AssessmentResult {
         return AssessmentResult(
             id = id,
@@ -31,7 +61,8 @@ class AssessmentRepository(private val assessmentDao: AssessmentDao) {
             imagePath = imagePath,
             hazards = hazards,
             overallRiskLevel = overallRiskLevel,
-            analysisTimeMs = analysisTimeMs
+            analysisTimeMs = analysisTimeMs,
+            analysisMode = analysisMode
         )
     }
 
@@ -42,7 +73,8 @@ class AssessmentRepository(private val assessmentDao: AssessmentDao) {
             imagePath = imagePath,
             hazards = hazards,
             overallRiskLevel = overallRiskLevel,
-            analysisTimeMs = analysisTimeMs
+            analysisTimeMs = analysisTimeMs,
+            analysisMode = analysisMode
         )
     }
 }
