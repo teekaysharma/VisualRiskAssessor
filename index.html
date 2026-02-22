@@ -1,370 +1,539 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualRiskAssessor - HSE Risk Assessment</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
-    <style>
-        :root { --primary: #FF6D00; --primary-dark: #E65100; --secondary: #1565C0; --bg: #F5F5F5; --surface: #fff; --text: #212121; --text2: #616161; --low: #4CAF50; --med: #FFC107; --high: #F44336; --extreme: #B71C1C; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-        .header { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 25px; text-align: center; }
-        .header h1 { font-size: 2rem; margin-bottom: 8px; }
-        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
-        .card { background: var(--surface); border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 15px rgba(0,0,0,0.08); }
-        .card h2 { color: var(--secondary); margin-bottom: 20px; font-size: 1.4rem; }
-        .btn-group { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin: 25px 0; }
-        .btn { padding: 16px 32px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); transform: translateY(-2px); }
-        .btn-secondary { background: var(--secondary); color: white; }
-        .btn-secondary:hover { background: #0D47A1; }
-        .btn-outline { background: transparent; border: 2px solid var(--secondary); color: var(--secondary); }
-        .camera-sec { display: none; text-align: center; }
-        .camera-sec.active { display: block; }
-        #videoPreview { width: 100%; max-width: 600px; border-radius: 12px; background: #000; }
-        .upload-area { border: 3px dashed var(--secondary); border-radius: 16px; padding: 50px; text-align: center; cursor: pointer; transition: 0.3s; background: #f8fbff; }
-        .upload-area:hover { background: #e3f2fd; border-color: var(--primary); }
-        .upload-icon { font-size: 4rem; }
-        #fileInput { display: none; }
-        .loading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
-        .loading.active { display: flex; }
-        .spinner { width: 70px; height: 70px; border: 5px solid rgba(255,255,255,0.2); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text { color: white; margin-top: 25px; font-size: 1.3rem; }
-        .results { display: none; }
-        .results.active { display: block; }
-        .photo-ref { text-align: center; margin-bottom: 25px; }
-        .photo-ref img { max-width: 100%; max-height: 400px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        .photo-label { display: inline-block; background: var(--secondary); color: white; padding: 8px 20px; border-radius: 20px; margin-top: 15px; font-weight: 600; }
-        .overall-risk { text-align: center; margin: 25px 0; padding: 30px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; border-radius: 16px; }
-        .overall-score { font-size: 4rem; font-weight: 800; }
-        .overall-level { font-size: 1.8rem; font-weight: 700; margin-top: 10px; }
-        .hazard-item { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 15px; border-left: 5px solid var(--med); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .hazard-item.risk-low { border-left-color: var(--low); }
-        .hazard-item.risk-medium { border-left-color: var(--med); }
-        .hazard-item.risk-high { border-left-color: var(--high); }
-        .hazard-item.risk-extreme { border-left-color: var(--extreme); }
-        .hazard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .hazard-name { font-size: 1.2rem; font-weight: 700; }
-        .hazard-conf { background: var(--secondary); color: white; padding: 5px 12px; border-radius: 15px; font-size: 0.85rem; }
-        .hazard-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 8px; }
-        .detail-item { text-align: center; }
-        .detail-label { font-size: 0.75rem; color: var(--text2); text-transform: uppercase; }
-        .detail-value { font-size: 1.2rem; font-weight: 700; }
-        .matrix-sec { padding: 25px; background: linear-gradient(135deg, #f8f9fa, #fff); border-radius: 16px; margin: 25px 0; }
-        .matrix-title { text-align: center; color: var(--secondary); margin-bottom: 20px; font-size: 1.4rem; }
-        .risk-matrix { display: grid; grid-template-columns: 40px repeat(5, 1fr); gap: 3px; max-width: 480px; margin: 0 auto; }
-        .matrix-cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 600; border-radius: 6px; min-height: 50px; }
-        .matrix-label { background: transparent; font-weight: 700; color: var(--text2); font-size: 0.65rem; }
-        .matrix-header { background: var(--secondary); color: white; font-weight: 700; }
-        .cell-low { background: var(--low); color: white; }
-        .cell-medium { background: var(--med); color: #000; }
-        .cell-high { background: var(--high); color: white; }
-        .cell-extreme { background: var(--extreme); color: white; }
-        .current-marker { border: 4px solid gold !important; box-shadow: 0 0 15px gold; }
-        .methodology { background: #E3F2FD; padding: 20px; border-radius: 12px; margin: 20px 0; font-size: 0.95rem; color: #0D47A1; }
-        .methodology h4 { color: var(--secondary); margin-bottom: 10px; }
-        .rec-item { display: flex; gap: 15px; padding: 18px; background: #f8f9fa; border-radius: 12px; margin-bottom: 12px; border-left: 4px solid var(--primary); }
-        .rec-icon { font-size: 1.8rem; flex-shrink: 0; }
-        .rec-content h4 { color: var(--text); margin-bottom: 5px; }
-        .rec-content p { color: var(--text2); font-size: 0.95rem; }
-        .actions { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
-        .btn-restart { background: #616161; color: white; }
-        .hidden { display: none !important; }
-        .instr { text-align: center; color: var(--text2); margin: 15px 0; font-size: 1.05rem; }
-        @media (max-width: 768px) { .btn { width: 100%; justify-content: center; } .hazard-details { grid-template-columns: 1fr 1fr; } }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VisualRiskAssessor - HSE Risk Assessment</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+  <style>
+    :root { --p:#ff6d00; --s:#1565c0; --ok:#4caf50; --mid:#ffc107; --hi:#f44336; --x:#b71c1c; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI,Roboto,Arial,sans-serif; background:#f5f5f5; color:#212121; }
+    .header { background:linear-gradient(120deg,#ff6d00,#e65100); color:#fff; text-align:center; padding:20px 12px; }
+    .container { max-width:980px; margin:0 auto; padding:16px; }
+    .card { background:#fff; border-radius:14px; padding:18px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+    .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:600; cursor:pointer; }
+    .btn + .btn { margin-left:8px; }
+    .btn-primary { background:var(--p); color:#fff; }
+    .btn-secondary { background:var(--s); color:#fff; }
+    .btn-outline { background:#fff; color:var(--s); border:2px solid var(--s); }
+    .hidden { display:none !important; }
+    #uploadArea { border:2px dashed var(--s); border-radius:10px; padding:20px; margin-top:12px; background:#eef6ff; cursor:pointer; }
+    #uploadArea:focus-visible { outline:3px solid #000; }
+    #cameraSection { text-align:center; margin-top:12px; }
+    #videoPreview,#resultImg { width:100%; max-width:620px; border-radius:10px; background:#000; }
+    .warning { background:#fff3cd; color:#694f00; border-radius:8px; padding:10px; margin-bottom:10px; }
+    .result-chip { display:inline-block; padding:6px 10px; border-radius:999px; color:#fff; font-weight:700; }
+    .hazard-item { border-left:5px solid var(--mid); background:#fafafa; padding:10px; border-radius:8px; margin-bottom:8px; }
+    .risk-low { border-left-color:var(--ok); }
+    .risk-medium { border-left-color:var(--mid); }
+    .risk-high { border-left-color:var(--hi); }
+    .risk-extreme { border-left-color:var(--x); }
+    .matrix { display:grid; grid-template-columns:42px repeat(5,1fr); gap:3px; max-width:450px; }
+    .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; }
+    .head { background:#1565c0; color:#fff; }
+    .low { background:var(--ok); color:#fff; }
+    .med { background:var(--mid); }
+    .high { background:var(--hi); color:#fff; }
+    .ext { background:var(--x); color:#fff; }
+    .mark { outline:3px solid #000; }
+    #loading { position:fixed; inset:0; background:rgba(0,0,0,.72); color:#fff; display:none; place-items:center; font-size:1.1rem; z-index:999; }
+    #loading.active { display:grid; }
+  </style>
 </head>
 <body>
-    <header class="header">
-        <h1>🔬 VisualRiskAssessor</h1>
-        <p>HSE Risk Assessment - Identify Hazards, Assess Risks, Ensure Safety</p>
-    </header>
-    <main class="container">
-        <section class="card" id="inputSec">
-            <h2>📸 Capture Workplace Image</h2>
-            <p class="instr">Take a photo or upload an image of a workplace area to analyze for potential health and safety hazards.</p>
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="startCam()">📷 Take Photo</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">🖼️ Upload from Library</button>
-                <button class="btn btn-outline hidden" onclick="stopCam()" id="stopBtn">⏹️ Stop Camera</button>
-            </div>
-            <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
-            <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline muted webkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
-            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"><div class="upload-icon">📁</div><div class="instr">Click to upload or drag image<br><small>JPEG, PNG, WEBP</small></div></div>
-        </section>
-        <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
-        <section class="results" id="results">
-            <div class="card photo-ref"><img id="resultImg"><div class="photo-label">📸 Reference Image</div></div>
-            <div class="overall-risk"><div>OVERALL RISK SCORE</div><div class="overall-score" id="overallScore">0</div><div class="overall-level" id="overallLevel">Assessing...</div></div>
-            <div class="card"><h2>🚨 Hazards Identified</h2><p class="instr">The following hazards were detected:</p><div id="hazardsList"></div></div>
-            <div class="card"><h2>📊 Risk Assessment Matrix</h2><div class="matrix-sec"><div class="matrix-title">Likelihood × Severity = Risk</div><div class="risk-matrix" id="riskMatrix"></div></div><div class="methodology"><h4>📖 HSE Methodology</h4><p><strong>Risk = Likelihood × Severity</strong></p><p>🟢 Low (1-5) - Acceptable | 🟡 Medium (6-14) - Additional controls | 🔴 High (15-19) - Urgent action | ⚫ Extreme (20-25) - Immediate action</p></div></div>
-            <div class="card"><h2>🛡️ Safety Recommendations</h2><div id="recsList"></div></div>
-            <div class="actions"><button class="btn btn-primary" onclick="exportReport()">📥 Download Full Report</button><button class="btn btn-restart" onclick="resetApp()">🔄 New Assessment</button></div>
-        </section>
-    </main>
-    <script>
-    const hazardDB = {
-        slip_floor:{name:"Floor Surface Hazard",kw:["floor","ground","tile","carpet"],L:4,S:3,recs:[{i:"🧹",t:"Clean Floors",d:"Keep floors clean and free from debris"},{i:"⚠️",t:"Warning Signs",d:"Use wet floor signs"},{i:"👟",t:"Footwear",d:"Slip-resistant safety footwear"}]},
-        slip_stairs:{name:"Stairway Hazard",kw:["stairs","staircase","step","ladder"],L:3,S:4,recs:[{i:"🪜",t:"Handrails",d:"Install secure handrails"},{i:"⚠️",t:"Anti-slip",d:"Apply anti-slip strips"},{i:"🔦",t:"Lighting",d:"Adequate stair lighting"}]},
-        slip_water:{name:"Wet Surface Hazard",kw:["water","liquid","puddle","spill"],L:4,S:3,recs:[{i:"🧽",t:"Immediate Cleanup",d:"Clean spills immediately"},{i:"🛑",t:"Isolation",d:"Block off wet areas"},{i:"💧",t:"Source",d:"Fix source of water"}]},
-        elec_outlet:{name:"Electrical Outlet",kw:["outlet","socket","power"],L:2,S:5,recs:[{i:"🔌",t:"Inspect",d:"Regular outlet inspection"},{i:"🚫",t:"No Overload",d:"Don't overload outlets"},{i:"⚡",t:"GFCI",d:"Install GFCI protection"}]},
-        elec_wire:{name:"Exposed Wiring",kw:["wire","cable","cord"],L:3,S:5,recs:[{i:"🔧",t:"Cover Wires",d:"Cover exposed wiring"},{i:"🛡️",t:"Conduit",d:"Use cable conduit"},{i:"⚡",t:"Power Off",d:"Turn off power before work"}]},
-        fire_ext:{name:"Fire Equipment",kw:["extinguisher","fire alarm"],L:2,S:5,recs:[{i:"✅",t:"Accessible",d:"Keep extinguishers accessible"},{i:"📅",t:"Inspect",d:"Monthly inspections"},{i:"🏷️",t:"Signage",d:"Clear emergency signage"}]},
-        fire_flam:{name:"Flammable Materials",kw:["flammable","gasoline","chemical"],L:2,S:5,recs:[{i:"🏪",t:"Storage",d:"Approved safety cabinets"},{i:"🚭",t:"No Smoking",d:"Strict no smoking policy"},{i:"🧯",t:"Suppression",d:"Fire suppression nearby"}]},
-        chem:{name:"Chemical Storage",kw:["bottle","container","drum","can"],L:2,S:4,recs:[{i:"🧪",t:"Labeling",d:"Clear chemical labeling"},{i:"🗄️",t:"Storage",d:"Approved chemical cabinets"},{i:"😷",t:"PPE",d:"Appropriate PPE available"}]},
-        machine:{name:"Machinery Hazard",kw:["machine","motor","equipment","tool"],L:3,S:4,recs:[{i:"🛡️",t:"Guards",d:"Safety guards in place"},{i:"🔒",t:"Lockout",d:"Lockout/tagout procedures"},{i:"👷",t:"Training",d:"Operator certification"}]},
-        ergo:{name:"Workstation Ergonomics",kw:["chair","desk","computer","keyboard"],L:4,S:2,recs:[{i:"🪑",t:"Ergonomic Chair",d:"Adjustable seating"},{i:"🖥️",t:"Monitor Position",d:"Eye level monitor"},{i:"⏰",t:"Breaks",d:"Regular break schedule"}]},
-        ergo_lift:{name:"Manual Handling",kw:["box","heavy","lift"],L:4,S:3,recs:[{i:"🏋️",t:"Lifting Aids",d:"Use mechanical aids"},{i:"👥",t:"Team Lift",d:"Two-person for heavy loads"},{i:"📐",t:"Technique",d:"Proper lifting training"}]},
-        height:{name:"Working at Height",kw:["ladder","scaffold","building","construction"],L:2,S:5,recs:[{i:"🦺",t:"Fall Protection",d:"Use fall protection"},{i:"🏗️",t:"Scaffold",d:"Proper scaffold inspection"},{i:"✅",t:"Daily Checks",d:"Documented daily inspections"}]},
-        general:{name:"General Workplace",kw:["office","room","indoor","workspace"],L:3,S:2,recs:[{i:"🧹",t:"Housekeeping",d:"Clean organized areas"},{i:"🪜",t:"Clear Walkways",d:"No obstructions"},{i:"🔦",t:"Emergency Lighting",d:"Functional lighting"}]}
-    };
-    let model=null,video=null,imgData=null,hazards=[],overallScore=0;
-    async function init(){
-        try{
-            model=await mobilenet.load();
-            console.log('Model loaded');
-        }catch(e){
-            console.error('Model failed', e);
+  <header class="header">
+    <h1 style="margin:0">VisualRiskAssessor</h1>
+    <p style="margin:8px 0 0">GitHub Pages HSE visual risk tool</p>
+  </header>
+
+  <main class="container">
+    <div id="envWarning" class="warning hidden" role="alert"></div>
+    <div id="cameraStatus" class="warning hidden" role="status"></div>
+    <div id="runtimeStatus" class="warning hidden" role="status"></div>
+
+    <section id="inputSec" class="card">
+      <h2 style="margin-top:0">Image Input</h2>
+      <button class="btn btn-primary" id="btnCamera">📷 Open Camera</button>
+      <select id="cameraSelect" class="btn btn-outline" aria-label="Select camera" style="margin-left:8px;">
+        <option value="">Auto camera</option>
+      </select>
+      <button class="btn btn-outline" id="btnSwitchCam">Switch Camera</button>
+      <button class="btn btn-outline" id="btnCameraBasic">Open Camera (Compat)</button>
+      <button class="btn btn-secondary" id="btnUpload">🖼 Upload Image</button>
+      <input id="fileInput" type="file" accept="image/*,.heic,.heif" capture="environment" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
+      <div id="uploadArea" tabindex="0" role="button" aria-label="Upload an image">Click or press Enter/Space to upload an image.</div>
+
+      <div id="cameraSection" class="hidden">
+        <video id="videoPreview" autoplay playsinline muted></video><br/><br/>
+        <button class="btn btn-primary" id="btnCapture">Capture</button>
+        <button class="btn btn-outline" id="btnStop">Stop Camera</button>
+      </div>
+    </section>
+
+    <section id="results" class="card hidden" aria-live="polite">
+      <h2 style="margin-top:0">Assessment Results</h2>
+      <div id="fallbackWarning" class="warning hidden">ML model unavailable. Showing heuristic risk estimation.</div>
+      <img id="resultImg" alt="Analyzed image" />
+      <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span></p>
+      <p><strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span></p>
+      <h3>Hazards</h3>
+      <div id="hazardsList"></div>
+      <h3>Risk Matrix</h3>
+      <div id="riskMatrix" class="matrix"></div>
+      <h3>Recommendations</h3>
+      <div id="recsList"></div>
+      <button class="btn btn-secondary" id="btnExport">Export Report</button>
+      <button class="btn btn-outline" id="btnReset">New Assessment</button>
+    </section>
+  </main>
+
+  <div id="loading" aria-live="assertive">Analyzing image...</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    envWarning: $('envWarning'), cameraStatus: $('cameraStatus'), runtimeStatus: $('runtimeStatus'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
+    cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
+    overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'), riskMatrix: $('riskMatrix'),
+    recsList: $('recsList'), fallbackWarning: $('fallbackWarning'), loading: $('loading'),
+    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'),
+    cameraSelect: $('cameraSelect'), btnSwitchCam: $('btnSwitchCam'), btnCameraBasic: $('btnCameraBasic')
+  };
+
+  let model = null, stream = null, imageData = null, hazards = [], overall = 0, usedFallback = false;
+  let selectedDeviceId = '';
+  let preferredFacingMode = 'environment';
+
+  const hazardDB = {
+    electrical:{name:'Electrical Hazard',L:4,S:4,kw:['wire','cable','electric','plug'],recs:['Isolate energy sources and apply lockout/tagout','Inspect protection devices and grounding integrity','Use insulated tools and arc-rated PPE']},
+    slip:{name:'Slip/Trip/Fall Hazard',L:4,S:3,kw:['floor','ground','wet','slippery'],recs:['Dry floor immediately','Use anti-slip signage']},
+    machinery:{name:'Machinery Hazard',L:3,S:4,kw:['machine','equipment','tool','motor'],recs:['Install guarding','Apply lockout-tagout']},
+    fire:{name:'Fire Hazard',L:3,S:5,kw:['fire','flame','gas','smoke'],recs:['Remove ignition sources','Keep extinguisher nearby']}
+  };
+
+  function showWarning(msg){ els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
+  function setCameraStatus(msg){ if(!msg){ els.cameraStatus.classList.add('hidden'); els.cameraStatus.textContent=''; return; } els.cameraStatus.textContent = msg; els.cameraStatus.classList.remove('hidden'); }
+  function setRuntimeStatus(msg){ if(!msg){ els.runtimeStatus.classList.add('hidden'); els.runtimeStatus.textContent=''; return; } els.runtimeStatus.textContent = msg; els.runtimeStatus.classList.remove('hidden'); }
+  function setLoading(v){ els.loading.classList.toggle('active', v); }
+  function riskFor(score){ if(score<=5) return {label:'Low Risk', cls:'risk-low', color:'var(--ok)'}; if(score<=14) return {label:'Medium Risk', cls:'risk-medium', color:'var(--mid)'}; if(score<=19) return {label:'High Risk', cls:'risk-high', color:'var(--hi)'}; return {label:'Extreme Risk', cls:'risk-extreme', color:'var(--x)'}; }
+
+  async function initModel(){
+    if (location.protocol === 'http:' && !['localhost','127.0.0.1'].includes(location.hostname)) {
+      showWarning('Use HTTPS on GitHub Pages for camera access. Upload still works.');
+      setRuntimeStatus('Camera will be blocked on insecure HTTP origins. Use https://<user>.github.io/...');
+    }
+    try { model = await mobilenet.load(); }
+    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
+  }
+
+  async function refreshCameraOptions() {
+    if (!navigator.mediaDevices?.enumerateDevices || !els.cameraSelect) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === 'videoinput');
+      const current = els.cameraSelect.value;
+      els.cameraSelect.textContent = '';
+      const auto = document.createElement('option');
+      auto.value = '';
+      auto.textContent = 'Auto camera';
+      els.cameraSelect.appendChild(auto);
+      cams.forEach((cam, idx) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${idx + 1}`;
+        els.cameraSelect.appendChild(opt);
+      });
+      els.cameraSelect.value = cams.some(c => c.deviceId === current) ? current : '';
+      selectedDeviceId = els.cameraSelect.value;
+    } catch (_) {}
+  }
+
+  async function waitForVideoFrame(video, timeoutMs = 3000) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      function check() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve(true);
+          return;
         }
-    }
-    function showLoad(message){
-        const loading=document.getElementById('loading');
-        const loadText=document.getElementById('loadText');
-        if(message){
-            loadText.textContent=message;
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
         }
-        loading.classList.add('active');
+        requestAnimationFrame(check);
+      }
+      check();
+    });
+  }
+
+  // CAMERA_STABILITY_LOCK: Critical camera compatibility path. Do not simplify/remove without cross-device validation (Android, iOS, desktop).
+
+
+  function isStreamUsable(mediaStream) {
+    const track = mediaStream?.getVideoTracks?.()[0];
+    return !!track && track.readyState === 'live' && track.enabled !== false;
+  }
+
+  async function waitForPlayable(video, timeoutMs = 3500) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      const done = () => cleanup(true);
+      const cleanup = (ok) => {
+        video.removeEventListener('playing', done);
+        video.removeEventListener('canplay', done);
+        resolve(ok);
+      };
+      video.addEventListener('playing', done, { once: true });
+      video.addEventListener('canplay', done, { once: true });
+      (function check(){
+        if (video.readyState >= 2) return cleanup(true);
+        if (Date.now()-start >= timeoutMs) return cleanup(false);
+        requestAnimationFrame(check);
+      })();
+    });
+  }
+  async function startCamera(options = {}){
+    stopCamera();
+    setRuntimeStatus('Starting camera initialization...');
+
+    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+    if (!navigator.mediaDevices?.getUserMedia && !legacyGetUserMedia) {
+      showWarning('Camera API is not available in this browser. Please use Upload Image.');
+      return;
     }
-    function hideLoad(){document.getElementById('loading').classList.remove('active');}
-    function ensureSecureContext(){
-        const isLocalhost=['localhost','127.0.0.1'].includes(window.location.hostname);
-        if(window.location.protocol!=='https:'&&!isLocalhost){
-            const httpsUrl=`https://${window.location.host}${window.location.pathname}${window.location.search}${window.location.hash}`;
-            if(window.location.hostname.endsWith('github.io')){
-                window.location.replace(httpsUrl);
-                return;
-            }
-            showHttpsBanner(httpsUrl);
-        }
+
+    setCameraStatus('Opening camera...');
+
+    const attempts = options.forceBasic
+      ? [{ video: true, audio: false }]
+      : selectedDeviceId
+      ? [
+          { video: { deviceId: { exact: selectedDeviceId } }, audio: false },
+          { video: { deviceId: selectedDeviceId }, audio: false },
+          { video: true, audio: false }
+        ]
+      : [
+          { video: true, audio: false },
+          { video: { facingMode: { ideal: preferredFacingMode } }, audio: false },
+          { video: { facingMode: preferredFacingMode }, audio: false },
+          { video: { facingMode: { ideal: preferredFacingMode === 'environment' ? 'user' : 'environment' } }, audio: false }
+        ];
+
+    async function getStream(constraints) {
+      if (navigator.mediaDevices?.getUserMedia) {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+      return new Promise((resolve, reject) => legacyGetUserMedia.call(navigator, constraints, resolve, reject));
     }
-    function showHttpsBanner(httpsUrl){
-        if(document.getElementById('httpsNotice')){return;}
-        const banner=document.createElement('div');
-        banner.id='httpsNotice';
-        banner.style.cssText='background:#0D47A1;color:white;padding:12px 20px;text-align:center;font-weight:600;';
-        banner.innerHTML=`Secure HTTPS is required for camera access. <a href="${httpsUrl}" style="color:#FFD54F;text-decoration:underline;">Switch to HTTPS</a>`;
-        document.body.insertBefore(banner, document.body.firstChild);
-    }
-    async function startCam(){
-        let constraints = {
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-                facingMode: "environment"
-            }
-        };
 
-        try {
-            // Try with rear camera first
-            let stream = await navigator.mediaDevices.getUserMedia(constraints);
+    let lastError = null;
+    for (const constraints of attempts) {
+      try {
+        stream = await getStream(constraints);
+        if (!isStreamUsable(stream)) { stopCamera(); continue; }
+        els.videoPreview.srcObject = stream;
+        els.videoPreview.muted = true;
+        els.videoPreview.autoplay = true;
+        els.videoPreview.playsInline = true;
+        els.videoPreview.setAttribute('playsinline', 'true');
+        els.cameraSection.classList.remove('hidden');
 
-            // If rear camera fails, try front camera
-            if (!stream.getVideoTracks().length) {
-                stream.getTracks().forEach(track => track.stop());
-                constraints.video.facingMode = "user";
-                stream = await navigator.mediaDevices.getUserMedia(constraints);
-            }
-
-            const videoEl = document.getElementById("videoPreview");
-            videoEl.srcObject = stream;
-            video = stream;
-            
-            // Wait for video to load
-            videoEl.onloadedmetadata = () => {
-                videoEl.play();
-                document.getElementById("camSec").classList.add("active");
-                document.getElementById("uploadArea").classList.add("hidden");
-                document.getElementById("stopBtn").classList.remove("hidden");
-            };
-            
-        } catch (error) {
-            console.error("Camera error:", error);
-            
-            let errorMessage = "Unable to access camera. ";
-            
-            if (error.name === "NotAllowedError") {
-                errorMessage += "Please allow camera permission and try again.";
-            } else if (error.name === "NotFoundError") {
-                errorMessage += "No camera found on this device.";
-            } else if (error.name === "NotReadableError") {
-                errorMessage += "Camera is being used by another application.";
-            } else {
-                errorMessage += "Please use the upload feature instead.";
-            }
-            
-            // Show more detailed error and suggest upload
-            const shouldUpload = confirm(errorMessage + "\n\nWould you like to upload an image instead?");
-            if (shouldUpload) {
-                document.getElementById("fileInput").click();
-            }
-        }
-    }
-    function stopCam(){if(video){video.getTracks().forEach(t=>t.stop());video=null;}document.getElementById('camSec').classList.remove('active');document.getElementById('uploadArea').classList.remove('hidden');document.getElementById('stopBtn').classList.add('hidden');}
-    function resetApp(){
-        stopCam();
-        hazards=[];
-        overallScore=0;
-        imgData=null;
-        document.getElementById('fileInput').value='';
-        document.getElementById('hazardsList').innerHTML='';
-        document.getElementById('recsList').innerHTML='';
-        document.getElementById('riskMatrix').innerHTML='';
-        document.getElementById('overallScore').textContent='0';
-        document.getElementById('overallLevel').textContent='Assessing...';
-        document.getElementById('overallLevel').style.background='';
-        document.getElementById('resultImg').removeAttribute('src');
-        document.getElementById('results').classList.remove('active');
-        document.getElementById('inputSec').classList.remove('hidden');
-        window.scrollTo({top:0,behavior:'smooth'});
-    }
-    function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
-    function handleFile(e){
-        const f=e.target.files[0];
-        if(!f)return;
-        if(!f.type.startsWith('image/')){
-            alert('Please upload a valid image file.');
-            e.target.value='';
-            return;
-        }
-        if(f.size>10*1024*1024){
-            alert('Please upload an image under 10MB.');
-            e.target.value='';
-            return;
-        }
-        const r=new FileReader();
-        r.onload=function(e){imgData=e.target.result;analyze(imgData);};
-        r.onerror=function(){alert('Unable to read the selected file.');};
-        r.readAsDataURL(f);
-    }
-    async function analyze(img){showLoad();hazards=[];try{if(model&&img){const i=new Image();i.onload=async()=>{try{const p=await model.classify(i);mapHazards(p);calcOverall();display();}catch(e){fallback();}hideLoad();};i.onerror=()=>{fallback();hideLoad();};i.src=img;}else{setTimeout(()=>{fallback();hideLoad();},1500);}}catch(e){fallback();hideLoad();}}
-    function mapHazards(preds){const found=new Set();preds.forEach(p=>{const l=p.className.toLowerCase();Object.entries(hazardDB).forEach(([k,h])=>{h.kw.forEach(kw=>{if(l.includes(kw)&&!found.has(k)){found.add(k);hazards.push({id:k,...h,conf:p.probability,risk:h.L*h.S});}});});});if(hazards.length===0)hazards.push({...hazardDB.general,conf:0.8,risk:6});}
-    function fallback(){hazards=[{...hazardDB.general,conf:0.8,risk:6},{...hazardDB.slip_floor,conf:0.6,risk:12}];}
-    function calcOverall(){overallScore=hazards.length?Math.max(...hazards.map(h=>h.risk)):0;}
-    function getRisk(s){if(s<=5)return{l:'Low',c:'#4CAF50'};if(s<=14)return{l:'Medium',c:'#FFC107'};if(s<=19)return{l:'High',c:'#F44336'};return{l:'Extreme',c:'#B71C1C'};}
-    function display(){document.getElementById('resultImg').src=imgData;const r=getRisk(overallScore);document.getElementById('overallScore').textContent=overallScore;document.getElementById('overallLevel').textContent=r.l+' Risk';document.getElementById('overallLevel').style.background=r.c;const L=['Rare','Unlikely','Possible','Likely','Certain'],S=['','Insignificant','Minor','Moderate','Major','Catastrophic'];document.getElementById('hazardsList').innerHTML=hazards.map(h=>{const r=getRisk(h.risk);return`<div class="hazard-item risk-${r.l.toLowerCase()}"><div class="hazard-header"><span class="hazard-name">${h.name}</span><span class="hazard-conf">${Math.round(h.conf*100)}%</span></div><div class="hazard-details"><div class="detail-item"><div class="detail-label">Likelihood</div><div class="detail-value">${h.L}-${L[h.L-1]}</div></div><div class="detail-item"><div class="detail-label">Severity</div><div class="detail-value">${h.S}-${S[h.S]}</div></div><div class="detail-item"><div class="detail-label">Risk</div><div class="detail-value" style="color:${r.c}">${h.risk}</div></div><div class="detail-item"><div class="detail-label">Level</div><div class="detail-value" style="color:${r.c}">${r.l}</div></div></div></div>`;}).join('');drawMatrix();dispRecs();document.getElementById('results').classList.add('active');document.getElementById('inputSec').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'});}
-    function drawMatrix(){const m=document.getElementById('riskMatrix');let html='<div class="matrix-cell"></div>';['1','2','3','4','5'].forEach(s=>html+=`<div class="matrix-cell matrix-header">S:${s}</div>`);for(let l=0;l<5;l++){html+=`<div class="matrix-cell matrix-header">L:${l+1}</div>`;for(let s=0;s<5;s++){const sc=(l+1)*(s+1),cls=sc>=20?'cell-extreme':sc>=15?'cell-high':sc>=6?'cell-medium':'cell-low',mk=hazards.some(h=>h.risk===sc)?'current-marker':'';html+=`<div class="matrix-cell ${cls} ${mk}">${sc}</div>`;}}m.innerHTML=html;}
-    function dispRecs(){const recs=[];hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!recs.find(x=>x.t===r.t))recs.push(r);});});recs.push({i:"📋",t:"Regular Audits",d:"Conduct routine safety inspections"},{i:"📢",t:"Report Hazards",d:"Encourage immediate hazard reporting"});document.getElementById('recsList').innerHTML=recs.map(r=>`<div class="rec-item"><div class="rec-icon">${r.i}</div><div class="rec-content"><h4>${r.t}</h4><p>${r.d}</p></div></div>`).join('');}
-    function exportReport(){
-        const L=['Rare','Unlikely','Possible','Likely','Certain'];
-        const S=[ '','Insignificant','Minor','Moderate','Major','Catastrophic'];
-        const now=new Date();
-        const r=getRisk(overallScore);
-        let rep=`
-
-                    OCCUPATIONAL HEALTH & SAFETY RISK ASSESSMENT
-                              ISO 45001:2018 COMPLIANT
-
-
-DOCUMENT REFERENCE:    HSE-RA-${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${(now.getDate()).toString().padStart(2,'0')}-${Date.now().toString().slice(-6)}
-ASSESSMENT DATE:     ${now.toLocaleDateString()}
-ASSESSMENT TIME:     ${now.toLocaleTimeString()}
-METHODOLOGY:         ISO 45001:2018 / ISO 31000:2018
-
-
-                          ASSESSMENT SUMMARY
-
-
-OVERALL RISK RATING:     ${r.l.toUpperCase()}
-RISK SCORE:             ${overallScore} / 25
-HAZARDS IDENTIFIED:     ${hazards.length}
-
-
-RISK MATRIX
-
-        Severity  1    2    3    4    5
-Likelihood
-    1         1    2    3    4    5   Rare
-    2         2    4    6    8   10   Unlikely
-    3         3    6    9   12   15   Possible
-    4         4    8   12   16   20   Likely
-    5         5   10   15   20   25   Certain
-
-
-                          HAZARDS IDENTIFIED
-
-`;
-        hazards.forEach((h,i)=>{
-            const risk=getRisk(h.risk);
-            rep+=`
---------------------------------------------------------------------------------
-HAZARD #${i+1}: ${h.name.toUpperCase()}
---------------------------------------------------------------------------------
-CATEGORY:              ${h.category || 'Workplace Hazard'}
-CONFIDENCE:           ${Math.round(h.conf*100)}%
-
-RISK ANALYSIS:
-  Likelihood:       ${h.L} - ${L[h.L-1]}
-  Severity:         ${h.S} - ${S[h.S]}
-  Risk Score:       ${h.risk}
-  Risk Level:       ${risk.l.toUpperCase()}
-
-CONTROLS REQUIRED:
-`;
-            if(h.recs){h.recs.forEach((rec,idx)=>{rep+=`  ${idx+1}. ${rec.t} - ${rec.d}`;});}
-            rep+="\\n";
+        await new Promise((resolve) => {
+          const timer = setTimeout(resolve, 3000);
+          const done = () => { clearTimeout(timer); resolve(); };
+          els.videoPreview.onloadedmetadata = done;
+          els.videoPreview.onloadeddata = done;
         });
-        rep+=`
 
+        try { await els.videoPreview.play(); } catch (_) { }
+        const isPlayable = await waitForPlayable(els.videoPreview, 4000);
+        if (!isPlayable) { stopCamera(); continue; }
 
-                          RISK CLASSIFICATION
+        const hasFrame = await waitForVideoFrame(els.videoPreview, 4500);
+        if (hasFrame) {
+          await refreshCameraOptions();
+          setCameraStatus('Camera ready.');
+          setRuntimeStatus('Camera stream active.');
+          setTimeout(() => setCameraStatus(''), 1500);
+          return;
+        }
 
-
- EXTREME (20-25): Immediate action - STOP WORK until controlled
-
-
-                          RECOMMENDATIONS
-
-`;
-        const uniqueRecs=[];
-        hazards.forEach(h=>{if(h.recs)h.recs.forEach(r=>{if(!uniqueRecs.find(x=>x.t===r.t))uniqueRecs.push(r);});});
-        uniqueRecs.forEach((rec,i)=>{const priority=i<3?'HIGH':i<6?'MEDIUM':'LOW';rep+=`
-${i+1}. [${priority}] ${rec.t}
-   Action: ${rec.d}`;});
-        rep+=`
-
-
-                          ISO 45001:2018 COMPLIANCE
-
-
-This assessment complies with:
- ISO 45001:2018 - Occupational health and safety management
- ISO 31000:2018 - Risk management
- ISO 45002:2021 - OHS management in practice
-
-KEY CLAUSES: 6.1.2 Hazard ID, 6.1.2.2 Risk Assessment, 8.1.1 Planning
-
-
-                          SIGNATURES
-
-
-Assessor: __________________  Date: __________
-Manager:  __________________  Date: __________
-Next Review: ${new Date(now.getTime()+90*24*60*60*1000).toLocaleDateString()} (90 days)
-
-
-                    Generated: ${now.toLocaleString()}
-              VisualRiskAssessor - ISO 45001 Compliant
-`;
-        const b=new Blob([rep],{type:'text/plain'});
-        const u=URL.createObjectURL(b);
-        const a=document.createElement('a');
-        a.href=u;
-        a.download=`HSE_Risk_Assessment_${now.toISOString().slice(0,10)}_ISO45001.txt`;
-        a.click();
-        URL.revokeObjectURL(u);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const hasFrameRetry = await waitForVideoFrame(els.videoPreview, 3000);
+        if (hasFrameRetry) {
+          await refreshCameraOptions();
+          setCameraStatus('Camera ready.');
+          setRuntimeStatus('Camera stream active.');
+          setTimeout(() => setCameraStatus(''), 1500);
+          return;
+        }
+        stopCamera();
+      } catch (err) {
+        lastError = err;
+      }
     }
-    window.addEventListener('load',()=>{ensureSecureContext();init();});
+
+    const errText = lastError ? ` (${lastError.name || 'Error'}${lastError.message ? `: ${lastError.message}` : ''})` : '';
+    const secureHint = (location.protocol !== 'https:' && !['localhost','127.0.0.1'].includes(location.hostname)) ? ' Camera requires HTTPS on non-localhost origins.' : '';
+    showWarning(`Unable to start camera stream. Check browser permissions, close other camera apps, and try again.${secureHint}${errText}`);
+    setRuntimeStatus('Camera start failed. Try Open Camera (Compat) or verify site is HTTPS and permission is allowed.');
+    setCameraStatus('');
+    stopCamera();
+  }
+
+  function stopCamera(){
+    setCameraStatus('');
+    if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if (els.videoPreview) { els.videoPreview.pause(); els.videoPreview.srcObject = null; }
+    els.cameraSection.classList.add('hidden');
+  }
+
+  function openFilePicker(){ setRuntimeStatus('Opening file picker...'); els.fileInput.value=''; els.fileInput.click(); }
+
+  function isoRecommendations(category) {
+    const controls = {
+      slip: ['Eliminate spills and loose materials from walkways','Install anti-slip flooring or mats in high-traffic areas','Enforce housekeeping inspections every shift','Issue slip-resistant footwear'],
+      visibility: ['Increase task lighting to recommended lux levels','Add reflective markings and warning signage','Introduce low-visibility work permit checks','Issue high-visibility PPE'],
+      struck: ['Separate pedestrians and moving equipment paths','Add physical barriers and exclusion zones','Use spotters and traffic management plans','Issue head and eye protection'],
+      ergonomic: ['Redesign workstation height/reach to neutral posture','Use mechanical aids for lifting/handling','Rotate repetitive tasks and add micro-breaks','Train workers in safe manual handling'],
+      fireElectrical: ['Isolate damaged electrical/fire ignition sources immediately','Install/inspect circuit protection and emergency shutoffs','Apply permit-to-work and lockout/tagout controls','Issue insulated gloves and arc-rated PPE']
+    };
+    return controls[category] || ['Apply hierarchy of controls: eliminate, engineer, administrate, PPE','Conduct supervisor-led job safety analysis'];
+  }
+
+  function heuristicHazardsFromCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const img = ctx.getImageData(0, 0, width, height).data;
+    let sum = 0, edge = 0;
+    for (let i = 0; i < img.length; i += 16) {
+      const v = (img[i] + img[i+1] + img[i+2]) / 3;
+      sum += v;
+      if (i > 16) {
+        const pv = (img[i-16] + img[i-15] + img[i-14]) / 3;
+        if (Math.abs(v - pv) > 45) edge++;
+      }
+    }
+    const samples = Math.floor(img.length / 16);
+    const avg = sum / Math.max(samples, 1);
+    const edgeRatio = edge / Math.max(samples, 1);
+
+    const out = [];
+    if (avg < 85) out.push({name:'Low Visibility / Poor Illumination',L:3,S:3,risk:9,conf:0.72,recs:isoRecommendations('visibility')});
+    if (edgeRatio > 0.22) out.push({name:'Slip/Trip Obstruction',L:3,S:3,risk:9,conf:0.69,recs:isoRecommendations('slip')});
+    if (out.length === 0) out.push({name:'General Task Hazard Review Required',L:2,S:2,risk:4,conf:0.65,recs:['Conduct a task-specific ISO 45001 hazard identification review','Confirm controls with competent supervisor before work']});
+    return out;
+  }
+
+  function hazardsFromPredictions(preds) {
+    const labelText = preds.map(p => `${p.className.toLowerCase()} ${(p.probability || 0).toFixed(3)}`).join(' | ');
+    const profiles = [
+      {name:'Struck-by / Vehicle Interaction', category:'struck', keys:['truck','car','bus','forklift','machine','tractor','vehicle'], L:3, S:4},
+      {name:'Ergonomic / Manual Handling', category:'ergonomic', keys:['person','worker','uniform','backpack','carton','box'], L:3, S:3},
+      {name:'Electrical / Fire Potential', category:'fireElectrical', keys:['wire','cable','electric','plug','switch','generator','engine'], L:2, S:5},
+      {name:'Slip/Trip Surface Condition', category:'slip', keys:['floor','stairs','ladder','corridor','warehouse','platform'], L:3, S:3}
+    ];
+
+    const out = [];
+    profiles.forEach((p) => {
+      const strength = p.keys.reduce((acc, key) => {
+        const hit = preds.find(pr => pr.className.toLowerCase().includes(key));
+        return acc + (hit ? hit.probability : 0);
+      }, 0);
+      if (strength >= 0.15) {
+        const likelihoodBoost = strength > 0.55 ? 1 : 0;
+        const L = Math.min(5, p.L + likelihoodBoost);
+        const S = p.S;
+        out.push({
+          name: p.name,
+          L,
+          S,
+          risk: L * S,
+          conf: Math.min(0.95, Math.max(0.55, strength)),
+          recs: isoRecommendations(p.category)
+        });
+      }
+    });
+
+    if (out.length === 0 && labelText.includes('person')) {
+      out.push({name:'Behavioral / Human-factor Exposure', L:2, S:3, risk:6, conf:0.6, recs:['Verify task briefing and supervision','Ensure competency and permit-to-work compliance','Confirm required PPE is worn correctly']});
+    }
+    return out;
+  }
+
+  function mapPredictions(preds){
+    const found = new Set();
+    const out = [];
+    preds.forEach(p => {
+      const name = p.className.toLowerCase();
+      Object.entries(hazardDB).forEach(([key,h]) => {
+        h.kw.forEach(kw => {
+          if(name.includes(kw) && !found.has(key)) {
+            found.add(key);
+            out.push({name:h.name,L:h.L,S:h.S,risk:h.L*h.S,conf:p.probability,recs:h.recs});
+          }
+        });
+      });
+    });
+    return out;
+  }
+
+  function render(){
+    els.results.classList.remove('hidden');
+    els.resultImg.src = imageData;
+    els.fallbackWarning.classList.toggle('hidden', !usedFallback);
+
+    overall = hazards.length ? Math.max(...hazards.map(h => h.risk)) : 0;
+    const r = riskFor(overall);
+    els.overallScore.textContent = String(overall);
+    els.overallLevel.textContent = r.label;
+    els.overallLevel.style.background = r.color;
+
+    els.hazardsList.textContent = '';
+    hazards.forEach(h => {
+      const hr = riskFor(h.risk);
+      const item = document.createElement('div');
+      item.className = `hazard-item ${hr.cls}`;
+      const t = document.createElement('div');
+      t.textContent = `${h.name} (${Math.round((h.conf||0)*100)}%)`;
+      const d = document.createElement('div');
+      d.textContent = `Likelihood ${h.L}, Severity ${h.S}, Risk ${h.risk} (${hr.label.replace(' Risk','')})`;
+      item.append(t,d);
+      els.hazardsList.appendChild(item);
+    });
+
+    els.riskMatrix.textContent = '';
+    const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
+    add('', ''); [1,2,3,4,5].forEach(s => add(`S${s}`, 'head'));
+    for(let l=1;l<=5;l++){
+      add(`L${l}`, 'head');
+      for(let s=1;s<=5;s++){
+        const score=l*s; const c=document.createElement('div');
+        let cls='low'; if(score>=20)cls='ext'; else if(score>=15)cls='high'; else if(score>=6)cls='med';
+        c.className=`cell ${cls}${hazards.some(h=>h.risk===score)?' mark':''}`;
+        c.textContent=String(score);
+        els.riskMatrix.appendChild(c);
+      }
+    }
+
+    els.recsList.textContent = '';
+    const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
+    recs.forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
+  }
+
+  async function analyze(dataUrl){
+    setLoading(true);
+    try {
+      imageData = dataUrl;
+      hazards = [];
+
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+
+      if (model) {
+        try {
+          const preds = await model.classify(img);
+          hazards = mapPredictions(preds);
+          if (hazards.length === 0) {
+            hazards = hazardsFromPredictions(preds);
+          }
+        } catch {
+          usedFallback = true;
+        }
+      }
+
+      if (hazards.length === 0) {
+        hazards = heuristicHazardsFromCanvas(canvas);
+      }
+
+      render();
+    } catch {
+      usedFallback = true;
+      hazards = [{name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.5,recs:['Run manual inspection','Repeat assessment with clearer image']}];
+      render();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function exportReport(){
+    const risk = riskFor(overall).label;
+    let out = `HSE Risk Assessment\nDate: ${new Date().toISOString()}\nRisk: ${risk} (${overall}/25)\nHeuristic Mode: ${usedFallback?'YES':'NO'}\n\nHazards:\n`;
+    hazards.forEach((h,i)=> out += `${i+1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk}\n`);
+    out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h=>h.recs||[]))].map((r,i)=>`${i+1}. ${r}`).join('\n')}`;
+    const blob = new Blob([out], {type:'text/plain'});
+    const url = URL.createObjectURL(blob); const a = document.createElement('a');
+    a.href = url; a.download = `HSE_Risk_Assessment_${new Date().toISOString().slice(0,10)}.txt`; a.click(); URL.revokeObjectURL(url);
+  }
+
+  function resetApp(){ stopCamera(); hazards=[]; overall=0; imageData=null; usedFallback=false; els.fileInput.value=''; els.results.classList.add('hidden'); }
+
+  function captureFromCamera(){
+    if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
+      showWarning('No camera frame available yet. Try switching camera, then retry capture.');
+      return;
+    }
+    const c=document.createElement('canvas');
+    c.width=els.videoPreview.videoWidth;
+    c.height=els.videoPreview.videoHeight;
+    c.getContext('2d').drawImage(els.videoPreview,0,0);
+    stopCamera();
+    analyze(c.toDataURL('image/jpeg',0.9));
+  }
+
+  els.btnCamera.addEventListener('click', startCamera);
+  els.btnUpload.addEventListener('click', openFilePicker);
+  els.btnCapture.addEventListener('click', captureFromCamera);
+  els.btnStop.addEventListener('click', stopCamera);
+  els.cameraSelect.addEventListener('change', () => { selectedDeviceId = els.cameraSelect.value; });
+  els.btnSwitchCam.addEventListener('click', () => {
+    preferredFacingMode = preferredFacingMode === 'environment' ? 'user' : 'environment';
+    selectedDeviceId = '';
+    els.cameraSelect.value = '';
+    startCamera();
+  });
+  els.btnCameraBasic.addEventListener('click', () => {
+    // CAMERA_STABILITY_LOCK: explicit compatibility mode using minimal constraints only.
+    selectedDeviceId = '';
+    els.cameraSelect.value = '';
+    startCamera({ forceBasic: true });
+  });
+  els.btnExport.addEventListener('click', exportReport);
+  els.btnReset.addEventListener('click', resetApp);
+  els.fileInput.addEventListener('change', (e) => {
+    const f = e.target.files?.[0];
+    if(!f) { setRuntimeStatus('No file selected.'); return; }
+    const name = (f.name || '').toLowerCase();
+    const looksImage = (f.type && f.type.startsWith('image/')) || /\.(png|jpe?g|webp|gif|bmp|heic|heif)$/i.test(name);
+    if(!looksImage) { showWarning('Please upload a valid image file.'); e.target.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = (ev) => { setRuntimeStatus('Image loaded. Running analysis...'); analyze(ev.target.result); };
+    reader.onerror = () => showWarning('Failed to read selected image.');
+    reader.readAsDataURL(f);
+  });
+  els.uploadArea.addEventListener('click', openFilePicker);
+  els.uploadArea.addEventListener('keydown', (e) => { if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openFilePicker(); }});
+
+  window.openFilePicker = openFilePicker;
+  window.startCam = startCamera;
+  window.stopCam = stopCamera;
+  window.capture = captureFromCamera;
+  window.analyze = analyze;
+  window.exportReport = exportReport;
+  window.resetApp = resetApp;
+
+  window.addEventListener('error', (ev) => { showWarning(`Runtime error: ${ev.message || 'unknown error'}`); setRuntimeStatus('A script error occurred. Reload and retry.'); });
+  window.addEventListener('unhandledrejection', (ev) => { showWarning(`Unhandled error: ${ev.reason?.message || ev.reason || 'promise rejection'}`); });
+  initModel();
+  refreshCameraOptions();
+})();
+</script>
+</body>
+</html>
