@@ -2,7 +2,6 @@ package com.hse.visualriskassessor.ui
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -29,18 +28,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private val storagePermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions.values.all { it }) {
-            openPhotoPicker()
-        } else {
-            showPermissionDeniedDialog("Storage")
-        }
-    }
-
     private val photoPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let {
             val intent = Intent(this, ResultsActivity::class.java).apply {
@@ -99,14 +88,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleChoosePhoto() {
-        when {
-            permissionManager.hasStoragePermission() -> {
-                openPhotoPicker()
-            }
-            else -> {
-                permissionManager.requestStoragePermission(storagePermissionLauncher)
-            }
-        }
+        openPhotoPicker()
     }
 
     private fun openCamera() {
@@ -114,7 +96,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openPhotoPicker() {
-        photoPickerLauncher.launch("image/*")
+        photoPickerLauncher.launch(
+            ActivityResultContracts.PickVisualMedia.Request(
+                ActivityResultContracts.PickVisualMedia.ImageOnly
+            )
+        )
     }
 
     private fun showPermissionRationaleDialog(
