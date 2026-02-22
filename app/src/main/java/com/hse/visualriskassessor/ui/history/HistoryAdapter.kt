@@ -5,6 +5,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -16,7 +17,8 @@ import java.io.File
 import java.text.DateFormat
 
 class HistoryAdapter(
-    private var assessments: List<AssessmentResult>
+    private var assessments: List<AssessmentResult>,
+    private val onDeleteClicked: (AssessmentResult) -> Unit
 ) : RecyclerView.Adapter<HistoryAdapter.HistoryViewHolder>() {
 
     private val dateFormatter = DateFormat.getDateTimeInstance(
@@ -27,7 +29,7 @@ class HistoryAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): HistoryViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_history, parent, false)
-        return HistoryViewHolder(view, dateFormatter)
+        return HistoryViewHolder(view, dateFormatter, onDeleteClicked)
     }
 
     override fun onBindViewHolder(holder: HistoryViewHolder, position: Int) {
@@ -43,12 +45,14 @@ class HistoryAdapter(
 
     class HistoryViewHolder(
         itemView: View,
-        private val dateFormatter: DateFormat
+        private val dateFormatter: DateFormat,
+        private val onDeleteClicked: (AssessmentResult) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val historyImage: ImageView = itemView.findViewById(R.id.historyImage)
         private val historyDate: TextView = itemView.findViewById(R.id.historyDate)
         private val historyRiskLevel: TextView = itemView.findViewById(R.id.historyRiskLevel)
         private val historyHazardCount: TextView = itemView.findViewById(R.id.historyHazardCount)
+        private val deleteButton: ImageButton = itemView.findViewById(R.id.btnDeleteAssessment)
 
         fun bind(assessment: AssessmentResult) {
             historyImage.load(File(assessment.imagePath)) {
@@ -68,6 +72,7 @@ class HistoryAdapter(
 
             val hazardLabel = itemView.context.getString(R.string.hazards_detected)
             historyHazardCount.text = "$hazardLabel: ${assessment.hazards.size}"
+            deleteButton.setOnClickListener { onDeleteClicked(assessment) }
         }
     }
 }

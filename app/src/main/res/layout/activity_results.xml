@@ -89,6 +89,19 @@
                         android:textColor="@color/text_secondary"
                         android:textSize="@dimen/text_sm" />
 
+                    <TextView
+                        android:id="@+id/fallbackWarningText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_sm"
+                        android:background="@color/warning"
+                        android:padding="@dimen/spacing_sm"
+                        android:text="@string/fallback_analysis_warning"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/text_sm"
+                        android:visibility="gone" />
+
+
                 </LinearLayout>
 
             </com.google.android.material.card.MaterialCardView>
