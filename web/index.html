@@ -55,10 +55,6 @@
     <section id="inputSec" class="card">
       <h2 style="margin-top:0">Image Input</h2>
       <button class="btn btn-primary" id="btnCamera">📷 Open Camera</button>
-      <select id="cameraSelect" class="btn btn-outline" aria-label="Select camera" style="margin-left:8px;">
-        <option value="">Auto camera</option>
-      </select>
-      <button class="btn btn-outline" id="btnSwitchCam">Switch Camera</button>
       <button class="btn btn-secondary" id="btnUpload">🖼 Upload Image</button>
       <input id="fileInput" type="file" accept="image/*" class="hidden" />
       <div id="uploadArea" tabindex="0" role="button" aria-label="Upload an image">Click or press Enter/Space to upload an image.</div>
@@ -93,27 +89,23 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const els = {
-    envWarning: $('envWarning'), cameraStatus: $('cameraStatus'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
+    envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
     cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
     overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'), riskMatrix: $('riskMatrix'),
     recsList: $('recsList'), fallbackWarning: $('fallbackWarning'), loading: $('loading'),
-    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'),
-    cameraSelect: $('cameraSelect'), btnSwitchCam: $('btnSwitchCam')
+    btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'), btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset')
   };
 
   let model = null, stream = null, imageData = null, hazards = [], overall = 0, usedFallback = false;
-  let selectedDeviceId = '';
-  let preferredFacingMode = 'environment';
 
   const hazardDB = {
-    electrical:{name:'Electrical Hazard',L:4,S:4,kw:['wire','cable','electric','plug'],recs:['Isolate energy sources and apply lockout/tagout','Inspect protection devices and grounding integrity','Use insulated tools and arc-rated PPE']},
+    electrical:{name:'Electrical Hazard',L:4,S:4,kw:['wire','cable','electric','plug'],recs:['Isolate exposed circuits','Use insulated PPE']},
     slip:{name:'Slip/Trip/Fall Hazard',L:4,S:3,kw:['floor','ground','wet','slippery'],recs:['Dry floor immediately','Use anti-slip signage']},
     machinery:{name:'Machinery Hazard',L:3,S:4,kw:['machine','equipment','tool','motor'],recs:['Install guarding','Apply lockout-tagout']},
     fire:{name:'Fire Hazard',L:3,S:5,kw:['fire','flame','gas','smoke'],recs:['Remove ignition sources','Keep extinguisher nearby']}
   };
 
   function showWarning(msg){ els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
-  function setCameraStatus(msg){ if(!msg){ els.cameraStatus.classList.add('hidden'); els.cameraStatus.textContent=''; return; } els.cameraStatus.textContent = msg; els.cameraStatus.classList.remove('hidden'); }
   function setLoading(v){ els.loading.classList.toggle('active', v); }
   function riskFor(score){ if(score<=5) return {label:'Low Risk', cls:'risk-low', color:'var(--ok)'}; if(score<=14) return {label:'Medium Risk', cls:'risk-medium', color:'var(--mid)'}; if(score<=19) return {label:'High Risk', cls:'risk-high', color:'var(--hi)'}; return {label:'Extreme Risk', cls:'risk-extreme', color:'var(--x)'}; }
 
@@ -123,28 +115,6 @@
     }
     try { model = await mobilenet.load(); }
     catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
-  }
-
-  async function refreshCameraOptions() {
-    if (!navigator.mediaDevices?.enumerateDevices || !els.cameraSelect) return;
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const cams = devices.filter((d) => d.kind === 'videoinput');
-      const current = els.cameraSelect.value;
-      els.cameraSelect.textContent = '';
-      const auto = document.createElement('option');
-      auto.value = '';
-      auto.textContent = 'Auto camera';
-      els.cameraSelect.appendChild(auto);
-      cams.forEach((cam, idx) => {
-        const opt = document.createElement('option');
-        opt.value = cam.deviceId;
-        opt.textContent = cam.label || `Camera ${idx + 1}`;
-        els.cameraSelect.appendChild(opt);
-      });
-      els.cameraSelect.value = cams.some(c => c.deviceId === current) ? current : '';
-      selectedDeviceId = els.cameraSelect.value;
-    } catch (_) {}
   }
 
   async function waitForVideoFrame(video, timeoutMs = 3000) {
@@ -165,107 +135,52 @@
     });
   }
 
-  // CAMERA_STABILITY_LOCK: Critical camera compatibility path. Do not simplify/remove without cross-device validation (Android, iOS, desktop).
-  async function startCamera(options = {}){
+  async function startCamera(){
     stopCamera();
 
-    const legacyGetUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
-    if (!navigator.mediaDevices?.getUserMedia && !legacyGetUserMedia) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       showWarning('Camera API is not available in this browser. Please use Upload Image.');
       return;
     }
 
-    setCameraStatus('Opening camera...');
+    const constraintCandidates = [
+      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { facingMode: { ideal: 'user' } }, audio: false },
+      { video: true, audio: false }
+    ];
 
-    const attempts = options.forceBasic
-      ? [{ video: true, audio: false }]
-      : selectedDeviceId
-      ? [
-          { video: { deviceId: { exact: selectedDeviceId } }, audio: false },
-          { video: { deviceId: selectedDeviceId }, audio: false },
-          { video: true, audio: false }
-        ]
-      : [
-          { video: true, audio: false },
-          { video: { facingMode: { ideal: preferredFacingMode } }, audio: false },
-          { video: { facingMode: preferredFacingMode }, audio: false },
-          { video: { facingMode: { ideal: preferredFacingMode === 'environment' ? 'user' : 'environment' } }, audio: false }
-        ];
-
-    async function getStream(constraints) {
-      if (navigator.mediaDevices?.getUserMedia) {
-        return navigator.mediaDevices.getUserMedia(constraints);
-      }
-      return new Promise((resolve, reject) => legacyGetUserMedia.call(navigator, constraints, resolve, reject));
-    }
-
-    let lastError = null;
-    for (const constraints of attempts) {
+    for (const constraints of constraintCandidates) {
       try {
-        stream = await getStream(constraints);
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         els.videoPreview.srcObject = stream;
-        els.videoPreview.muted = true;
-        els.videoPreview.autoplay = true;
-        els.videoPreview.playsInline = true;
         els.videoPreview.setAttribute('playsinline', 'true');
+        els.videoPreview.muted = true;
         els.cameraSection.classList.remove('hidden');
-
-        await new Promise((resolve) => {
-          const timer = setTimeout(resolve, 3000);
-          const done = () => { clearTimeout(timer); resolve(); };
-          els.videoPreview.onloadedmetadata = done;
-          els.videoPreview.onloadeddata = done;
-        });
 
         try { await els.videoPreview.play(); } catch (_) { }
 
-        const hasFrame = await waitForVideoFrame(els.videoPreview, 4000);
+        const hasFrame = await waitForVideoFrame(els.videoPreview, 3500);
         if (hasFrame) {
-          await refreshCameraOptions();
-          setCameraStatus('Camera ready.');
-          setTimeout(() => setCameraStatus(''), 1500);
           return;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        const hasFrameRetry = await waitForVideoFrame(els.videoPreview, 3000);
-        if (hasFrameRetry) {
-          await refreshCameraOptions();
-          setCameraStatus('Camera ready.');
-          setTimeout(() => setCameraStatus(''), 1500);
-          return;
-        }
-        stopCamera();
-      } catch (err) {
-        lastError = err;
+        showWarning('Camera opened, waiting for frames... If preview stays black, use Upload Image.');
+        return;
+      } catch (_) {
       }
     }
 
-    const errText = lastError ? ` (${lastError.name || 'Error'}${lastError.message ? `: ${lastError.message}` : ''})` : '';
-    showWarning(`Unable to start camera stream. Check browser permissions, close other camera apps, and try again.${errText}`);
-    setCameraStatus('');
+    showWarning('Unable to start camera stream on this device/browser. Please use Upload Image.');
     stopCamera();
   }
 
   function stopCamera(){
-    setCameraStatus('');
     if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
     if (els.videoPreview) { els.videoPreview.pause(); els.videoPreview.srcObject = null; }
     els.cameraSection.classList.add('hidden');
   }
 
   function openFilePicker(){ els.fileInput.click(); }
-
-  function isoRecommendations(category) {
-    const controls = {
-      slip: ['Eliminate spills and loose materials from walkways','Install anti-slip flooring or mats in high-traffic areas','Enforce housekeeping inspections every shift','Issue slip-resistant footwear'],
-      visibility: ['Increase task lighting to recommended lux levels','Add reflective markings and warning signage','Introduce low-visibility work permit checks','Issue high-visibility PPE'],
-      struck: ['Separate pedestrians and moving equipment paths','Add physical barriers and exclusion zones','Use spotters and traffic management plans','Issue head and eye protection'],
-      ergonomic: ['Redesign workstation height/reach to neutral posture','Use mechanical aids for lifting/handling','Rotate repetitive tasks and add micro-breaks','Train workers in safe manual handling'],
-      fireElectrical: ['Isolate damaged electrical/fire ignition sources immediately','Install/inspect circuit protection and emergency shutoffs','Apply permit-to-work and lockout/tagout controls','Issue insulated gloves and arc-rated PPE']
-    };
-    return controls[category] || ['Apply hierarchy of controls: eliminate, engineer, administrate, PPE','Conduct supervisor-led job safety analysis'];
-  }
 
   function heuristicHazardsFromCanvas(canvas) {
     const ctx = canvas.getContext('2d');
@@ -285,45 +200,9 @@
     const edgeRatio = edge / Math.max(samples, 1);
 
     const out = [];
-    if (avg < 85) out.push({name:'Low Visibility / Poor Illumination',L:3,S:3,risk:9,conf:0.72,recs:isoRecommendations('visibility')});
-    if (edgeRatio > 0.22) out.push({name:'Slip/Trip Obstruction',L:3,S:3,risk:9,conf:0.69,recs:isoRecommendations('slip')});
-    if (out.length === 0) out.push({name:'General Task Hazard Review Required',L:2,S:2,risk:4,conf:0.65,recs:['Conduct a task-specific ISO 45001 hazard identification review','Confirm controls with competent supervisor before work']});
-    return out;
-  }
-
-  function hazardsFromPredictions(preds) {
-    const labelText = preds.map(p => `${p.className.toLowerCase()} ${(p.probability || 0).toFixed(3)}`).join(' | ');
-    const profiles = [
-      {name:'Struck-by / Vehicle Interaction', category:'struck', keys:['truck','car','bus','forklift','machine','tractor','vehicle'], L:3, S:4},
-      {name:'Ergonomic / Manual Handling', category:'ergonomic', keys:['person','worker','uniform','backpack','carton','box'], L:3, S:3},
-      {name:'Electrical / Fire Potential', category:'fireElectrical', keys:['wire','cable','electric','plug','switch','generator','engine'], L:2, S:5},
-      {name:'Slip/Trip Surface Condition', category:'slip', keys:['floor','stairs','ladder','corridor','warehouse','platform'], L:3, S:3}
-    ];
-
-    const out = [];
-    profiles.forEach((p) => {
-      const strength = p.keys.reduce((acc, key) => {
-        const hit = preds.find(pr => pr.className.toLowerCase().includes(key));
-        return acc + (hit ? hit.probability : 0);
-      }, 0);
-      if (strength >= 0.15) {
-        const likelihoodBoost = strength > 0.55 ? 1 : 0;
-        const L = Math.min(5, p.L + likelihoodBoost);
-        const S = p.S;
-        out.push({
-          name: p.name,
-          L,
-          S,
-          risk: L * S,
-          conf: Math.min(0.95, Math.max(0.55, strength)),
-          recs: isoRecommendations(p.category)
-        });
-      }
-    });
-
-    if (out.length === 0 && labelText.includes('person')) {
-      out.push({name:'Behavioral / Human-factor Exposure', L:2, S:3, risk:6, conf:0.6, recs:['Verify task briefing and supervision','Ensure competency and permit-to-work compliance','Confirm required PPE is worn correctly']});
-    }
+    if (avg < 80) out.push({name:'Low Visibility Hazard',L:3,S:3,risk:9,conf:0.72,recs:['Improve workplace lighting','Use high-visibility safety markers']});
+    if (edgeRatio > 0.2) out.push({name:'Clutter/Obstruction Hazard',L:3,S:2,risk:6,conf:0.69,recs:['Clear walk paths and floor obstructions','Apply 5S housekeeping checks']});
+    if (out.length === 0) out.push({name:'General Workplace Hazard',L:2,S:2,risk:4,conf:0.65,recs:['Run manual inspection','Verify with site supervisor']});
     return out;
   }
 
@@ -404,9 +283,6 @@
         try {
           const preds = await model.classify(img);
           hazards = mapPredictions(preds);
-          if (hazards.length === 0) {
-            hazards = hazardsFromPredictions(preds);
-          }
         } catch {
           usedFallback = true;
         }
@@ -440,7 +316,7 @@
 
   function captureFromCamera(){
     if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
-      showWarning('No camera frame available yet. Try switching camera, then retry capture.');
+      showWarning('No camera frame available yet. If this persists, stop camera and use Upload Image.');
       return;
     }
     const c=document.createElement('canvas');
@@ -455,18 +331,6 @@
   els.btnUpload.addEventListener('click', openFilePicker);
   els.btnCapture.addEventListener('click', captureFromCamera);
   els.btnStop.addEventListener('click', stopCamera);
-  els.cameraSelect.addEventListener('change', () => { selectedDeviceId = els.cameraSelect.value; });
-  els.btnSwitchCam.addEventListener('click', () => {
-    preferredFacingMode = preferredFacingMode === 'environment' ? 'user' : 'environment';
-    selectedDeviceId = '';
-    els.cameraSelect.value = '';
-    startCamera();
-  });
-  els.btnSwitchCam.addEventListener('dblclick', () => {
-    // CAMERA_STABILITY_LOCK: emergency fallback for browsers that fail facingMode/deviceId constraints.
-    selectedDeviceId = '';
-    startCamera({ forceBasic: true });
-  });
   els.btnExport.addEventListener('click', exportReport);
   els.btnReset.addEventListener('click', resetApp);
   els.fileInput.addEventListener('change', (e) => {
@@ -490,7 +354,6 @@
   window.resetApp = resetApp;
 
   initModel();
-  refreshCameraOptions();
 })();
 </script>
 </body>
