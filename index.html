@@ -252,14 +252,39 @@
         document.getElementById('inputSec').classList.remove('hidden');
         window.scrollTo({top:0,behavior:'smooth'});
     }
-    function capture(){const v=document.getElementById('videoPreview'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);imgData=c.toDataURL('image/jpeg',0.9);stopCam();analyze(imgData);}
-    function handleFile(e){
-        const f=e.target.files[0];
-        if(!f)return;
-        if(!f.type.startsWith('image/')){
-            alert('Please upload a valid image file.');
-            e.target.value='';
-            return;
+    try { model = await mobilenet.load(); }
+    catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
+  }
+
+  async function refreshCameraOptions() {
+    if (!navigator.mediaDevices?.enumerateDevices || !els.cameraSelect) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === 'videoinput');
+      const current = els.cameraSelect.value;
+      els.cameraSelect.textContent = '';
+      const auto = document.createElement('option');
+      auto.value = '';
+      auto.textContent = 'Auto camera';
+      els.cameraSelect.appendChild(auto);
+      cams.forEach((cam, idx) => {
+        const opt = document.createElement('option');
+        opt.value = cam.deviceId;
+        opt.textContent = cam.label || `Camera ${idx + 1}`;
+        els.cameraSelect.appendChild(opt);
+      });
+      els.cameraSelect.value = cams.some(c => c.deviceId === current) ? current : '';
+      selectedDeviceId = els.cameraSelect.value;
+    } catch (_) {}
+  }
+
+  async function waitForVideoFrame(video, timeoutMs = 3000) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      function check() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve(true);
+          return;
         }
         if (Date.now() - start >= timeoutMs) {
           resolve(false);
