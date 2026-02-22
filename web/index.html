@@ -116,10 +116,35 @@
     catch { usedFallback = true; showWarning('ML model failed to load. Using heuristic analysis.'); }
   }
 
+  async function waitForVideoFrame(video, timeoutMs = 3000) {
+    const start = Date.now();
+    return new Promise((resolve) => {
+      function check() {
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() - start >= timeoutMs) {
+          resolve(false);
+          return;
+        }
+        requestAnimationFrame(check);
+      }
+      check();
+    });
+  }
+
   async function startCamera(){
     stopCamera();
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showWarning('Camera API is not available in this browser. Please use Upload Image.');
+      return;
+    }
+
     const constraintCandidates = [
-      { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { facingMode: { ideal: 'user' } }, audio: false },
       { video: true, audio: false }
     ];
 
@@ -129,18 +154,22 @@
         els.videoPreview.srcObject = stream;
         els.videoPreview.setAttribute('playsinline', 'true');
         els.videoPreview.muted = true;
-        await els.videoPreview.play();
-        await new Promise(r => setTimeout(r, 400));
-        if (els.videoPreview.videoWidth > 0 && els.videoPreview.videoHeight > 0) {
-          els.cameraSection.classList.remove('hidden');
+        els.cameraSection.classList.remove('hidden');
+
+        try { await els.videoPreview.play(); } catch (_) { }
+
+        const hasFrame = await waitForVideoFrame(els.videoPreview, 3500);
+        if (hasFrame) {
           return;
         }
+
+        showWarning('Camera opened, waiting for frames... If preview stays black, use Upload Image.');
+        return;
       } catch (_) {
-        // try next
       }
     }
 
-    showWarning('Camera opened but no frames received (black preview). Please use Upload Image.');
+    showWarning('Unable to start camera stream on this device/browser. Please use Upload Image.');
     stopCamera();
   }
 
@@ -286,7 +315,7 @@
 
   function captureFromCamera(){
     if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
-      showWarning('No video frame available yet. Please wait or use upload.');
+      showWarning('No camera frame available yet. If this persists, stop camera and use Upload Image.');
       return;
     }
     const c=document.createElement('canvas');
