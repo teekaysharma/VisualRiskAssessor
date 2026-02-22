@@ -61,6 +61,7 @@
   <main class="container">
     <div id="envWarning" class="warning hidden" role="alert"></div>
     <div id="cameraStatus" class="warning hidden" role="status"></div>
+    <div id="modelStatus" class="info" role="status">📦 Loading ML model...</div>
 
     <section id="inputSec" class="card">
       <h2 style="margin-top:0">Image Input</h2>
@@ -117,6 +118,9 @@
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let analysisMode = 'heuristic';
+  let modelLoading = true;
+  let modelLoadError = null;
+  let pendingAnalysis = null;
 
   // All 11 HSE hazard types with COCO-SSD class mappings, pixel heuristic flags, likelihood, severity, and recommendations
   const hazardDB = {
@@ -199,10 +203,39 @@
     if (location.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(location.hostname)) {
       showWarning('Use HTTPS for camera access. Image upload still works.');
     }
+    modelLoading = true;
+    modelLoadError = null;
+    updateModelStatus();
     try {
       cocoModel = await cocoSsd.load();
-    } catch {
+    } catch (err) {
+      modelLoadError = err?.message || 'Unknown error';
       showWarning('Object detection model failed to load. Using heuristic analysis as fallback.');
+    } finally {
+      modelLoading = false;
+      updateModelStatus();
+      // Process any pending analysis
+      if (pendingAnalysis) {
+        const dataUrl = pendingAnalysis;
+        pendingAnalysis = null;
+        analyze(dataUrl);
+      }
+    }
+  }
+
+  function updateModelStatus() {
+    const statusEl = $('modelStatus');
+    if (!statusEl) return;
+    if (modelLoading) {
+      statusEl.textContent = '📦 Loading ML model...';
+      statusEl.className = 'info';
+    } else if (modelLoadError) {
+      statusEl.textContent = '⚠️ ML model failed to load. Using fallback analysis.';
+      statusEl.className = 'warning';
+    } else if (cocoModel) {
+      statusEl.textContent = '✅ ML model ready';
+      statusEl.className = 'info';
+      setTimeout(() => { statusEl.classList.add('hidden'); }, 2000);
     }
   }
 
@@ -441,6 +474,13 @@ If no hazards are visible, return an empty array [].`;
 
   // ── Main analysis orchestrator ─────────────────────────────────────────────
   async function analyze(dataUrl) {
+    // If model is still loading, queue the analysis and show loading
+    if (modelLoading) {
+      pendingAnalysis = dataUrl;
+      setLoading(true, '📦 Waiting for ML model to load...');
+      return;
+    }
+
     setLoading(true, 'Loading image...');
     try {
       imageData = dataUrl;
@@ -516,6 +556,7 @@ If no hazards are visible, return an empty array [].`;
   function resetApp() {
     stopCamera();
     hazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
+    pendingAnalysis = null;
     els.fileInput.value = '';
     els.results.classList.add('hidden');
     els.fallbackWarning.classList.add('hidden');
