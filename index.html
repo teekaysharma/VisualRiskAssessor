@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VisualRiskAssessor - HSE Risk Assessment</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+    <script src="./web/vendor/tfjs-4.10.0.min.js"></script>
+    <script src="./web/vendor/mobilenet-2.1.0.min.js"></script>
     <style>
         :root { --primary: #FF6D00; --primary-dark: #E65100; --secondary: #1565C0; --bg: #F5F5F5; --surface: #fff; --text: #212121; --text2: #616161; --low: #4CAF50; --med: #FFC107; --high: #F44336; --extreme: #B71C1C; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,6 +15,13 @@
         .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
         .card { background: var(--surface); border-radius: 16px; padding: 30px; margin-bottom: 20px; box-shadow: 0 2px 15px rgba(0,0,0,0.08); }
         .card h2 { color: var(--secondary); margin-bottom: 20px; font-size: 1.4rem; }
+        .diag-panel { margin: 18px 0 4px; padding: 14px; border-radius: 12px; background: #f7f9fc; border: 1px solid #d9e3f5; }
+        .diag-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #e8eef9; font-size: 0.95rem; }
+        .diag-item:last-child { border-bottom: 0; }
+        .diag-status { font-weight: 700; }
+        .diag-ok { color: #2e7d32; }
+        .diag-warn { color: #ef6c00; }
+        .diag-error { color: #c62828; }
         .btn-group { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin: 25px 0; }
         .btn { padding: 16px 32px; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 10px; }
         .btn-primary { background: var(--primary); color: white; }
@@ -95,6 +102,11 @@
             <input type="file" id="fileInput" accept="image/*" onchange="handleFile(event)">
             <div class="camera-sec" id="camSec"><video id="videoPreview" autoplay playsinline muted webkit-playsinline style="width:100%;height:auto;max-height:70vh;object-fit:cover;border-radius:12px;background:#000;"></video><button class="btn btn-primary" style="margin:15px auto" onclick="capture()">🔴 Capture</button></div>
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()"><div class="upload-icon">📁</div><div class="instr">Click to upload or drag image<br><small>JPEG, PNG, WEBP</small></div></div>
+            <div class="diag-panel" id="diagPanel" role="status" aria-live="polite">
+                <div class="diag-item"><span>Browser support</span><span class="diag-status diag-warn" id="diagBrowser">Checking…</span></div>
+                <div class="diag-item"><span>Model status</span><span class="diag-status diag-warn" id="diagModel">Initializing…</span></div>
+                <div class="diag-item"><span>Camera status</span><span class="diag-status diag-warn" id="diagCamera">Not requested</span></div>
+            </div>
         </section>
         <div class="loading" id="loading"><div class="spinner"></div><div class="loading-text" id="loadText">Analyzing image...</div></div>
         <section class="results" id="results">
@@ -107,6 +119,10 @@
         </section>
     </main>
     <script>
+    const ML_MODEL_CONFIG={
+        localModelUrl:"./web/models/mobilenet/model.json",
+        preferLocalModel:false
+    };
     const hazardDB = {
         slip_floor:{name:"Floor Surface Hazard",kw:["floor","ground","tile","carpet"],L:4,S:3,recs:[{i:"🧹",t:"Clean Floors",d:"Keep floors clean and free from debris"},{i:"⚠️",t:"Warning Signs",d:"Use wet floor signs"},{i:"👟",t:"Footwear",d:"Slip-resistant safety footwear"}]},
         slip_stairs:{name:"Stairway Hazard",kw:["stairs","staircase","step","ladder"],L:3,S:4,recs:[{i:"🪜",t:"Handrails",d:"Install secure handrails"},{i:"⚠️",t:"Anti-slip",d:"Apply anti-slip strips"},{i:"🔦",t:"Lighting",d:"Adequate stair lighting"}]},
@@ -123,11 +139,35 @@
         general:{name:"General Workplace",kw:["office","room","indoor","workspace"],L:3,S:2,recs:[{i:"🧹",t:"Housekeeping",d:"Clean organized areas"},{i:"🪜",t:"Clear Walkways",d:"No obstructions"},{i:"🔦",t:"Emergency Lighting",d:"Functional lighting"}]}
     };
     let model=null,video=null,imgData=null,hazards=[],overallScore=0;
+    function setDiag(id,message,level){
+        const el=document.getElementById(id);
+        if(!el){return;}
+        el.textContent=message;
+        el.className=`diag-status ${level||"diag-warn"}`;
+    }
+    function detectBrowserSupport(){
+        const supportsMedia=Boolean(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+        const supportsCanvas=Boolean(window.HTMLCanvasElement&&window.FileReader);
+        if(supportsMedia&&supportsCanvas){
+            setDiag('diagBrowser','Supported','diag-ok');
+            return true;
+        }
+        setDiag('diagBrowser','Unsupported browser','diag-error');
+        return false;
+    }
     async function init(){
+        if(!detectBrowserSupport()){
+            setDiag('diagModel','Unavailable (browser unsupported)','diag-error');
+            return;
+        }
+        const useLocal=ML_MODEL_CONFIG.preferLocalModel||window.location.search.includes('localModel=1');
+        const options=useLocal?{modelUrl:ML_MODEL_CONFIG.localModelUrl}:undefined;
         try{
-            model=await mobilenet.load();
+            model=await mobilenet.load(options);
+            setDiag('diagModel',useLocal?'Loaded local model':'Loaded CDN model','diag-ok');
             console.log('Model loaded');
         }catch(e){
+            setDiag('diagModel','Model load failed','diag-error');
             console.error('Model failed', e);
         }
     }
@@ -160,6 +200,11 @@
         document.body.insertBefore(banner, document.body.firstChild);
     }
     async function startCam(){
+        if(!detectBrowserSupport()){
+            alert("Camera is not supported in this browser. Please upload an image instead.");
+            return;
+        }
+        setDiag('diagCamera','Requesting camera permission…','diag-warn');
         let constraints = {
             video: {
                 width: { ideal: 1280 },
@@ -189,6 +234,7 @@
                 document.getElementById("camSec").classList.add("active");
                 document.getElementById("uploadArea").classList.add("hidden");
                 document.getElementById("stopBtn").classList.remove("hidden");
+                setDiag('diagCamera','Camera ready','diag-ok');
             };
             
         } catch (error) {
@@ -197,12 +243,16 @@
             let errorMessage = "Unable to access camera. ";
             
             if (error.name === "NotAllowedError") {
+                setDiag('diagCamera','Camera denied','diag-error');
                 errorMessage += "Please allow camera permission and try again.";
             } else if (error.name === "NotFoundError") {
+                setDiag('diagCamera','No camera available','diag-error');
                 errorMessage += "No camera found on this device.";
             } else if (error.name === "NotReadableError") {
+                setDiag('diagCamera','Camera busy','diag-error');
                 errorMessage += "Camera is being used by another application.";
             } else {
+                setDiag('diagCamera','Camera failed','diag-error');
                 errorMessage += "Please use the upload feature instead.";
             }
             
