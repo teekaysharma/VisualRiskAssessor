@@ -5,8 +5,6 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.hse.visualriskassessor.data.converter.AnalysisModeConverter
 import com.hse.visualriskassessor.data.converter.DateConverter
 import com.hse.visualriskassessor.data.converter.HazardListConverter

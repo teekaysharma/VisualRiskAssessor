@@ -48,6 +48,7 @@
     <string name="report_save_failed">Unable to save report. Please try again.</string>
     <string name="no_hazards_detected">No significant hazards detected</string>
     <string name="no_hazards_message">The analyzed image appears to show a low-risk environment. Continue regular safety monitoring.</string>
+    <string name="fallback_warning_banner">⚠️ Warning: Analysis completed using estimated hazards due to an image analysis issue. Review results carefully before making safety decisions.</string>
     
     <!-- Risk Levels -->
     <string name="risk_low">Low Risk</string>
