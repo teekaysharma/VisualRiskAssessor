@@ -496,15 +496,21 @@ Analyse this workplace image and identify all visible hazards.
 For EACH hazard found, respond ONLY with a JSON array (no markdown, no prose) like:
 [
   {
-    "name": "Electrical Hazard",
-    "key": "electrical",
-    "likelihood": 3,
+    "name": "Slip Hazard",
+    "key": "slip",
+    "likelihood": 4,
     "severity": 4,
-    "confidence": 0.85,
-    "details": "Exposed cable running across the floor"
+    "confidence": 0.90,
+    "details": "Yellow substance spilled on the floor near machinery",
+    "eliminate": "Remove the source of the spill permanently; redesign process to eliminate liquid exposure",
+    "substitute": "Replace liquid process with dry alternative where feasible",
+    "engineering": "Install drainage channels; apply anti-slip flooring coating in the area",
+    "administrative": "Implement spill response procedure; add wet floor signage; increase inspection frequency",
+    "ppe": "Safety footwear with slip-resistant soles mandatory in this zone"
   }
 ]
 
+For each hazard, provide specific actionable controls for all five hierarchy levels based on what is visible in the image. Controls must be specific to the hazard, not generic statements.
 Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, other
 Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
 Confidence must be 0.0-1.0.
@@ -558,7 +564,12 @@ If no hazards are visible, return an empty array [].`;
             conf: Math.min(1, Math.max(0, item.confidence || 0.8)),
             recs: h.recs,
             source: 'ai',
-            details: item.details || ''
+            details: item.details || '',
+            eliminate: item.eliminate || 'N/A',
+            substitute: item.substitute || 'N/A',
+            engineering: item.engineering || 'N/A',
+            administrative: item.administrative || 'N/A',
+            ppe: item.ppe || 'N/A'
           };
         });
       } catch (e) {
@@ -736,32 +747,16 @@ If no hazards are visible, return an empty array [].`;
     hocThead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Eliminate</th><th>Substitute</th><th>Engineering Control</th><th>Administrative Control</th><th>PPE Required</th></tr>';
     hocTable.appendChild(hocThead);
     const hocTbody = document.createElement('tbody');
-    // Define control mappings - these are placeholder mappings from the existing recommendations
-    const controlMappings = {
-      electrical: { eliminate: 'De-energize equipment before work', substitute: 'Use battery-powered tools', engineering: 'Install insulation/grounding', admin: 'Lockout/Tagout procedures', ppe: 'Insulated gloves, safety glasses' },
-      fire: { eliminate: 'Remove flammable materials', substitute: 'Use fire-resistant materials', engineering: 'Install fire suppression systems', admin: 'No smoking policy, evacuation plans', ppe: 'Fire-resistant clothing' },
-      machinery: { eliminate: 'Remove machinery from service', substitute: 'Use manual tools where possible', engineering: 'Install guards and barriers', admin: 'Operator training, maintenance schedules', ppe: 'Safety shoes, hearing protection' },
-      slip: { eliminate: 'Eliminate wet surfaces', substitute: 'Use anti-slip flooring', engineering: 'Install drainage, non-slip mats', admin: 'Housekeeping protocols, signage', ppe: 'Non-slip footwear' },
-      height: { eliminate: 'Eliminate work at height', substitute: 'Use elevated platforms', engineering: 'Install guardrails, fall arrest systems', admin: 'Training, permit systems', ppe: 'Harnesses, safety nets' },
-      chemical: { eliminate: 'Remove chemicals from workplace', substitute: 'Use less hazardous alternatives', engineering: 'Install ventilation, fume hoods', admin: 'SDS access, handling procedures', ppe: 'Respirators, gloves, goggles' },
-      ppe: { eliminate: 'N/A', substitute: 'N/A', engineering: 'N/A', admin: 'PPE policies and enforcement', ppe: 'As per hazard assessment' },
-      struck: { eliminate: 'Create exclusion zones', substitute: 'Use pedestrian-safe vehicles', engineering: 'Install barriers, warning lights', admin: 'Traffic management plans', ppe: 'High-visibility vests, hard hats' },
-      confined: { eliminate: 'Eliminate need for confined space', substitute: 'Use alternative methods', engineering: 'Install ventilation, communication systems', admin: 'Entry permits, attendant duties', ppe: 'Respiratory protection, safety harnesses' },
-      ergonomic: { eliminate: 'Automate repetitive tasks', substitute: 'Use ergonomic equipment', engineering: 'Adjustable workstations, lift aids', admin: 'Job rotation, rest breaks', ppe: 'Support belts, ergonomic accessories' },
-      other: { eliminate: 'Conduct detailed assessment needed', substitute: 'Use safer alternatives', engineering: 'Implement engineering controls', admin: 'Develop safety procedures', ppe: 'As per hazard assessment' }
-    };
     hazards.forEach((h, i) => {
-      const key = Object.keys(hazardDB).find(k => hazardDB[k].name === h.name) || 'other';
-      const controls = controlMappings[key] || controlMappings.other;
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${i + 1}</td>
         <td><strong>${h.name}</strong></td>
-        <td>${controls.eliminate}</td>
-        <td>${controls.substitute}</td>
-        <td>${controls.engineering}</td>
-        <td>${controls.admin}</td>
-        <td>${controls.ppe}</td>
+        <td>${h.eliminate || 'N/A'}</td>
+        <td>${h.substitute || 'N/A'}</td>
+        <td>${h.engineering || 'N/A'}</td>
+        <td>${h.administrative || 'N/A'}</td>
+        <td>${h.ppe || 'N/A'}</td>
       `;
       hocTbody.appendChild(tr);
     });
