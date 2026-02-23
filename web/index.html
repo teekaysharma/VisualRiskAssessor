@@ -56,6 +56,91 @@
       box-shadow:0 1px 3px rgba(0,0,0,.3);
       z-index:1;
     }
+    .hazard-marker-cluster {
+      display:flex;
+      flex-wrap:wrap;
+      max-width:36px;
+      max-height:36px;
+      gap:1px;
+      position:absolute;
+      top:2px;
+      right:2px;
+      justify-content:flex-end;
+      align-content:flex-start;
+    }
+    .hazard-marker-cluster .hazard-marker {
+      position:relative;
+      top:auto;
+      right:auto;
+      width:16px;
+      height:16px;
+      font-size:9px;
+    }
+    .hazard-marker-count {
+      position:absolute;
+      top:2px;
+      right:2px;
+      min-width:18px;
+      height:18px;
+      background:#fff;
+      border-radius:9px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:10px;
+      font-weight:700;
+      color:#212121;
+      box-shadow:0 1px 3px rgba(0,0,0,.3);
+      z-index:1;
+      padding:0 4px;
+      cursor:pointer;
+    }
+    .hazard-tooltip {
+      display:none;
+      position:absolute;
+      bottom:100%;
+      right:0;
+      background:#333;
+      color:#fff;
+      padding:8px 10px;
+      border-radius:6px;
+      font-size:11px;
+      font-weight:400;
+      white-space:nowrap;
+      z-index:10;
+      margin-bottom:4px;
+      max-width:250px;
+      white-space:normal;
+      text-align:left;
+    }
+    .hazard-marker-count:hover .hazard-tooltip {
+      display:block;
+    }
+    .risk-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+    .kpi-card { border:2px solid #ddd; border-radius:10px; padding:14px 12px; text-align:center; }
+    .kpi-card.kpi-green { border-color:#27ae60; }
+    .kpi-card.kpi-yellow { border-color:#f1c40f; }
+    .kpi-card.kpi-amber { border-color:#e67e22; }
+    .kpi-card.kpi-red { border-color:#c0392b; }
+    .kpi-label { font-size:12px; color:#666; font-weight:600; margin-bottom:6px; }
+    .kpi-value { font-size:28px; font-weight:700; color:#212121; }
+    .kpi-card.kpi-green .kpi-value { color:#27ae60; }
+    .kpi-card.kpi-yellow .kpi-value { color:#f1c40f; }
+    .kpi-card.kpi-amber .kpi-value { color:#e67e22; }
+    .kpi-card.kpi-red .kpi-value { color:#c0392b; }
+    .hoc-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:12px; }
+    .hoc-table caption { font-size:14px; font-weight:700; text-align:left; padding:8px 4px; color:#212121; }
+    .hoc-table th { background:#424242; color:#fff; padding:10px 8px; text-align:left; font-weight:600; border:1px solid #333; }
+    .hoc-table td { padding:8px; border:1px solid #ddd; text-align:left; }
+    .hoc-table tbody tr:nth-child(even) { background:#f9f9f9; }
+    .hoc-table tbody tr:nth-child(odd) { background:#fff; }
+    .metadata-footer { border:2px solid #9e9e9e; border-radius:10px; padding:14px; background:#f5f5f5; margin-top:16px; }
+    .metadata-footer h4 { margin:0 0 10px; font-size:14px; color:#424242; }
+    .metadata-row { display:flex; flex-wrap:wrap; gap:8px 20px; margin-bottom:8px; font-size:12px; }
+    .metadata-label { font-weight:600; color:#616161; }
+    .metadata-value { color:#212121; }
+    .disclaimer { font-size:11px; color:#d32f2f; font-style:italic; margin:10px 0; }
+    .action-buttons { margin-top:12px; }
     .risk-table {
       width:100%;
       border-collapse:collapse;
@@ -141,10 +226,17 @@
       <div id="hazardsList"></div>
       <h3>Risk Matrix</h3>
       <div id="riskMatrix" class="matrix"></div>
-      <h3>Recommendations</h3>
-      <div id="recsList"></div>
-      <button class="btn btn-secondary" id="btnExport">Export Report</button>
-      <button class="btn btn-outline" id="btnReset">New Assessment</button>
+      <h3>Risk Summary Dashboard</h3>
+      <div id="riskSummary" class="risk-summary"></div>
+      <h3>Hierarchy of Controls</h3>
+      <div id="hocTable"></div>
+      <h3>Assessment Details</h3>
+      <div id="metadataFooter" class="metadata-footer"></div>
+      <div class="action-buttons">
+        <button class="btn btn-secondary" id="btnExport">Export Report</button>
+        <button class="btn btn-primary" id="btnPrint">Print / Export to PDF</button>
+        <button class="btn btn-outline" id="btnReset">New Assessment</button>
+      </div>
     </section>
   </main>
 
@@ -159,8 +251,9 @@
     overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'),
     riskMatrix: $('riskMatrix'), recsList: $('recsList'), fallbackWarning: $('fallbackWarning'),
     aiInfo: $('aiInfo'), loading: $('loading'), loadingMsg: $('loadingMsg'), modeBadge: $('modeBadge'),
+    riskSummary: $('riskSummary'), hocTable: $('hocTable'), metadataFooter: $('metadataFooter'),
     btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'),
-    btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'),
+    btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'), btnPrint: $('btnPrint'),
     apiKeyInput: $('apiKeyInput')
   };
 
@@ -493,6 +586,9 @@ If no hazards are visible, return an empty array [].`;
     els.overallLevel.textContent = r.label;
     els.overallLevel.style.background = r.color;
 
+    // Store assessment timestamp for metadata
+    const assessmentTimestamp = new Date();
+
     els.hazardsList.textContent = '';
     const table = document.createElement('table');
     table.className = 'risk-table';
@@ -527,26 +623,54 @@ If no hazards are visible, return an empty array [].`;
     table.appendChild(tbody);
     els.hazardsList.appendChild(table);
 
+    // --- Risk Matrix with enhanced hazard markers ---
     els.riskMatrix.textContent = '';
-    // Create mapping of (L, S) positions to hazard numbers
+    // Create mapping of (L, S) positions to array of hazard objects
     const hazardPositions = new Map();
     hazards.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
       if (!hazardPositions.has(key)) {
-        hazardPositions.set(key, i + 1);
+        hazardPositions.set(key, []);
       }
+      hazardPositions.get(key).push({ seq: i + 1, name: h.name });
     });
 
     const add = (txt, cls, l, s) => {
       const c = document.createElement('div');
       c.className = `cell ${cls}`;
       c.textContent = txt;
-      // Add hazard marker if this cell has a hazard
+      // Add hazard marker if this cell has hazards
       if (l && s && hazardPositions.has(`${l}-${s}`)) {
-        const marker = document.createElement('div');
-        marker.className = 'hazard-marker';
-        marker.textContent = hazardPositions.get(`${l}-${s}`);
-        c.appendChild(marker);
+        const cellHazards = hazardPositions.get(`${l}-${s}`);
+        if (cellHazards.length === 1) {
+          // Single hazard - show white circle with number
+          const marker = document.createElement('div');
+          marker.className = 'hazard-marker';
+          marker.textContent = cellHazards[0].seq;
+          c.appendChild(marker);
+        } else if (cellHazards.length === 2) {
+          // Two hazards - stack markers
+          const cluster = document.createElement('div');
+          cluster.className = 'hazard-marker-cluster';
+          cellHazards.forEach(h => {
+            const marker = document.createElement('div');
+            marker.className = 'hazard-marker';
+            marker.textContent = h.seq;
+            cluster.appendChild(marker);
+          });
+          c.appendChild(cluster);
+        } else {
+          // Three or more - show count badge with tooltip
+          const countBadge = document.createElement('div');
+          countBadge.className = 'hazard-marker-count';
+          countBadge.textContent = `×${cellHazards.length}`;
+          const tooltip = document.createElement('div');
+          tooltip.className = 'hazard-tooltip';
+          tooltip.innerHTML = '<strong>Hazards in this cell:</strong><br/>' + 
+            cellHazards.map(h => `#${h.seq}: ${h.name}`).join('<br/>');
+          countBadge.appendChild(tooltip);
+          c.appendChild(countBadge);
+        }
       }
       els.riskMatrix.appendChild(c);
     };
@@ -564,9 +688,108 @@ If no hazards are visible, return an empty array [].`;
     add('', '');
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
-    els.recsList.textContent = '';
-    const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
-    recs.forEach(rec => { const p = document.createElement('p'); p.textContent = `• ${rec}`; els.recsList.appendChild(p); });
+    // --- Section A: Risk Summary Dashboard ---
+    const totalHazards = hazards.length;
+    const highestRisk = overall;
+    const highestRiskBand = highestRisk <= 4 ? 'kpi-green' : highestRisk <= 9 ? 'kpi-yellow' : highestRisk <= 16 ? 'kpi-amber' : 'kpi-red';
+    const criticalCount = hazards.filter(h => h.risk >= 17).length;
+    const highCount = hazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
+    const criticalHighCombined = criticalCount + highCount;
+    let overallSiteRating = 'Low';
+    let overallSiteBand = 'kpi-green';
+    if (criticalCount > 0) {
+      overallSiteRating = 'Critical';
+      overallSiteBand = 'kpi-red';
+    } else if (highCount > 0) {
+      overallSiteRating = 'High';
+      overallSiteBand = 'kpi-amber';
+    } else if (hazards.length > 0 && hazards.every(h => h.risk <= 9)) {
+      overallSiteRating = 'Medium';
+      overallSiteBand = 'kpi-yellow';
+    }
+    els.riskSummary.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">Total Hazards Identified</div>
+        <div class="kpi-value">${totalHazards}</div>
+      </div>
+      <div class="kpi-card ${highestRiskBand}">
+        <div class="kpi-label">Highest Risk Score</div>
+        <div class="kpi-value">${highestRisk}</div>
+      </div>
+      <div class="kpi-card kpi-amber">
+        <div class="kpi-label">Critical + High Count</div>
+        <div class="kpi-value">${criticalHighCombined}</div>
+      </div>
+      <div class="kpi-card ${overallSiteBand}">
+        <div class="kpi-label">Overall Site Risk Rating</div>
+        <div class="kpi-value">${overallSiteRating}</div>
+      </div>
+    `;
+
+    // --- Section B: Hierarchy of Controls Table ---
+    const hocTable = document.createElement('table');
+    hocTable.className = 'hoc-table';
+    const hocCaption = document.createElement('caption');
+    hocCaption.textContent = 'Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF';
+    hocTable.appendChild(hocCaption);
+    const hocThead = document.createElement('thead');
+    hocThead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Eliminate</th><th>Substitute</th><th>Engineering Control</th><th>Administrative Control</th><th>PPE Required</th></tr>';
+    hocTable.appendChild(hocThead);
+    const hocTbody = document.createElement('tbody');
+    // Define control mappings - these are placeholder mappings from the existing recommendations
+    const controlMappings = {
+      electrical: { eliminate: 'De-energize equipment before work', substitute: 'Use battery-powered tools', engineering: 'Install insulation/grounding', admin: 'Lockout/Tagout procedures', ppe: 'Insulated gloves, safety glasses' },
+      fire: { eliminate: 'Remove flammable materials', substitute: 'Use fire-resistant materials', engineering: 'Install fire suppression systems', admin: 'No smoking policy, evacuation plans', ppe: 'Fire-resistant clothing' },
+      machinery: { eliminate: 'Remove machinery from service', substitute: 'Use manual tools where possible', engineering: 'Install guards and barriers', admin: 'Operator training, maintenance schedules', ppe: 'Safety shoes, hearing protection' },
+      slip: { eliminate: 'Eliminate wet surfaces', substitute: 'Use anti-slip flooring', engineering: 'Install drainage, non-slip mats', admin: 'Housekeeping protocols, signage', ppe: 'Non-slip footwear' },
+      height: { eliminate: 'Eliminate work at height', substitute: 'Use elevated platforms', engineering: 'Install guardrails, fall arrest systems', admin: 'Training, permit systems', ppe: 'Harnesses, safety nets' },
+      chemical: { eliminate: 'Remove chemicals from workplace', substitute: 'Use less hazardous alternatives', engineering: 'Install ventilation, fume hoods', admin: 'SDS access, handling procedures', ppe: 'Respirators, gloves, goggles' },
+      ppe: { eliminate: 'N/A', substitute: 'N/A', engineering: 'N/A', admin: 'PPE policies and enforcement', ppe: 'As per hazard assessment' },
+      struck: { eliminate: 'Create exclusion zones', substitute: 'Use pedestrian-safe vehicles', engineering: 'Install barriers, warning lights', admin: 'Traffic management plans', ppe: 'High-visibility vests, hard hats' },
+      confined: { eliminate: 'Eliminate need for confined space', substitute: 'Use alternative methods', engineering: 'Install ventilation, communication systems', admin: 'Entry permits, attendant duties', ppe: 'Respiratory protection, safety harnesses' },
+      ergonomic: { eliminate: 'Automate repetitive tasks', substitute: 'Use ergonomic equipment', engineering: 'Adjustable workstations, lift aids', admin: 'Job rotation, rest breaks', ppe: 'Support belts, ergonomic accessories' },
+      other: { eliminate: 'Conduct detailed assessment needed', substitute: 'Use safer alternatives', engineering: 'Implement engineering controls', admin: 'Develop safety procedures', ppe: 'As per hazard assessment' }
+    };
+    hazards.forEach((h, i) => {
+      const key = Object.keys(hazardDB).find(k => hazardDB[k].name === h.name) || 'other';
+      const controls = controlMappings[key] || controlMappings.other;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td><strong>${h.name}</strong></td>
+        <td>${controls.eliminate}</td>
+        <td>${controls.substitute}</td>
+        <td>${controls.engineering}</td>
+        <td>${controls.admin}</td>
+        <td>${controls.ppe}</td>
+      `;
+      hocTbody.appendChild(tr);
+    });
+    hocTable.appendChild(hocTbody);
+    els.hocTable.innerHTML = '';
+    els.hocTable.appendChild(hocTable);
+
+    // --- Section C: Assessment Metadata Footer ---
+    const formattedDate = assessmentTimestamp.toLocaleString('en-US', { 
+      year: 'numeric', month: 'long', day: 'numeric', 
+      hour: '2-digit', minute: '2-digit', second: '2-digit' 
+    });
+    els.metadataFooter.innerHTML = `
+      <h4>Assessment Information</h4>
+      <div class="metadata-row">
+        <span class="metadata-label">Assessment Date and Time:</span>
+        <span class="metadata-value">${formattedDate}</span>
+      </div>
+      <div class="metadata-row">
+        <span class="metadata-label">Assessment Method:</span>
+        <span class="metadata-value">AI Visual Analysis — Llama 4 Scout via Groq API</span>
+      </div>
+      <div class="metadata-row">
+        <span class="metadata-label">Standard Reference:</span>
+        <span class="metadata-value">ISO 45001:2018 / ADOSH-SF</span>
+      </div>
+      <div class="disclaimer">This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register.</div>
+    `;
   }
 
   // ── Main analysis orchestrator ─────────────────────────────────────────────
@@ -681,6 +904,7 @@ If no hazards are visible, return an empty array [].`;
   els.btnCapture.addEventListener('click', captureFromCamera);
   els.btnStop.addEventListener('click', stopCamera);
   els.btnExport.addEventListener('click', exportReport);
+  els.btnPrint.addEventListener('click', () => window.print());
   els.btnReset.addEventListener('click', resetApp);
   els.fileInput.addEventListener('change', e => {
     const f = e.target.files?.[0];
