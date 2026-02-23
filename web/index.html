@@ -35,11 +35,10 @@
     .matrix { display:grid; grid-template-columns:42px repeat(5,1fr); gap:3px; max-width:450px; }
     .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; }
     .head { background:#1565c0; color:#fff; }
-    .low { background:var(--ok); color:#fff; }
-    .med { background:var(--mid); }
-    .high { background:var(--hi); color:#fff; }
-    .ext { background:var(--x); color:#fff; }
-    .mark { outline:3px solid #000; }
+    .low { background:#27ae60; color:#fff; }
+    .med { background:#f1c40f; }
+    .high { background:#e67e22; color:#fff; }
+    .ext { background:#c0392b; color:#fff; }
     .mode-badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; margin-left:8px; vertical-align:middle; }
     .mode-ai { background:#6a1b9a; color:#fff; }
     .mode-ml { background:#1565c0; color:#fff; }
@@ -467,9 +466,6 @@ If no hazards are visible, return an empty array [].`;
 
     els.riskMatrix.textContent = '';
     const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
-    // Header row: corner + S1-S5
-    add('', '');
-    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
     // Data rows: L5-L1 with scores
     [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
@@ -477,12 +473,12 @@ If no hazards are visible, return an empty array [].`;
         const score = l * s;
         let cls = 'low';
         if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
-        const c = document.createElement('div');
-        c.className = `cell ${cls}${hazards.some(h => h.L === l && h.S === s) ? ' mark' : ''}`;
-        c.textContent = String(score);
-        els.riskMatrix.appendChild(c);
+        add(String(score), cls);
       }
     });
+    // Footer row: corner + S1-S5
+    add('', '');
+    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
     els.recsList.textContent = '';
     const recs = [...new Set(hazards.flatMap(h => h.recs || []))];
