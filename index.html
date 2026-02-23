@@ -416,7 +416,8 @@ If no hazards are visible, return an empty array [].`;
     els.results.classList.remove('hidden');
     els.resultImg.src = imageData;
 
-    els.fallbackWarning.classList.toggle('hidden', analysisMode !== 'heuristic');
+    // Only show fallback warning if model actually failed to load (not just no detections)
+    els.fallbackWarning.classList.toggle('hidden', !(analysisMode === 'heuristic' && modelLoadError));
     els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
 
     const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'] };
