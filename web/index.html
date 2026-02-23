@@ -381,26 +381,18 @@ If no hazards are visible, return an empty array [].`;
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
     };
 
-    // Try multiple model endpoints for compatibility
-    const modelCandidates = [
-      'gemini-2.0-flash',
-      'gemini-1.5-flash-latest',
-      'gemini-1.5-flash',
-      'gemini-pro-vision'
-    ];
+    // Use gemini-2.0-flash (latest stable) for AI analysis
+    const modelId = 'gemini-2.0-flash';
 
-    let lastError = null;
-    for (const model of modelCandidates) {
-      try {
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    try {
+      const resp = await fetch(
+        `https://generativelanguage.googleapis.com/v1/models/${modelId}:generateContent?key=${apiKey}`,
           { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
         );
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          lastError = err?.error?.message || `Gemini API error ${resp.status}`;
-          continue; // Try next model
+          throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
         }
 
         const data = await resp.json();
@@ -422,12 +414,8 @@ If no hazards are visible, return an empty array [].`;
           };
         });
       } catch (e) {
-        lastError = e.message;
-        continue;
+        throw new Error(`Gemini API error: ${e.message}`);
       }
-    }
-
-    throw new Error(lastError || 'No Gemini models available');
   }
 
   // ── Render results ─────────────────────────────────────────────────────────
