@@ -516,7 +516,8 @@ For each hazard, provide specific actionable controls for all five hierarchy lev
 Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, other
 Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
 Confidence must be 0.0-1.0.
-If no hazards are visible, return an empty array [].`;
+If no hazards are visible, return an empty array [].
+Be thorough and observational. Do not limit yourself to obvious hazards. Examine the full image including background, floor, ceiling, equipment state, worker positioning, housekeeping condition, and signage. Report every hazard visible regardless of how minor it appears. Accuracy of observation is more important than brevity.`;
 
     const body = {
       model: 'meta-llama/llama-4-scout-17b-16e-instruct',
@@ -529,7 +530,8 @@ If no hazards are visible, return an empty array [].`;
           ]
         }
       ],
-      temperature: 0.1,
+      temperature: 0.4,
+      top_p: 0.9,
       max_tokens: 2048
     };
 
