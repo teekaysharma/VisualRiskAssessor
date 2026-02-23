@@ -381,34 +381,53 @@ If no hazards are visible, return an empty array [].`;
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
     };
 
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    );
+    // Try multiple model endpoints for compatibility
+    const modelCandidates = [
+      'gemini-2.0-flash',
+      'gemini-1.5-flash-latest',
+      'gemini-1.5-flash',
+      'gemini-pro-vision'
+    ];
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
+    let lastError = null;
+    for (const model of modelCandidates) {
+      try {
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+        );
+
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          lastError = err?.error?.message || `Gemini API error ${resp.status}`;
+          continue; // Try next model
+        }
+
+        const data = await resp.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        const cleaned = text.replace(/```json|```/g, '').trim();
+        const raw = JSON.parse(cleaned);
+
+        return raw.map(item => {
+          const h = hazardDB[item.key] || hazardDB.other;
+          const L = Math.min(5, Math.max(1, Math.round(item.likelihood)));
+          const S = Math.min(5, Math.max(1, Math.round(item.severity)));
+          return {
+            name: item.name || h.name,
+            L, S, risk: L * S,
+            conf: Math.min(1, Math.max(0, item.confidence || 0.8)),
+            recs: h.recs,
+            source: 'ai',
+            details: item.details || ''
+          };
+        });
+      } catch (e) {
+        lastError = e.message;
+        continue;
+      }
     }
 
-    const data = await resp.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    const raw = JSON.parse(cleaned);
-
-    return raw.map(item => {
-      const h = hazardDB[item.key] || hazardDB.other;
-      const L = Math.min(5, Math.max(1, Math.round(item.likelihood)));
-      const S = Math.min(5, Math.max(1, Math.round(item.severity)));
-      return {
-        name: item.name || h.name,
-        L, S, risk: L * S,
-        conf: Math.min(1, Math.max(0, item.confidence || 0.8)),
-        recs: h.recs,
-        source: 'ai',
-        details: item.details || ''
-      };
-    });
+    throw new Error(lastError || 'No Gemini models available');
   }
 
   // ── Render results ─────────────────────────────────────────────────────────
