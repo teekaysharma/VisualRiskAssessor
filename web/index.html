@@ -6,6 +6,9 @@
   <title>VisualRiskAssessor - HSE Risk Assessment</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <style>
     :root { --p:#ff6d00; --s:#1565c0; --ok:#4caf50; --mid:#ffc107; --hi:#f44336; --x:#b71c1c; }
     * { box-sizing:border-box; }
@@ -19,6 +22,7 @@
     .btn-secondary { background:var(--s); color:#fff; }
     .btn-outline { background:#fff; color:var(--s); border:2px solid var(--s); }
     .btn-ai { background:#6a1b9a; color:#fff; }
+    .btn-pdf { background:#c62828; color:#fff; }
     .hidden { display:none !important; }
     #uploadArea { border:2px dashed var(--s); border-radius:10px; padding:20px; margin-top:12px; background:#eef6ff; cursor:pointer; }
     #uploadArea:focus-visible { outline:3px solid #000; }
@@ -32,7 +36,12 @@
     .risk-medium { border-left-color:var(--mid); }
     .risk-high { border-left-color:var(--hi); }
     .risk-extreme { border-left-color:var(--x); }
+    .matrix-wrap { position:relative; display:inline-block; }
     .matrix { display:grid; grid-template-columns:42px repeat(5,1fr); gap:3px; max-width:450px; }
+    .matrix-legend { display:flex; gap:16px; margin-top:10px; font-size:12px; align-items:center; flex-wrap:wrap; }
+    .matrix-legend-item { display:flex; align-items:center; gap:6px; }
+    .legend-dot-initial { width:14px; height:14px; background:#fff; border-radius:50%; border:2px solid #212121; display:inline-block; box-shadow:0 1px 3px rgba(0,0,0,.3); flex-shrink:0; }
+    .legend-dot-residual { width:14px; height:14px; background:transparent; border-radius:50%; border:3px solid #212121; display:inline-block; flex-shrink:0; }
     .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; position:relative; }
     .head { background:#1565c0; color:#fff; }
     .low { background:#27ae60; color:#fff; }
@@ -55,6 +64,11 @@
       color:#212121;
       box-shadow:0 1px 3px rgba(0,0,0,.3);
       z-index:1;
+    }
+    .hazard-marker.residual-marker {
+      background:transparent;
+      border:2px solid #212121;
+      top:22px;
     }
     .hazard-marker-cluster {
       display:flex;
@@ -144,7 +158,7 @@
     .risk-table {
       width:100%;
       border-collapse:collapse;
-      font-size:13px;
+      font-size:12px;
       margin-bottom:12px;
     }
     .risk-table caption {
@@ -157,22 +171,37 @@
     .risk-table th {
       background:#424242;
       color:#fff;
-      padding:10px 8px;
+      padding:8px 6px;
       text-align:left;
       font-weight:600;
       border:1px solid #333;
+      font-size:11px;
     }
     .risk-table td {
-      padding:8px;
+      padding:6px;
       border:1px solid #ddd;
       text-align:left;
+      vertical-align:top;
     }
-    .risk-table tbody tr:nth-child(even) {
-      background:#f9f9f9;
-    }
-    .risk-table tbody tr:nth-child(odd) {
+    .risk-table tbody tr:nth-child(even) { background:#f9f9f9; }
+    .risk-table tbody tr:nth-child(odd) { background:#fff; }
+    .risk-table input[type="text"], .risk-table input[type="date"], .risk-table select {
+      width:100%;
+      padding:4px 6px;
+      border:1px solid #ccc;
+      border-radius:4px;
+      font-size:11px;
+      font-family:inherit;
       background:#fff;
+      box-sizing:border-box;
     }
+    .risk-table select { cursor:pointer; }
+    .status-open { background:#f44336 !important; color:#fff; }
+    .status-open select { background:#f44336; color:#fff; }
+    .status-inprogress { background:#ff9800 !important; color:#fff; }
+    .status-inprogress select { background:#ff9800; color:#fff; }
+    .status-closed { background:#4caf50 !important; color:#fff; }
+    .status-closed select { background:#4caf50; color:#fff; }
     .mode-badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; margin-left:8px; vertical-align:middle; }
     .mode-ai { background:#6a1b9a; color:#fff; }
     .mode-ml { background:#1565c0; color:#fff; }
@@ -222,10 +251,16 @@
       <div id="aiInfo" class="info hidden">🤖 AI Vision analysis used for enhanced hazard identification.</div>
       <img id="resultImg" alt="Analyzed image" />
       <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span> &nbsp;<strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span> <span id="modeBadge" class="mode-badge"></span></p>
-      <h3>Detected Hazards</h3>
+      <h3>Detected Hazards &amp; Risk Register</h3>
       <div id="hazardsList"></div>
       <h3>Risk Matrix</h3>
-      <div id="riskMatrix" class="matrix"></div>
+      <div class="matrix-wrap">
+        <div id="riskMatrix" class="matrix"></div>
+        <div class="matrix-legend">
+          <div class="matrix-legend-item"><span class="legend-dot-initial"></span> Initial Risk</div>
+          <div class="matrix-legend-item"><span class="legend-dot-residual"></span> Residual Risk</div>
+        </div>
+      </div>
       <h3>Risk Summary Dashboard</h3>
       <div id="riskSummary" class="risk-summary"></div>
       <h3>Hierarchy of Controls</h3>
@@ -234,7 +269,7 @@
       <div id="metadataFooter" class="metadata-footer"></div>
       <div class="action-buttons">
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
-        <button class="btn btn-primary" id="btnPrint">Print / Export to PDF</button>
+        <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
         <button class="btn btn-outline" id="btnReset">New Assessment</button>
       </div>
     </section>
@@ -253,7 +288,7 @@
     aiInfo: $('aiInfo'), loading: $('loading'), loadingMsg: $('loadingMsg'), modeBadge: $('modeBadge'),
     riskSummary: $('riskSummary'), hocTable: $('hocTable'), metadataFooter: $('metadataFooter'),
     btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'),
-    btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'), btnPrint: $('btnPrint'),
+    btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'), btnPDF: $('btnPDF'),
     apiKeyInput: $('apiKeyInput')
   };
 
@@ -262,8 +297,8 @@
   let modelLoading = true;
   let modelLoadError = null;
   let pendingAnalysis = null;
+  let assessmentTimestamp = null;
 
-  // All 11 HSE hazard types with COCO-SSD class mappings, pixel heuristic flags, likelihood, severity, and recommendations
   const hazardDB = {
     electrical: {
       name: 'Electrical Hazard', L: 4, S: 4,
@@ -322,7 +357,6 @@
     }
   };
 
-  // COCO class → hazard key lookup built once
   const cocoToHazard = {};
   Object.entries(hazardDB).forEach(([key, h]) => {
     h.cocoClasses.forEach(cls => {
@@ -333,12 +367,20 @@
 
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
   function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
+
   function riskFor(score) {
-    if (score <= 4) return { label: 'Low Risk', cls: 'risk-low', color: 'var(--ok)' };
-    if (score <= 9) return { label: 'Medium Risk', cls: 'risk-medium', color: 'var(--mid)' };
-    if (score <= 16) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)' };
-    if (score <= 25) return { label: 'Critical Risk', cls: 'risk-extreme', color: 'var(--x)' };
-    return { label: 'Extreme Risk', cls: 'risk-extreme', color: 'var(--x)' };
+    if (score <= 4) return { label: 'Low Risk', cls: 'risk-low', color: 'var(--ok)', bg: '#27ae60', textColor: '#fff' };
+    if (score <= 9) return { label: 'Medium Risk', cls: 'risk-medium', color: 'var(--mid)', bg: '#f1c40f', textColor: '#212121' };
+    if (score <= 16) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)', bg: '#e67e22', textColor: '#fff' };
+    if (score <= 25) return { label: 'Critical Risk', cls: 'risk-extreme', color: 'var(--x)', bg: '#c0392b', textColor: '#fff' };
+    return { label: 'Extreme Risk', cls: 'risk-extreme', color: 'var(--x)', bg: '#c0392b', textColor: '#fff' };
+  }
+
+  function residualBorderColor(score) {
+    if (score <= 4) return '#27ae60';
+    if (score <= 9) return '#f1c40f';
+    if (score <= 16) return '#e67e22';
+    return '#c0392b';
   }
 
   async function initModel() {
@@ -356,7 +398,6 @@
     } finally {
       modelLoading = false;
       updateModelStatus();
-      // Process any pending analysis
       if (pendingAnalysis) {
         const dataUrl = pendingAnalysis;
         pendingAnalysis = null;
@@ -430,7 +471,6 @@
 
   function openFilePicker() { els.fileInput.click(); }
 
-  // ── Heuristic analysis (pixel-level fallback) ──────────────────────────────
   function heuristicHazards(canvas) {
     const ctx = canvas.getContext('2d');
     const { width, height } = canvas;
@@ -463,7 +503,6 @@
     return out;
   }
 
-  // ── COCO-SSD object detection ──────────────────────────────────────────────
   async function cocoHazards(imgEl) {
     if (!cocoModel) return [];
     const predictions = await cocoModel.detect(imgEl);
@@ -485,7 +524,6 @@
     return [...found.values()];
   }
 
-  // ── Gemini Vision API analysis ─────────────────────────────────────────────
   async function geminiHazards(dataUrl) {
     const apiKey = els.apiKeyInput.value.trim();
     if (!apiKey) return null;
@@ -550,7 +588,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
+          throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
         }
 
         const data = await resp.json();
@@ -581,12 +619,106 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       }
   }
 
-  // ── Render results ─────────────────────────────────────────────────────────
+  function getRowResidualData(rowIndex) {
+    const controls = $(`controls_${rowIndex}`)?.value || '';
+    const rl = parseInt($(`rl_${rowIndex}`)?.value || '1', 10);
+    const rs = parseInt($(`rs_${rowIndex}`)?.value || '1', 10);
+    const residualScore = rl * rs;
+    const owner = $(`owner_${rowIndex}`)?.value || '';
+    const action = $(`action_${rowIndex}`)?.value || '';
+    const target = $(`target_${rowIndex}`)?.value || '';
+    const status = $(`status_${rowIndex}`)?.value || 'Open';
+    return { controls, rl, rs, residualScore, owner, action, target, status };
+  }
+
+  function applyStatusStyle(td, status) {
+    td.classList.remove('status-open', 'status-inprogress', 'status-closed');
+    if (status === 'Open') td.classList.add('status-open');
+    else if (status === 'In Progress') td.classList.add('status-inprogress');
+    else if (status === 'Closed') td.classList.add('status-closed');
+  }
+
+  function buildResidualDropdown(id, defaultVal) {
+    const sel = document.createElement('select');
+    sel.id = id;
+    [1,2,3,4,5].forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      if (v === defaultVal) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    return sel;
+  }
+
+  function buildStatusDropdown(id, rowIndex) {
+    const sel = document.createElement('select');
+    sel.id = id;
+    ['Open', 'In Progress', 'Closed'].forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      applyStatusStyle(sel.closest('td'), sel.value);
+      updateResidualMatrix();
+    });
+    return sel;
+  }
+
+  function updateResidualMatrix() {
+    const residualPositions = new Map();
+    hazards.forEach((h, i) => {
+      const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
+      const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
+      const key = `${rl}-${rs}`;
+      if (!residualPositions.has(key)) residualPositions.set(key, []);
+      residualPositions.get(key).push({ seq: i + 1, name: h.name });
+    });
+
+    document.querySelectorAll('.residual-marker').forEach(m => m.remove());
+
+    const cells = els.riskMatrix.querySelectorAll('.cell[data-l][data-s]');
+    cells.forEach(cell => {
+      const l = parseInt(cell.dataset.l, 10);
+      const s = parseInt(cell.dataset.s, 10);
+      const key = `${l}-${s}`;
+      if (residualPositions.has(key)) {
+        const entries = residualPositions.get(key);
+        const score = l * s;
+        const borderCol = residualBorderColor(score);
+        const marker = document.createElement('div');
+        marker.className = 'hazard-marker residual-marker';
+        marker.style.borderColor = borderCol;
+        marker.style.color = '#212121';
+        if (entries.length === 1) {
+          marker.textContent = entries[0].seq;
+        } else {
+          marker.textContent = `×${entries.length}`;
+        }
+        cell.appendChild(marker);
+      }
+    });
+
+    hazards.forEach((h, i) => {
+      const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
+      const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
+      const residualScore = rl * rs;
+      const rr = riskFor(residualScore);
+      const scoreCell = $(`residual_score_${i}`);
+      if (scoreCell) {
+        scoreCell.textContent = residualScore;
+        scoreCell.style.backgroundColor = rr.bg;
+        scoreCell.style.color = rr.textColor;
+      }
+    });
+  }
+
   function render() {
     els.results.classList.remove('hidden');
     els.resultImg.src = imageData;
 
-    // Only show fallback warning if model actually failed to load (not just no detections)
     els.fallbackWarning.classList.toggle('hidden', !(analysisMode === 'heuristic' && modelLoadError));
     els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
 
@@ -601,70 +733,187 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.overallLevel.textContent = r.label;
     els.overallLevel.style.background = r.color;
 
-    // Store assessment timestamp for metadata
-    const assessmentTimestamp = new Date();
+    assessmentTimestamp = assessmentTimestamp || new Date();
 
+    // ── Risk Register table ────────────────────────────────────────────────────
     els.hazardsList.textContent = '';
     const table = document.createElement('table');
     table.className = 'risk-table';
+    table.id = 'riskRegisterTable';
     const caption = document.createElement('caption');
     caption.textContent = 'Risk Register — AI Visual Assessment';
     table.appendChild(caption);
     const thead = document.createElement('thead');
-    thead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Details</th><th>Likelihood (L)</th><th>Severity (S)</th><th>Risk Score</th><th>Rating</th><th>Confidence</th><th>Recommended Controls</th></tr>';
+    thead.innerHTML = `<tr>
+      <th>#</th>
+      <th>Hazard</th>
+      <th>Details</th>
+      <th>L</th>
+      <th>S</th>
+      <th>Risk Score</th>
+      <th>Rating</th>
+      <th>Conf.</th>
+      <th>Controls In Place</th>
+      <th>Res. L</th>
+      <th>Res. S</th>
+      <th>Residual Risk</th>
+      <th>Risk Owner</th>
+      <th>Corrective Action</th>
+      <th>Target Date</th>
+      <th>Status</th>
+    </tr>`;
     table.appendChild(thead);
     const tbody = document.createElement('tbody');
+
     hazards.forEach((h, i) => {
       const hr = riskFor(h.risk);
       const tr = document.createElement('tr');
       const ratingLabel = hr.label.replace(' Risk', '');
-      const ratingText = ratingLabel === 'Critical' ? 'Critical' : ratingLabel;
-      const riskColorClass = h.risk <= 4 ? 'low' : h.risk <= 9 ? 'med' : h.risk <= 16 ? 'high' : 'ext';
-      const riskBgColor = riskColorClass === 'low' ? '#27ae60' : riskColorClass === 'med' ? '#f1c40f' : riskColorClass === 'high' ? '#e67e22' : '#c0392b';
-      const riskTextColor = riskColorClass === 'med' ? '#212121' : '#fff';
-      tr.innerHTML = `
-        <td>${i + 1}</td>
-        <td><strong>${h.name}</strong></td>
-        <td>${h.details || '-'}</td>
-        <td>${h.L}</td>
-        <td>${h.S}</td>
-        <td style="background-color:${riskBgColor};color:${riskTextColor};font-weight:700;">${h.risk}</td>
-        <td>${ratingText}</td>
-        <td>${Math.round((h.conf || 0) * 100)}%</td>
-        <td>${(h.recs || []).join(', ')}</td>
-      `;
+
+      const tdNum = document.createElement('td');
+      tdNum.textContent = i + 1;
+      tr.appendChild(tdNum);
+
+      const tdName = document.createElement('td');
+      tdName.innerHTML = `<strong>${h.name}</strong>`;
+      tr.appendChild(tdName);
+
+      const tdDetails = document.createElement('td');
+      tdDetails.textContent = h.details || '-';
+      tr.appendChild(tdDetails);
+
+      const tdL = document.createElement('td');
+      tdL.textContent = h.L;
+      tr.appendChild(tdL);
+
+      const tdS = document.createElement('td');
+      tdS.textContent = h.S;
+      tr.appendChild(tdS);
+
+      const tdScore = document.createElement('td');
+      tdScore.textContent = h.risk;
+      tdScore.style.backgroundColor = hr.bg;
+      tdScore.style.color = hr.textColor;
+      tdScore.style.fontWeight = '700';
+      tr.appendChild(tdScore);
+
+      const tdRating = document.createElement('td');
+      tdRating.textContent = ratingLabel === 'Critical' ? 'Critical' : ratingLabel;
+      tr.appendChild(tdRating);
+
+      const tdConf = document.createElement('td');
+      tdConf.textContent = `${Math.round((h.conf || 0) * 100)}%`;
+      tr.appendChild(tdConf);
+
+      const tdControls = document.createElement('td');
+      const inputControls = document.createElement('input');
+      inputControls.type = 'text';
+      inputControls.id = `controls_${i}`;
+      inputControls.placeholder = 'Describe controls…';
+      tdControls.appendChild(inputControls);
+      tr.appendChild(tdControls);
+
+      const defaultRL = Math.max(1, h.L - 1);
+      const defaultRS = Math.max(1, h.S - 1);
+
+      const tdRL = document.createElement('td');
+      const selRL = buildResidualDropdown(`rl_${i}`, defaultRL);
+      selRL.addEventListener('change', updateResidualMatrix);
+      tdRL.appendChild(selRL);
+      tr.appendChild(tdRL);
+
+      const tdRS = document.createElement('td');
+      const selRS = buildResidualDropdown(`rs_${i}`, defaultRS);
+      selRS.addEventListener('change', updateResidualMatrix);
+      tdRS.appendChild(selRS);
+      tr.appendChild(tdRS);
+
+      const initialResidualScore = defaultRL * defaultRS;
+      const rrr = riskFor(initialResidualScore);
+      const tdResidualScore = document.createElement('td');
+      tdResidualScore.id = `residual_score_${i}`;
+      tdResidualScore.textContent = initialResidualScore;
+      tdResidualScore.style.backgroundColor = rrr.bg;
+      tdResidualScore.style.color = rrr.textColor;
+      tdResidualScore.style.fontWeight = '700';
+      tr.appendChild(tdResidualScore);
+
+      const tdOwner = document.createElement('td');
+      const inputOwner = document.createElement('input');
+      inputOwner.type = 'text';
+      inputOwner.id = `owner_${i}`;
+      inputOwner.placeholder = 'Name / Role';
+      tdOwner.appendChild(inputOwner);
+      tr.appendChild(tdOwner);
+
+      const tdAction = document.createElement('td');
+      const inputAction = document.createElement('input');
+      inputAction.type = 'text';
+      inputAction.id = `action_${i}`;
+      inputAction.placeholder = 'Describe action…';
+      tdAction.appendChild(inputAction);
+      tr.appendChild(tdAction);
+
+      const tdTarget = document.createElement('td');
+      const inputDate = document.createElement('input');
+      inputDate.type = 'date';
+      inputDate.id = `target_${i}`;
+      tdTarget.appendChild(inputDate);
+      tr.appendChild(tdTarget);
+
+      const tdStatus = document.createElement('td');
+      tdStatus.classList.add('status-open');
+      const selStatus = buildStatusDropdown(`status_${i}`, i);
+      selStatus.style.background = 'transparent';
+      selStatus.style.color = '#fff';
+      selStatus.style.border = 'none';
+      selStatus.style.fontWeight = '700';
+      selStatus.style.width = '100%';
+      selStatus.style.cursor = 'pointer';
+      tdStatus.appendChild(selStatus);
+      tr.appendChild(tdStatus);
+
       tbody.appendChild(tr);
     });
+
     table.appendChild(tbody);
     els.hazardsList.appendChild(table);
 
-    // --- Risk Matrix with enhanced hazard markers ---
+    // ── Risk Matrix ────────────────────────────────────────────────────────────
     els.riskMatrix.textContent = '';
-    // Create mapping of (L, S) positions to array of hazard objects
+
     const hazardPositions = new Map();
     hazards.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
-      if (!hazardPositions.has(key)) {
-        hazardPositions.set(key, []);
-      }
+      if (!hazardPositions.has(key)) hazardPositions.set(key, []);
       hazardPositions.get(key).push({ seq: i + 1, name: h.name });
+    });
+
+    const residualPositions = new Map();
+    hazards.forEach((h, i) => {
+      const rl = Math.max(1, h.L - 1);
+      const rs = Math.max(1, h.S - 1);
+      const key = `${rl}-${rs}`;
+      if (!residualPositions.has(key)) residualPositions.set(key, []);
+      residualPositions.get(key).push({ seq: i + 1, name: h.name });
     });
 
     const add = (txt, cls, l, s) => {
       const c = document.createElement('div');
       c.className = `cell ${cls}`;
       c.textContent = txt;
-      // Add hazard marker if this cell has hazards
+      if (l && s) {
+        c.dataset.l = l;
+        c.dataset.s = s;
+      }
       if (l && s && hazardPositions.has(`${l}-${s}`)) {
         const cellHazards = hazardPositions.get(`${l}-${s}`);
         if (cellHazards.length === 1) {
-          // Single hazard - show white circle with number
           const marker = document.createElement('div');
           marker.className = 'hazard-marker';
           marker.textContent = cellHazards[0].seq;
           c.appendChild(marker);
         } else if (cellHazards.length === 2) {
-          // Two hazards - stack markers
           const cluster = document.createElement('div');
           cluster.className = 'hazard-marker-cluster';
           cellHazards.forEach(h => {
@@ -675,21 +924,31 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           });
           c.appendChild(cluster);
         } else {
-          // Three or more - show count badge with tooltip
           const countBadge = document.createElement('div');
           countBadge.className = 'hazard-marker-count';
           countBadge.textContent = `×${cellHazards.length}`;
           const tooltip = document.createElement('div');
           tooltip.className = 'hazard-tooltip';
-          tooltip.innerHTML = '<strong>Hazards in this cell:</strong><br/>' + 
+          tooltip.innerHTML = '<strong>Hazards in this cell:</strong><br/>' +
             cellHazards.map(h => `#${h.seq}: ${h.name}`).join('<br/>');
           countBadge.appendChild(tooltip);
           c.appendChild(countBadge);
         }
       }
+      if (l && s && residualPositions.has(`${l}-${s}`)) {
+        const entries = residualPositions.get(`${l}-${s}`);
+        const score = l * s;
+        const borderCol = residualBorderColor(score);
+        const marker = document.createElement('div');
+        marker.className = 'hazard-marker residual-marker';
+        marker.style.borderColor = borderCol;
+        marker.style.color = '#212121';
+        marker.textContent = entries.length === 1 ? entries[0].seq : `×${entries.length}`;
+        c.appendChild(marker);
+      }
       els.riskMatrix.appendChild(c);
     };
-    // Data rows: L5-L1 with scores
+
     [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
       for (let s = 1; s <= 5; s++) {
@@ -699,11 +958,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         add(String(score), cls, l, s);
       }
     });
-    // Footer row: corner + S1-S5
     add('', '');
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
-    // --- Section A: Risk Summary Dashboard ---
+    // ── Risk Summary Dashboard ─────────────────────────────────────────────────
     const totalHazards = hazards.length;
     const highestRisk = overall;
     const highestRiskBand = highestRisk <= 4 ? 'kpi-green' : highestRisk <= 9 ? 'kpi-yellow' : highestRisk <= 16 ? 'kpi-amber' : 'kpi-red';
@@ -741,9 +999,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       </div>
     `;
 
-    // --- Section B: Hierarchy of Controls Table ---
+    // ── Hierarchy of Controls ──────────────────────────────────────────────────
     const hocTable = document.createElement('table');
     hocTable.className = 'hoc-table';
+    hocTable.id = 'hocTableEl';
     const hocCaption = document.createElement('caption');
     hocCaption.textContent = 'Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF';
     hocTable.appendChild(hocCaption);
@@ -768,10 +1027,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.hocTable.innerHTML = '';
     els.hocTable.appendChild(hocTable);
 
-    // --- Section C: Assessment Metadata Footer ---
-    const formattedDate = assessmentTimestamp.toLocaleString('en-US', { 
-      year: 'numeric', month: 'long', day: 'numeric', 
-      hour: '2-digit', minute: '2-digit', second: '2-digit' 
+    // ── Assessment Metadata ────────────────────────────────────────────────────
+    const formattedDate = assessmentTimestamp.toLocaleString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
     els.metadataFooter.innerHTML = `
       <h4>Assessment Information</h4>
@@ -791,9 +1050,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     `;
   }
 
-  // ── Main analysis orchestrator ─────────────────────────────────────────────
   async function analyze(dataUrl) {
-    // If model is still loading, queue the analysis and show loading
     if (modelLoading) {
       pendingAnalysis = dataUrl;
       setLoading(true, '📦 Waiting for ML model to load...');
@@ -801,6 +1058,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     }
 
     setLoading(true, 'Loading image...');
+    assessmentTimestamp = new Date();
     try {
       imageData = dataUrl;
       hazards = [];
@@ -824,7 +1082,6 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
             hazards = aiResult;
             analysisMode = 'ai';
           } else if (aiResult !== null) {
-            // AI succeeded but found nothing — run COCO as supplement
             setLoading(true, 'Running object detection...');
             const cocoResult = await cocoHazards(img);
             hazards = cocoResult.length > 0 ? cocoResult : heuristicHazards(canvas);
@@ -860,10 +1117,13 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   }
 
   function exportReport() {
-    const modeLabel = { ai: 'AI Vision (Gemini)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
+    const modeLabel = { ai: 'AI Vision (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
     const r = riskFor(overall).label;
     let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${modeLabel}\n\nHazards Detected:\n`;
-    hazards.forEach((h, i) => out += `${i + 1}. ${h.name} | Likelihood=${h.L} Severity=${h.S} Risk=${h.risk}${h.details ? ' | ' + h.details : ''}\n`);
+    hazards.forEach((h, i) => {
+      const d = getRowResidualData(i);
+      out += `${i + 1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk} | ResidualRisk=${d.residualScore} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
+    });
     out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
     const blob = new Blob([out], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -874,10 +1134,313 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     URL.revokeObjectURL(url);
   }
 
+  // ── PDF Export ─────────────────────────────────────────────────────────────
+  async function exportPDF() {
+    if (!window.jspdf) {
+      showWarning('PDF library not loaded. Please wait and try again.');
+      return;
+    }
+    setLoading(true, '📄 Generating PDF...');
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = 210;
+      const pageH = 297;
+      const margin = 15;
+      const contentW = pageW - margin * 2;
+      let y = margin;
+
+      function checkPageBreak(needed) {
+        if (y + needed > pageH - margin) {
+          doc.addPage();
+          y = margin;
+        }
+      }
+
+      function sectionTitle(text) {
+        checkPageBreak(10);
+        doc.setFontSize(13);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(21, 101, 192);
+        doc.text(text, margin, y);
+        y += 2;
+        doc.setDrawColor(21, 101, 192);
+        doc.setLineWidth(0.4);
+        doc.line(margin, y, margin + contentW, y);
+        y += 5;
+        doc.setTextColor(33, 33, 33);
+      }
+
+      // ── Header ──
+      doc.setFillColor(255, 109, 0);
+      doc.rect(0, 0, pageW, 28, 'F');
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(255, 255, 255);
+      doc.text('HSE Visual Risk Assessment Report', pageW / 2, 12, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('VisualRiskAssessor — AI Powered', pageW / 2, 20, { align: 'center' });
+      y = 34;
+      doc.setTextColor(33, 33, 33);
+
+      // ── Metadata ──
+      sectionTitle('Assessment Metadata');
+      const ts = assessmentTimestamp || new Date();
+      const formattedDate = ts.toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const modeLabel = { ai: 'AI Vision — Llama 4 Scout (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
+      const metaRows = [
+        ['Date & Time', formattedDate],
+        ['Analysis Method', modeLabel],
+        ['Standard Reference', 'ISO 45001:2018 / ADOSH-SF'],
+        ['Overall Risk Score', `${overall} / 25`],
+        ['Overall Risk Level', riskFor(overall).label]
+      ];
+      doc.autoTable({
+        startY: y,
+        head: [],
+        body: metaRows,
+        theme: 'plain',
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 }, 1: { cellWidth: contentW - 50 } },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      // ── Image ──
+      if (imageData) {
+        checkPageBreak(10);
+        sectionTitle('Assessed Image');
+        try {
+          const img = new Image();
+          img.src = imageData;
+          await new Promise(res => { img.onload = res; if (img.complete) res(); });
+          const imgAspect = img.naturalWidth / img.naturalHeight;
+          const imgW = contentW;
+          const imgH = Math.min(imgW / imgAspect, 80);
+          checkPageBreak(imgH + 4);
+          doc.addImage(imageData, 'JPEG', margin, y, imgW, imgH);
+          y += imgH + 6;
+        } catch (_) {}
+      }
+
+      // ── KPI Summary ──
+      checkPageBreak(20);
+      sectionTitle('Risk Summary');
+      const totalHazards = hazards.length;
+      const criticalCount = hazards.filter(h => h.risk >= 17).length;
+      const highCount = hazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
+      let overallSiteRating = 'Low';
+      if (criticalCount > 0) overallSiteRating = 'Critical';
+      else if (highCount > 0) overallSiteRating = 'High';
+      else if (hazards.length > 0 && hazards.every(h => h.risk <= 9)) overallSiteRating = 'Medium';
+
+      doc.autoTable({
+        startY: y,
+        head: [['Total Hazards', 'Highest Risk Score', 'Critical + High', 'Overall Site Rating']],
+        body: [[totalHazards, overall, criticalCount + highCount, overallSiteRating]],
+        theme: 'grid',
+        headStyles: { fillColor: [66, 66, 66], textColor: 255, fontStyle: 'bold', fontSize: 10 },
+        bodyStyles: { fontSize: 12, fontStyle: 'bold', halign: 'center' },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      // ── Risk Register ──
+      checkPageBreak(20);
+      sectionTitle('Risk Register');
+
+      function scoreColor(score) {
+        if (score <= 4) return [39, 174, 96];
+        if (score <= 9) return [241, 196, 15];
+        if (score <= 16) return [230, 126, 34];
+        return [192, 57, 43];
+      }
+
+      const rrHead = [['#', 'Hazard', 'Details', 'L', 'S', 'Score', 'Rating', 'Conf', 'Controls In Place', 'Res.L', 'Res.S', 'Res.Risk', 'Owner', 'Corrective Action', 'Target Date', 'Status']];
+      const rrBody = hazards.map((h, i) => {
+        const d = getRowResidualData(i);
+        const hr = riskFor(h.risk);
+        const ratingLabel = hr.label.replace(' Risk', '');
+        return [
+          i + 1,
+          h.name,
+          h.details || '-',
+          h.L,
+          h.S,
+          h.risk,
+          ratingLabel === 'Critical' ? 'Critical' : ratingLabel,
+          `${Math.round((h.conf || 0) * 100)}%`,
+          d.controls || '-',
+          d.rl,
+          d.rs,
+          d.residualScore,
+          d.owner || '-',
+          d.action || '-',
+          d.target || '-',
+          d.status
+        ];
+      });
+
+      doc.autoTable({
+        startY: y,
+        head: rrHead,
+        body: rrBody,
+        theme: 'grid',
+        headStyles: { fillColor: [66, 66, 66], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+        bodyStyles: { fontSize: 7, cellPadding: 2 },
+        columnStyles: {
+          0: { cellWidth: 6 },
+          1: { cellWidth: 18 },
+          2: { cellWidth: 22 },
+          3: { cellWidth: 6 },
+          4: { cellWidth: 6 },
+          5: { cellWidth: 8 },
+          6: { cellWidth: 10 },
+          7: { cellWidth: 8 },
+          8: { cellWidth: 20 },
+          9: { cellWidth: 8 },
+          10: { cellWidth: 8 },
+          11: { cellWidth: 10 },
+          12: { cellWidth: 14 },
+          13: { cellWidth: 20 },
+          14: { cellWidth: 14 },
+          15: { cellWidth: 12 }
+        },
+        didParseCell(data) {
+          if (data.section === 'body') {
+            if (data.column.index === 5) {
+              const score = parseInt(data.cell.raw, 10);
+              const col = scoreColor(score);
+              data.cell.styles.fillColor = col;
+              data.cell.styles.textColor = score > 4 && score <= 9 ? [33,33,33] : [255,255,255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.column.index === 11) {
+              const score = parseInt(data.cell.raw, 10);
+              const col = scoreColor(score);
+              data.cell.styles.fillColor = col;
+              data.cell.styles.textColor = score > 4 && score <= 9 ? [33,33,33] : [255,255,255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.column.index === 15) {
+              const status = data.cell.raw;
+              if (status === 'Open') { data.cell.styles.fillColor = [244, 67, 54]; data.cell.styles.textColor = [255,255,255]; }
+              else if (status === 'In Progress') { data.cell.styles.fillColor = [255, 152, 0]; data.cell.styles.textColor = [255,255,255]; }
+              else if (status === 'Closed') { data.cell.styles.fillColor = [76, 175, 80]; data.cell.styles.textColor = [255,255,255]; }
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      // ── Hierarchy of Controls ──
+      checkPageBreak(20);
+      sectionTitle('Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF');
+      const hocHead = [['#', 'Hazard', 'Eliminate', 'Substitute', 'Engineering Control', 'Administrative Control', 'PPE Required']];
+      const hocBody = hazards.map((h, i) => [
+        i + 1,
+        h.name,
+        h.eliminate || 'N/A',
+        h.substitute || 'N/A',
+        h.engineering || 'N/A',
+        h.administrative || 'N/A',
+        h.ppe || 'N/A'
+      ]);
+      doc.autoTable({
+        startY: y,
+        head: hocHead,
+        body: hocBody,
+        theme: 'grid',
+        headStyles: { fillColor: [66, 66, 66], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8, cellPadding: 2 },
+        margin: { left: margin, right: margin }
+      });
+      y = doc.lastAutoTable.finalY + 6;
+
+      // ── Risk Matrix screenshot ──
+      try {
+        checkPageBreak(10);
+        sectionTitle('Risk Matrix');
+        const matrixEl = $('riskMatrix');
+        if (matrixEl && window.html2canvas) {
+          const canvas = await html2canvas(matrixEl, { backgroundColor: '#ffffff', scale: 2 });
+          const imgData = canvas.toDataURL('image/png');
+          const mxW = Math.min(contentW * 0.6, 100);
+          const mxH = (canvas.height / canvas.width) * mxW;
+          checkPageBreak(mxH + 4);
+          doc.addImage(imgData, 'PNG', margin, y, mxW, mxH);
+          y += mxH + 4;
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(80, 80, 80);
+          doc.text('● Filled circle = Initial Risk   ○ Hollow circle = Residual Risk', margin, y);
+          y += 6;
+          doc.setTextColor(33, 33, 33);
+        }
+      } catch (_) {}
+
+      // ── Disclaimer ──
+      checkPageBreak(18);
+      sectionTitle('Disclaimer');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(211, 47, 47);
+      const disclaimer = 'This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register. The findings are based on visual analysis only and may not capture all hazards present in the assessed environment.';
+      const splitDisclaimer = doc.splitTextToSize(disclaimer, contentW);
+      checkPageBreak(splitDisclaimer.length * 5 + 4);
+      doc.text(splitDisclaimer, margin, y);
+      y += splitDisclaimer.length * 5 + 6;
+      doc.setTextColor(33, 33, 33);
+      doc.setFont('helvetica', 'normal');
+
+      // ── Signature Block ──
+      checkPageBreak(40);
+      sectionTitle('Signature Block');
+      const sigY = y;
+      const sigColW = contentW / 3;
+      const sigLabels = ['Assessed By', 'Designation', 'Date'];
+      sigLabels.forEach((label, idx) => {
+        const x = margin + idx * sigColW;
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.text(label, x + 2, sigY);
+        doc.setFont('helvetica', 'normal');
+        doc.setDrawColor(100, 100, 100);
+        doc.setLineWidth(0.3);
+        doc.line(x + 2, sigY + 14, x + sigColW - 4, sigY + 14);
+        doc.setFontSize(8);
+        doc.setTextColor(130, 130, 130);
+        doc.text('(Sign above)', x + 2, sigY + 18);
+        doc.setTextColor(33, 33, 33);
+      });
+      y = sigY + 24;
+
+      // ── Footer on all pages ──
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let pg = 1; pg <= totalPages; pg++) {
+        doc.setPage(pg);
+        doc.setFontSize(8);
+        doc.setTextColor(130, 130, 130);
+        doc.text(`Page ${pg} of ${totalPages}  |  VisualRiskAssessor — HSE Risk Assessment Report`, margin, pageH - 8);
+        doc.text(new Date().toISOString().slice(0, 10), pageW - margin, pageH - 8, { align: 'right' });
+      }
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      doc.save(`HSE-RiskAssessment-${dateStr}.pdf`);
+    } catch (err) {
+      showWarning(`PDF generation failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function resetApp() {
     stopCamera();
     hazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
-    pendingAnalysis = null;
+    pendingAnalysis = null; assessmentTimestamp = null;
     els.fileInput.value = '';
     els.results.classList.add('hidden');
     els.fallbackWarning.classList.add('hidden');
@@ -903,7 +1466,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   els.btnCapture.addEventListener('click', captureFromCamera);
   els.btnStop.addEventListener('click', stopCamera);
   els.btnExport.addEventListener('click', exportReport);
-  els.btnPrint.addEventListener('click', () => window.print());
+  els.btnPDF.addEventListener('click', exportPDF);
   els.btnReset.addEventListener('click', resetApp);
   els.fileInput.addEventListener('change', e => {
     const f = e.target.files?.[0];
