@@ -33,12 +33,61 @@
     .risk-high { border-left-color:var(--hi); }
     .risk-extreme { border-left-color:var(--x); }
     .matrix { display:grid; grid-template-columns:42px repeat(5,1fr); gap:3px; max-width:450px; }
-    .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; }
+    .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; position:relative; }
     .head { background:#1565c0; color:#fff; }
     .low { background:#27ae60; color:#fff; }
     .med { background:#f1c40f; }
     .high { background:#e67e22; color:#fff; }
     .ext { background:#c0392b; color:#fff; }
+    .hazard-marker {
+      position:absolute;
+      top:2px;
+      right:2px;
+      width:18px;
+      height:18px;
+      background:#fff;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:11px;
+      font-weight:700;
+      color:#212121;
+      box-shadow:0 1px 3px rgba(0,0,0,.3);
+      z-index:1;
+    }
+    .risk-table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+      margin-bottom:12px;
+    }
+    .risk-table caption {
+      font-size:15px;
+      font-weight:700;
+      text-align:left;
+      padding:8px 4px;
+      color:#212121;
+    }
+    .risk-table th {
+      background:#424242;
+      color:#fff;
+      padding:10px 8px;
+      text-align:left;
+      font-weight:600;
+      border:1px solid #333;
+    }
+    .risk-table td {
+      padding:8px;
+      border:1px solid #ddd;
+      text-align:left;
+    }
+    .risk-table tbody tr:nth-child(even) {
+      background:#f9f9f9;
+    }
+    .risk-table tbody tr:nth-child(odd) {
+      background:#fff;
+    }
     .mode-badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; margin-left:8px; vertical-align:middle; }
     .mode-ai { background:#6a1b9a; color:#fff; }
     .mode-ml { background:#1565c0; color:#fff; }
@@ -445,27 +494,62 @@ If no hazards are visible, return an empty array [].`;
     els.overallLevel.style.background = r.color;
 
     els.hazardsList.textContent = '';
-    hazards.forEach(h => {
+    const table = document.createElement('table');
+    table.className = 'risk-table';
+    const caption = document.createElement('caption');
+    caption.textContent = 'Risk Register — AI Visual Assessment';
+    table.appendChild(caption);
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Details</th><th>Likelihood (L)</th><th>Severity (S)</th><th>Risk Score</th><th>Rating</th><th>Confidence</th><th>Recommended Controls</th></tr>';
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    hazards.forEach((h, i) => {
       const hr = riskFor(h.risk);
-      const item = document.createElement('div');
-      item.className = `hazard-item ${hr.cls}`;
-      const t = document.createElement('div');
-      t.textContent = `${h.name} — ${Math.round((h.conf || 0) * 100)}% confidence`;
-      t.style.fontWeight = '700';
-      const d = document.createElement('div');
-      d.textContent = `Likelihood ${h.L} × Severity ${h.S} = Risk ${h.risk} (${hr.label.replace(' Risk', '')})`;
-      item.append(t, d);
-      if (h.details) {
-        const det = document.createElement('div');
-        det.style.cssText = 'font-size:.85rem;color:#555;margin-top:4px';
-        det.textContent = h.details;
-        item.append(det);
-      }
-      els.hazardsList.appendChild(item);
+      const tr = document.createElement('tr');
+      const ratingLabel = hr.label.replace(' Risk', '');
+      const ratingText = ratingLabel === 'Critical' ? 'Critical' : ratingLabel;
+      const riskColorClass = h.risk <= 4 ? 'low' : h.risk <= 9 ? 'med' : h.risk <= 16 ? 'high' : 'ext';
+      const riskBgColor = riskColorClass === 'low' ? '#27ae60' : riskColorClass === 'med' ? '#f1c40f' : riskColorClass === 'high' ? '#e67e22' : '#c0392b';
+      const riskTextColor = riskColorClass === 'med' ? '#212121' : '#fff';
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td><strong>${h.name}</strong></td>
+        <td>${h.details || '-'}</td>
+        <td>${h.L}</td>
+        <td>${h.S}</td>
+        <td style="background-color:${riskBgColor};color:${riskTextColor};font-weight:700;">${h.risk}</td>
+        <td>${ratingText}</td>
+        <td>${Math.round((h.conf || 0) * 100)}%</td>
+        <td>${(h.recs || []).join(', ')}</td>
+      `;
+      tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
+    els.hazardsList.appendChild(table);
 
     els.riskMatrix.textContent = '';
-    const add = (txt, cls) => { const c = document.createElement('div'); c.className = `cell ${cls}`; c.textContent = txt; els.riskMatrix.appendChild(c); };
+    // Create mapping of (L, S) positions to hazard numbers
+    const hazardPositions = new Map();
+    hazards.forEach((h, i) => {
+      const key = `${h.L}-${h.S}`;
+      if (!hazardPositions.has(key)) {
+        hazardPositions.set(key, i + 1);
+      }
+    });
+
+    const add = (txt, cls, l, s) => {
+      const c = document.createElement('div');
+      c.className = `cell ${cls}`;
+      c.textContent = txt;
+      // Add hazard marker if this cell has a hazard
+      if (l && s && hazardPositions.has(`${l}-${s}`)) {
+        const marker = document.createElement('div');
+        marker.className = 'hazard-marker';
+        marker.textContent = hazardPositions.get(`${l}-${s}`);
+        c.appendChild(marker);
+      }
+      els.riskMatrix.appendChild(c);
+    };
     // Data rows: L5-L1 with scores
     [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
@@ -473,7 +557,7 @@ If no hazards are visible, return an empty array [].`;
         const score = l * s;
         let cls = 'low';
         if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
-        add(String(score), cls);
+        add(String(score), cls, l, s);
       }
     });
     // Footer row: corner + S1-S5
