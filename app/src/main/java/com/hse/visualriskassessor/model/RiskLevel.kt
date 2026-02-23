@@ -12,8 +12,8 @@ enum class RiskLevel(val displayName: String, val colorRes: Int, val score: Int)
             return when (score) {
                 in 1..4 -> LOW
                 in 5..9 -> MEDIUM
-                in 10..15 -> HIGH
-                in 16..20 -> VERY_HIGH
+                in 10..16 -> HIGH
+                in 17..25 -> VERY_HIGH
                 else -> EXTREME
             }
         }

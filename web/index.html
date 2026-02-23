@@ -195,7 +195,8 @@
   function riskFor(score) {
     if (score <= 4) return { label: 'Low Risk', cls: 'risk-low', color: 'var(--ok)' };
     if (score <= 9) return { label: 'Medium Risk', cls: 'risk-medium', color: 'var(--mid)' };
-    if (score <= 15) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)' };
+    if (score <= 16) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)' };
+    if (score <= 25) return { label: 'Critical Risk', cls: 'risk-extreme', color: 'var(--x)' };
     return { label: 'Extreme Risk', cls: 'risk-extreme', color: 'var(--x)' };
   }
 
@@ -475,7 +476,7 @@ If no hazards are visible, return an empty array [].`;
       for (let s = 1; s <= 5; s++) {
         const score = l * s;
         let cls = 'low';
-        if (score >= 20) cls = 'ext'; else if (score >= 15) cls = 'high'; else if (score >= 6) cls = 'med';
+        if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
         const c = document.createElement('div');
         c.className = `cell ${cls}${hazards.some(h => h.L === l && h.S === s) ? ' mark' : ''}`;
         c.textContent = String(score);

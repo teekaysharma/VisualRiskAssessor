@@ -119,13 +119,26 @@ class RiskMatrixView @JvmOverloads constructor(
         for (col in 0..4) {
             val labelX = startX + col * cellSize + cellSize / 2
             canvas.drawText(
-                severityLabels[col],
+                "S${col + 1}",
                 labelX,
                 severityLabelY,
                 labelPaint
             )
         }
 
+        // Draw L labels on the left side (L5 at top, L1 at bottom)
+        labelPaint.textAlign = Paint.Align.RIGHT
+        for (row in 0..4) {
+            val labelY = startY + (4 - row) * cellSize + cellSize / 2 + labelPaint.textSize / 3
+            canvas.drawText(
+                "L${5 - row}",
+                startX - 10f,
+                labelY,
+                labelPaint
+            )
+        }
+
+        labelPaint.textAlign = Paint.Align.CENTER
         canvas.drawText(
             "Severity →",
             width / 2f,
@@ -149,8 +162,8 @@ class RiskMatrixView @JvmOverloads constructor(
             RiskLevel.LOW -> Color.rgb(76, 175, 80)
             RiskLevel.MEDIUM -> Color.rgb(255, 235, 59)
             RiskLevel.HIGH -> Color.rgb(255, 152, 0)
-            RiskLevel.VERY_HIGH -> Color.rgb(255, 87, 34)
-            RiskLevel.EXTREME -> Color.rgb(211, 47, 47)
+            RiskLevel.VERY_HIGH -> Color.rgb(211, 47, 47)
+            RiskLevel.EXTREME -> Color.rgb(183, 28, 28)
         }
     }
 
