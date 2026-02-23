@@ -493,6 +493,8 @@
     const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
 Analyse this workplace image and identify all visible hazards.
 
+Identify each hazard as a separate entry even if hazards are co-located. Do not merge multiple hazard types into one entry. A spilled chemical and a slip risk from that spill are two separate hazards with separate entries.
+
 For EACH hazard found, respond ONLY with a JSON array (no markdown, no prose) like:
 [
   {
@@ -528,7 +530,7 @@ If no hazards are visible, return an empty array [].`;
         }
       ],
       temperature: 0.1,
-      max_tokens: 1024
+      max_tokens: 2048
     };
 
     try {
