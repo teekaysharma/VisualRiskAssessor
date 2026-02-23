@@ -77,8 +77,8 @@
       </div>
 
       <div id="apiKeySection">
-        <label for="apiKeyInput">🤖 Gemini Vision API Key (optional — enables deep AI analysis)</label>
-        <input id="apiKeyInput" type="password" placeholder="Paste your Google Gemini API key here..." autocomplete="off" />
+        <label for="apiKeyInput">🤖 Groq API Key (optional — enables deep AI analysis)</label>
+        <input id="apiKeyInput" type="password" placeholder="Paste your Groq API key here..." autocomplete="off" />
         <p style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only. Enables scene-understanding beyond object labels. <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get a free key →</a></p>
       </div>
     </section>
@@ -348,9 +348,6 @@
     const apiKey = els.apiKeyInput.value.trim();
     if (!apiKey) return null;
 
-    const base64 = dataUrl.split(',')[1];
-    const mimeType = dataUrl.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
-
     const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
 Analyse this workplace image and identify all visible hazards.
 
@@ -372,23 +369,32 @@ Confidence must be 0.0-1.0.
 If no hazards are visible, return an empty array [].`;
 
     const body = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          { inline_data: { mime_type: mimeType, data: base64 } }
-        ]
-      }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: dataUrl } }
+          ]
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 1024
     };
-
-    // Use gemini-2.0-flash (latest stable) for AI analysis
-    const modelId = 'gemini-2.0-flash';
 
     try {
       const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/${modelId}:generateContent?key=${apiKey}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-        );
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify(body)
+        }
+      );
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
@@ -396,7 +402,7 @@ If no hazards are visible, return an empty array [].`;
         }
 
         const data = await resp.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+        const text = data?.choices?.[0]?.message?.content || '[]';
         const cleaned = text.replace(/```json|```/g, '').trim();
         const raw = JSON.parse(cleaned);
 
