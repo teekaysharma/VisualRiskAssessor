@@ -398,7 +398,7 @@ If no hazards are visible, return an empty array [].`;
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
-          throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
+          throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
         }
 
         const data = await resp.json();
