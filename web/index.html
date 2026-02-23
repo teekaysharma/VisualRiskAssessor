@@ -488,7 +488,9 @@ If no hazards are visible, return an empty array [].`;
       analysisMode = 'heuristic';
 
       const img = new Image();
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = dataUrl; });
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; if (img.complete) resolve(); });
+      if (img.decode) await img.decode();
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
