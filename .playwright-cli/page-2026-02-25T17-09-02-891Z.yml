@@ -1,0 +1,19 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "VisualRiskAssessor" [level=1] [ref=e3]
+    - paragraph [ref=e4]: HSE visual risk assessment — AI powered
+  - main [ref=e5]:
+    - status [ref=e6]: 📦 Loading ML model...
+    - generic [ref=e7]:
+      - heading "Image Input" [level=2] [ref=e8]
+      - button "📷 Open Camera" [ref=e9] [cursor=pointer]
+      - button "🖼 Upload Image" [ref=e10] [cursor=pointer]
+      - button "Upload an image" [ref=e11] [cursor=pointer]: Click or press Enter/Space to upload an image.
+      - generic [ref=e12]:
+        - generic [ref=e13]: 🤖 Groq API Key (optional — enables deep AI analysis)
+        - textbox "🤖 Groq API Key (optional — enables deep AI analysis)" [ref=e14]:
+          - /placeholder: Paste your Groq API key here...
+        - paragraph [ref=e15]:
+          - text: Key stays in your browser only. Enables scene-understanding beyond object labels.
+          - link "Get a free key →" [ref=e16] [cursor=pointer]:
+            - /url: https://console.groq.com/keys

@@ -37,58 +37,52 @@
     .risk-high { border-left-color:var(--hi); }
     .risk-extreme { border-left-color:var(--x); }
     .matrix-wrap { position:relative; display:inline-block; }
-    .matrix { display:grid; grid-template-columns:42px repeat(5,1fr); gap:3px; max-width:450px; }
+    .matrix { display:grid; grid-template-columns:60px repeat(5, minmax(60px, 1fr)); gap:4px; min-width:350px; min-height:350px; }
     .matrix-legend { display:flex; gap:16px; margin-top:10px; font-size:12px; align-items:center; flex-wrap:wrap; }
     .matrix-legend-item { display:flex; align-items:center; gap:6px; }
     .legend-dot-initial { width:14px; height:14px; background:#fff; border-radius:50%; border:2px solid #212121; display:inline-block; box-shadow:0 1px 3px rgba(0,0,0,.3); flex-shrink:0; }
     .legend-dot-residual { width:14px; height:14px; background:transparent; border-radius:50%; border:3px solid #212121; display:inline-block; flex-shrink:0; }
-    .cell { min-height:36px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:.8rem; font-weight:600; position:relative; }
+    .cell { min-height:60px; min-width:60px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; position:relative; }
     .head { background:#1565c0; color:#fff; }
     .low { background:#27ae60; color:#fff; }
     .med { background:#f1c40f; }
     .high { background:#e67e22; color:#fff; }
     .ext { background:#c0392b; color:#fff; }
     .hazard-marker {
-      position:absolute;
-      top:2px;
-      right:2px;
-      width:18px;
-      height:18px;
+      width:22px;
+      height:22px;
       background:#fff;
       border-radius:50%;
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size:11px;
+      font-size:12px;
       font-weight:700;
       color:#212121;
       box-shadow:0 1px 3px rgba(0,0,0,.3);
       z-index:1;
+      flex-shrink:0;
     }
     .hazard-marker.residual-marker {
       background:transparent;
       border:2px solid #212121;
-      top:22px;
     }
-    .hazard-marker-cluster {
+    .cell-marker-row {
+      position:absolute;
+      bottom:4px;
+      left:50%;
+      transform:translateX(-50%);
       display:flex;
       flex-wrap:wrap;
-      max-width:36px;
-      max-height:36px;
-      gap:1px;
-      position:absolute;
-      top:2px;
-      right:2px;
-      justify-content:flex-end;
-      align-content:flex-start;
+      gap:3px;
+      justify-content:center;
+      max-width:90%;
     }
-    .hazard-marker-cluster .hazard-marker {
-      position:relative;
-      top:auto;
-      right:auto;
-      width:16px;
-      height:16px;
-      font-size:9px;
+    .cell-score {
+      position:absolute;
+      top:4px;
+      left:50%;
+      transform:translateX(-50%);
     }
     .hazard-marker-count {
       position:absolute;
@@ -155,11 +149,12 @@
     .metadata-value { color:#212121; }
     .disclaimer { font-size:11px; color:#d32f2f; font-style:italic; margin:10px 0; }
     .action-buttons { margin-top:12px; }
+    .risk-tables-container { display:flex; flex-direction:column; gap:20px; }
     .risk-table {
       width:100%;
       border-collapse:collapse;
       font-size:12px;
-      margin-bottom:12px;
+      margin-bottom:0;
     }
     .risk-table caption {
       font-size:15px;
@@ -176,6 +171,7 @@
       font-weight:600;
       border:1px solid #333;
       font-size:11px;
+      white-space:nowrap;
     }
     .risk-table td {
       padding:6px;
@@ -196,6 +192,24 @@
       box-sizing:border-box;
     }
     .risk-table select { cursor:pointer; }
+
+    /* Table A - Hazard Assessment column widths */
+    .risk-table.table-a th:nth-child(1), .risk-table.table-a td:nth-child(1) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(2), .risk-table.table-a td:nth-child(2) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(3), .risk-table.table-a td:nth-child(3) { min-width:200px; }
+    .risk-table.table-a th:nth-child(4), .risk-table.table-a td:nth-child(4) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(5), .risk-table.table-a td:nth-child(5) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(6), .risk-table.table-a td:nth-child(6) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(7), .risk-table.table-a td:nth-child(7) { min-width:fit-content; }
+    .risk-table.table-a th:nth-child(8), .risk-table.table-a td:nth-child(8) { min-width:fit-content; }
+
+    /* Table B - Action Tracker column widths and scroll */
+    .table-b-wrapper { overflow-x:auto; }
+    @media (min-width:1024px) { .table-b-wrapper { overflow-x:visible; } }
+    .risk-table.table-b { min-width:900px; }
+    .risk-table.table-b th:nth-child(8), .risk-table.table-b td:nth-child(8) { min-width:180px; }
+    .risk-table.table-b th:nth-child(9), .risk-table.table-b td:nth-child(9) { min-width:130px; }
+    .risk-table.table-b th:nth-child(10), .risk-table.table-b td:nth-child(10) { min-width:100px; }
     .status-open { background:#f44336 !important; color:#fff; }
     .status-open select { background:#f44336; color:#fff; }
     .status-inprogress { background:#ff9800 !important; color:#fff; }
@@ -677,29 +691,78 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       residualPositions.get(key).push({ seq: i + 1, name: h.name });
     });
 
-    document.querySelectorAll('.residual-marker').forEach(m => m.remove());
+    // Rebuild the entire risk matrix to update markers
+    els.riskMatrix.textContent = '';
 
-    const cells = els.riskMatrix.querySelectorAll('.cell[data-l][data-s]');
-    cells.forEach(cell => {
-      const l = parseInt(cell.dataset.l, 10);
-      const s = parseInt(cell.dataset.s, 10);
-      const key = `${l}-${s}`;
-      if (residualPositions.has(key)) {
-        const entries = residualPositions.get(key);
+    const hazardPositions = new Map();
+    hazards.forEach((h, i) => {
+      const key = `${h.L}-${h.S}`;
+      if (!hazardPositions.has(key)) hazardPositions.set(key, []);
+      hazardPositions.get(key).push({ seq: i + 1, name: h.name });
+    });
+
+    const add = (txt, cls, l, s) => {
+      const c = document.createElement('div');
+      c.className = `cell ${cls}`;
+      if (l && s) {
+        c.dataset.l = l;
+        c.dataset.s = s;
+      }
+
+      // Score number at top-center
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'cell-score';
+      scoreSpan.textContent = txt;
+      c.appendChild(scoreSpan);
+
+      // Marker row at bottom for all markers
+      const markerRow = document.createElement('div');
+      markerRow.className = 'cell-marker-row';
+
+      // Add initial risk markers
+      if (l && s && hazardPositions.has(`${l}-${s}`)) {
+        const cellHazards = hazardPositions.get(`${l}-${s}`);
+        cellHazards.forEach(h => {
+          const marker = document.createElement('div');
+          marker.className = 'hazard-marker';
+          marker.textContent = h.seq;
+          markerRow.appendChild(marker);
+        });
+      }
+
+      // Add residual risk markers
+      if (l && s && residualPositions.has(`${l}-${s}`)) {
+        const entries = residualPositions.get(`${l}-${s}`);
         const score = l * s;
         const borderCol = residualBorderColor(score);
-        const marker = document.createElement('div');
-        marker.className = 'hazard-marker residual-marker';
-        marker.style.borderColor = borderCol;
-        marker.style.color = '#212121';
-        if (entries.length === 1) {
-          marker.textContent = entries[0].seq;
-        } else {
-          marker.textContent = `×${entries.length}`;
-        }
-        cell.appendChild(marker);
+        entries.forEach(entry => {
+          const marker = document.createElement('div');
+          marker.className = 'hazard-marker residual-marker';
+          marker.style.borderColor = borderCol;
+          marker.style.color = '#212121';
+          marker.textContent = entry.seq;
+          markerRow.appendChild(marker);
+        });
+      }
+
+      if (markerRow.children.length > 0) {
+        c.appendChild(markerRow);
+      }
+
+      els.riskMatrix.appendChild(c);
+    };
+
+    [5, 4, 3, 2, 1].forEach(l => {
+      add(`L${l}`, 'head');
+      for (let s = 1; s <= 5; s++) {
+        const score = l * s;
+        let cls = 'low';
+        if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
+        add(String(score), cls, l, s);
       }
     });
+    add('', '');
+    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
     hazards.forEach((h, i) => {
       const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
@@ -735,16 +798,20 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
     assessmentTimestamp = assessmentTimestamp || new Date();
 
-    // ── Risk Register table ────────────────────────────────────────────────────
+    // ── Risk Register tables (split into Table A and Table B) ──────────────────
     els.hazardsList.textContent = '';
-    const table = document.createElement('table');
-    table.className = 'risk-table';
-    table.id = 'riskRegisterTable';
-    const caption = document.createElement('caption');
-    caption.textContent = 'Risk Register — AI Visual Assessment';
-    table.appendChild(caption);
-    const thead = document.createElement('thead');
-    thead.innerHTML = `<tr>
+    const tablesContainer = document.createElement('div');
+    tablesContainer.className = 'risk-tables-container';
+
+    // Table A — Hazard Assessment
+    const tableA = document.createElement('table');
+    tableA.className = 'risk-table table-a';
+    tableA.id = 'riskRegisterTableA';
+    const captionA = document.createElement('caption');
+    captionA.textContent = 'Hazard Assessment';
+    tableA.appendChild(captionA);
+    const theadA = document.createElement('thead');
+    theadA.innerHTML = `<tr>
       <th>#</th>
       <th>Hazard</th>
       <th>Details</th>
@@ -752,7 +819,24 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       <th>S</th>
       <th>Risk Score</th>
       <th>Rating</th>
-      <th>Conf.</th>
+      <th>Confidence</th>
+    </tr>`;
+    tableA.appendChild(theadA);
+    const tbodyA = document.createElement('tbody');
+
+    // Table B — Action Tracker
+    const tableBWrapper = document.createElement('div');
+    tableBWrapper.className = 'table-b-wrapper';
+    const tableB = document.createElement('table');
+    tableB.className = 'risk-table table-b';
+    tableB.id = 'riskRegisterTableB';
+    const captionB = document.createElement('caption');
+    captionB.textContent = 'Corrective Action Tracker';
+    tableB.appendChild(captionB);
+    const theadB = document.createElement('thead');
+    theadB.innerHTML = `<tr>
+      <th>#</th>
+      <th>Hazard</th>
       <th>Controls In Place</th>
       <th>Res. L</th>
       <th>Res. S</th>
@@ -762,48 +846,41 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       <th>Target Date</th>
       <th>Status</th>
     </tr>`;
-    table.appendChild(thead);
-    const tbody = document.createElement('tbody');
+    tableB.appendChild(theadB);
+    const tbodyB = document.createElement('tbody');
 
     hazards.forEach((h, i) => {
       const hr = riskFor(h.risk);
-      const tr = document.createElement('tr');
       const ratingLabel = hr.label.replace(' Risk', '');
+      const defaultRL = Math.max(1, h.L - 1);
+      const defaultRS = Math.max(1, h.S - 1);
+      const initialResidualScore = defaultRL * defaultRS;
+      const rrr = riskFor(initialResidualScore);
 
-      const tdNum = document.createElement('td');
-      tdNum.textContent = i + 1;
-      tr.appendChild(tdNum);
+      // Table A row
+      const trA = document.createElement('tr');
+      trA.innerHTML = `
+        <td>${i + 1}</td>
+        <td><strong>${h.name}</strong></td>
+        <td>${h.details || '-'}</td>
+        <td>${h.L}</td>
+        <td>${h.S}</td>
+        <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
+        <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
+        <td>${Math.round((h.conf || 0) * 100)}%</td>
+      `;
+      tbodyA.appendChild(trA);
 
-      const tdName = document.createElement('td');
-      tdName.innerHTML = `<strong>${h.name}</strong>`;
-      tr.appendChild(tdName);
+      // Table B row
+      const trB = document.createElement('tr');
 
-      const tdDetails = document.createElement('td');
-      tdDetails.textContent = h.details || '-';
-      tr.appendChild(tdDetails);
+      const tdNumB = document.createElement('td');
+      tdNumB.textContent = i + 1;
+      trB.appendChild(tdNumB);
 
-      const tdL = document.createElement('td');
-      tdL.textContent = h.L;
-      tr.appendChild(tdL);
-
-      const tdS = document.createElement('td');
-      tdS.textContent = h.S;
-      tr.appendChild(tdS);
-
-      const tdScore = document.createElement('td');
-      tdScore.textContent = h.risk;
-      tdScore.style.backgroundColor = hr.bg;
-      tdScore.style.color = hr.textColor;
-      tdScore.style.fontWeight = '700';
-      tr.appendChild(tdScore);
-
-      const tdRating = document.createElement('td');
-      tdRating.textContent = ratingLabel === 'Critical' ? 'Critical' : ratingLabel;
-      tr.appendChild(tdRating);
-
-      const tdConf = document.createElement('td');
-      tdConf.textContent = `${Math.round((h.conf || 0) * 100)}%`;
-      tr.appendChild(tdConf);
+      const tdNameB = document.createElement('td');
+      tdNameB.innerHTML = `<strong>${h.name}</strong>`;
+      trB.appendChild(tdNameB);
 
       const tdControls = document.createElement('td');
       const inputControls = document.createElement('input');
@@ -811,32 +888,27 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       inputControls.id = `controls_${i}`;
       inputControls.placeholder = 'Describe controls…';
       tdControls.appendChild(inputControls);
-      tr.appendChild(tdControls);
-
-      const defaultRL = Math.max(1, h.L - 1);
-      const defaultRS = Math.max(1, h.S - 1);
+      trB.appendChild(tdControls);
 
       const tdRL = document.createElement('td');
       const selRL = buildResidualDropdown(`rl_${i}`, defaultRL);
       selRL.addEventListener('change', updateResidualMatrix);
       tdRL.appendChild(selRL);
-      tr.appendChild(tdRL);
+      trB.appendChild(tdRL);
 
       const tdRS = document.createElement('td');
       const selRS = buildResidualDropdown(`rs_${i}`, defaultRS);
       selRS.addEventListener('change', updateResidualMatrix);
       tdRS.appendChild(selRS);
-      tr.appendChild(tdRS);
+      trB.appendChild(tdRS);
 
-      const initialResidualScore = defaultRL * defaultRS;
-      const rrr = riskFor(initialResidualScore);
       const tdResidualScore = document.createElement('td');
       tdResidualScore.id = `residual_score_${i}`;
       tdResidualScore.textContent = initialResidualScore;
       tdResidualScore.style.backgroundColor = rrr.bg;
       tdResidualScore.style.color = rrr.textColor;
       tdResidualScore.style.fontWeight = '700';
-      tr.appendChild(tdResidualScore);
+      trB.appendChild(tdResidualScore);
 
       const tdOwner = document.createElement('td');
       const inputOwner = document.createElement('input');
@@ -844,7 +916,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       inputOwner.id = `owner_${i}`;
       inputOwner.placeholder = 'Name / Role';
       tdOwner.appendChild(inputOwner);
-      tr.appendChild(tdOwner);
+      trB.appendChild(tdOwner);
 
       const tdAction = document.createElement('td');
       const inputAction = document.createElement('input');
@@ -852,14 +924,14 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       inputAction.id = `action_${i}`;
       inputAction.placeholder = 'Describe action…';
       tdAction.appendChild(inputAction);
-      tr.appendChild(tdAction);
+      trB.appendChild(tdAction);
 
       const tdTarget = document.createElement('td');
       const inputDate = document.createElement('input');
       inputDate.type = 'date';
       inputDate.id = `target_${i}`;
       tdTarget.appendChild(inputDate);
-      tr.appendChild(tdTarget);
+      trB.appendChild(tdTarget);
 
       const tdStatus = document.createElement('td');
       tdStatus.classList.add('status-open');
@@ -871,13 +943,17 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       selStatus.style.width = '100%';
       selStatus.style.cursor = 'pointer';
       tdStatus.appendChild(selStatus);
-      tr.appendChild(tdStatus);
+      trB.appendChild(tdStatus);
 
-      tbody.appendChild(tr);
+      tbodyB.appendChild(trB);
     });
 
-    table.appendChild(tbody);
-    els.hazardsList.appendChild(table);
+    tableA.appendChild(tbodyA);
+    tableB.appendChild(tbodyB);
+    tableBWrapper.appendChild(tableB);
+    tablesContainer.appendChild(tableA);
+    tablesContainer.appendChild(tableBWrapper);
+    els.hazardsList.appendChild(tablesContainer);
 
     // ── Risk Matrix ────────────────────────────────────────────────────────────
     els.riskMatrix.textContent = '';
@@ -901,51 +977,51 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     const add = (txt, cls, l, s) => {
       const c = document.createElement('div');
       c.className = `cell ${cls}`;
-      c.textContent = txt;
       if (l && s) {
         c.dataset.l = l;
         c.dataset.s = s;
       }
+
+      // Score number at top-center
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'cell-score';
+      scoreSpan.textContent = txt;
+      c.appendChild(scoreSpan);
+
+      // Marker row at bottom for all markers
+      const markerRow = document.createElement('div');
+      markerRow.className = 'cell-marker-row';
+
+      // Add initial risk markers
       if (l && s && hazardPositions.has(`${l}-${s}`)) {
         const cellHazards = hazardPositions.get(`${l}-${s}`);
-        if (cellHazards.length === 1) {
+        cellHazards.forEach(h => {
           const marker = document.createElement('div');
           marker.className = 'hazard-marker';
-          marker.textContent = cellHazards[0].seq;
-          c.appendChild(marker);
-        } else if (cellHazards.length === 2) {
-          const cluster = document.createElement('div');
-          cluster.className = 'hazard-marker-cluster';
-          cellHazards.forEach(h => {
-            const marker = document.createElement('div');
-            marker.className = 'hazard-marker';
-            marker.textContent = h.seq;
-            cluster.appendChild(marker);
-          });
-          c.appendChild(cluster);
-        } else {
-          const countBadge = document.createElement('div');
-          countBadge.className = 'hazard-marker-count';
-          countBadge.textContent = `×${cellHazards.length}`;
-          const tooltip = document.createElement('div');
-          tooltip.className = 'hazard-tooltip';
-          tooltip.innerHTML = '<strong>Hazards in this cell:</strong><br/>' +
-            cellHazards.map(h => `#${h.seq}: ${h.name}`).join('<br/>');
-          countBadge.appendChild(tooltip);
-          c.appendChild(countBadge);
-        }
+          marker.textContent = h.seq;
+          markerRow.appendChild(marker);
+        });
       }
+
+      // Add residual risk markers
       if (l && s && residualPositions.has(`${l}-${s}`)) {
         const entries = residualPositions.get(`${l}-${s}`);
         const score = l * s;
         const borderCol = residualBorderColor(score);
-        const marker = document.createElement('div');
-        marker.className = 'hazard-marker residual-marker';
-        marker.style.borderColor = borderCol;
-        marker.style.color = '#212121';
-        marker.textContent = entries.length === 1 ? entries[0].seq : `×${entries.length}`;
-        c.appendChild(marker);
+        entries.forEach(entry => {
+          const marker = document.createElement('div');
+          marker.className = 'hazard-marker residual-marker';
+          marker.style.borderColor = borderCol;
+          marker.style.color = '#212121';
+          marker.textContent = entry.seq;
+          markerRow.appendChild(marker);
+        });
       }
+
+      if (markerRow.children.length > 0) {
+        c.appendChild(markerRow);
+      }
+
       els.riskMatrix.appendChild(c);
     };
 
