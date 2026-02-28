@@ -2211,7 +2211,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       }
 
       if (hazards.length === 0) {
-        hazards = ruleBasedHazards(['general']);
+        hazards = [{ name: 'General Workplace Hazard', L: 2, S: 2, risk: 4, conf: 0.5, recs: hazardDB.other.recs, source: 'rule-based', details: 'No specific hazards detected — general workplace risk profile applied.', eliminate: hazardDB.other.eliminate || 'N/A', substitute: hazardDB.other.substitute || 'N/A', engineering: hazardDB.other.engineering || 'N/A', administrative: hazardDB.other.administrative || 'N/A', ppe: hazardDB.other.ppe || 'N/A' }];
         analysisMode = 'rule-based';
       }
 
