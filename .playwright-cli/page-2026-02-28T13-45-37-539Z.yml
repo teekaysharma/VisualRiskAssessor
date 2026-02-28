@@ -1,0 +1,434 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "VisualRiskAssessor" [level=1] [ref=e3]
+    - paragraph [ref=e4]: HSE visual risk assessment — AI powered
+  - main [ref=e5]:
+    - generic [ref=e7]:
+      - heading "🏗️ Assessment Context" [level=2] [ref=e8]
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Industry
+          - combobox "Industry" [ref=e12] [cursor=pointer]:
+            - option "— Select Industry —"
+            - option "Construction" [selected]
+            - option "Oil & Gas"
+            - option "Manufacturing"
+            - option "Chemical"
+            - option "Logistics"
+            - option "General Workplace"
+        - generic [ref=e13]:
+          - generic [ref=e14]: Task Type
+          - combobox "Task Type" [ref=e15] [cursor=pointer]:
+            - option "— Select Task —"
+            - option "Working at Height" [selected]
+            - option "Confined Space Entry"
+            - option "Hot Work"
+            - option "Electrical Work"
+            - option "Manual Handling"
+            - option "Chemical Handling"
+            - option "General Maintenance"
+        - generic [ref=e16]:
+          - generic [ref=e17]: Location Type
+          - combobox "Location Type" [ref=e18] [cursor=pointer]:
+            - option "— Select Location —"
+            - option "Indoor"
+            - option "Outdoor"
+            - option "Confined"
+            - option "Elevated" [selected]
+            - option "Underground"
+      - generic [ref=e19]: 💡 Select all three fields to pre-load a baseline hazard set into the risk register.
+      - generic [ref=e34]:
+        - strong [ref=e35]: "✅ Baseline hazards loaded:"
+        - text: 4 hazard(s) pre-populated from ADOSH-SF typical risk profiles.
+        - generic [ref=e36]:
+          - generic [ref=e37]:
+            - text: Fall from Height
+            - generic [ref=e38]: (L3/S5)
+          - generic [ref=e39]:
+            - text: Falling Objects
+            - generic [ref=e40]: (L3/S4)
+          - generic [ref=e41]:
+            - text: Scaffold Collapse
+            - generic [ref=e42]: (L2/S5)
+          - generic [ref=e43]:
+            - text: PPE Non-compliance
+            - generic [ref=e44]: (L4/S3)
+    - generic [ref=e20]:
+      - heading "Image Input" [level=2] [ref=e21]
+      - button "📷 Open Camera" [ref=e22] [cursor=pointer]
+      - button "🖼 Upload Image" [ref=e23] [cursor=pointer]
+      - button "Upload an image" [ref=e24] [cursor=pointer]: Click or press Enter/Space to upload an image.
+      - generic [ref=e26] [cursor=pointer]:
+        - checkbox "Manual Entry Mode" [ref=e27]
+        - generic [ref=e28]: Manual Entry Mode
+      - generic [ref=e29]:
+        - generic [ref=e30]: 🤖 Groq API Key (optional — enables deep AI analysis)
+        - textbox "🤖 Groq API Key (optional — enables deep AI analysis)" [ref=e31]:
+          - /placeholder: Paste your Groq API key here...
+        - paragraph [ref=e32]:
+          - text: Key stays in your browser only. Enables scene-understanding beyond object labels.
+          - link "Get a free key →" [ref=e33] [cursor=pointer]:
+            - /url: https://console.groq.com/keys
+    - generic [ref=e45]:
+      - heading "Assessment Results" [level=2] [ref=e46]
+      - paragraph [ref=e47]:
+        - strong [ref=e48]: "Overall Risk Score:"
+        - text: "15"
+        - strong [ref=e49]: "Risk Level:"
+        - generic [ref=e50]: High Risk
+        - generic [ref=e51]: Baseline Context
+      - heading "Detected Hazards & Risk Register" [level=3] [ref=e52]
+      - generic [ref=e54]:
+        - table "Hazard Assessment" [ref=e55]:
+          - caption [ref=e56]: Hazard Assessment
+          - rowgroup [ref=e57]:
+            - row "# Hazard Details L S Risk Score Rating Confidence" [ref=e58]:
+              - columnheader "#" [ref=e59]
+              - columnheader "Hazard" [ref=e60]
+              - columnheader "Details" [ref=e61]
+              - columnheader "L" [ref=e62]
+              - columnheader "S" [ref=e63]
+              - columnheader "Risk Score" [ref=e64]
+              - columnheader "Rating" [ref=e65]
+              - columnheader "Confidence" [ref=e66]
+          - rowgroup [ref=e67]:
+            - row "Baseline Fall from Height Risk of falling from elevated work platforms, scaffolding, or open edges 3 5 15 High 100%" [ref=e68]:
+              - cell "Baseline" [ref=e69]:
+                - generic [ref=e70]: Baseline
+              - cell "Fall from Height" [ref=e71]:
+                - strong [ref=e72]: Fall from Height
+              - cell "Risk of falling from elevated work platforms, scaffolding, or open edges" [ref=e73]
+              - cell "3" [ref=e74]
+              - cell "5" [ref=e75]
+              - cell "15" [ref=e76]
+              - cell "High" [ref=e77]
+              - cell "100%" [ref=e78]
+            - row "Baseline Falling Objects Tools, materials, or debris falling from elevated work areas onto persons below 3 4 12 High 100%" [ref=e79]:
+              - cell "Baseline" [ref=e80]:
+                - generic [ref=e81]: Baseline
+              - cell "Falling Objects" [ref=e82]:
+                - strong [ref=e83]: Falling Objects
+              - cell "Tools, materials, or debris falling from elevated work areas onto persons below" [ref=e84]
+              - cell "3" [ref=e85]
+              - cell "4" [ref=e86]
+              - cell "12" [ref=e87]
+              - cell "High" [ref=e88]
+              - cell "100%" [ref=e89]
+            - row "Baseline Scaffold Collapse Structural failure of scaffolding due to overloading, inadequate erection, or ground instability 2 5 10 High 100%" [ref=e90]:
+              - cell "Baseline" [ref=e91]:
+                - generic [ref=e92]: Baseline
+              - cell "Scaffold Collapse" [ref=e93]:
+                - strong [ref=e94]: Scaffold Collapse
+              - cell "Structural failure of scaffolding due to overloading, inadequate erection, or ground instability" [ref=e95]
+              - cell "2" [ref=e96]
+              - cell "5" [ref=e97]
+              - cell "10" [ref=e98]
+              - cell "High" [ref=e99]
+              - cell "100%" [ref=e100]
+            - row "Baseline PPE Non-compliance Workers not wearing required PPE in elevated work zones, increasing injury severity 4 3 12 High 100%" [ref=e101]:
+              - cell "Baseline" [ref=e102]:
+                - generic [ref=e103]: Baseline
+              - cell "PPE Non-compliance" [ref=e104]:
+                - strong [ref=e105]: PPE Non-compliance
+              - cell "Workers not wearing required PPE in elevated work zones, increasing injury severity" [ref=e106]
+              - cell "4" [ref=e107]
+              - cell "3" [ref=e108]
+              - cell "12" [ref=e109]
+              - cell "High" [ref=e110]
+              - cell "100%" [ref=e111]
+        - table "Corrective Action Tracker" [ref=e113]:
+          - caption [ref=e114]: Corrective Action Tracker
+          - rowgroup [ref=e115]:
+            - row "# Hazard Controls In Place Res. L Res. S Residual Risk Risk Owner Corrective Action Target Date Status" [ref=e116]:
+              - columnheader "#" [ref=e117]
+              - columnheader "Hazard" [ref=e118]
+              - columnheader "Controls In Place" [ref=e119]
+              - columnheader "Res. L" [ref=e120]
+              - columnheader "Res. S" [ref=e121]
+              - columnheader "Residual Risk" [ref=e122]
+              - columnheader "Risk Owner" [ref=e123]
+              - columnheader "Corrective Action" [ref=e124]
+              - columnheader "Target Date" [ref=e125]
+              - columnheader "Status" [ref=e126]
+          - rowgroup [ref=e127]:
+            - row "Baseline Fall from Height 2 4 8 Open" [ref=e128]:
+              - cell "Baseline" [ref=e129]:
+                - generic [ref=e130]: Baseline
+              - cell "Fall from Height" [ref=e131]:
+                - strong [ref=e132]: Fall from Height
+              - cell [ref=e133]:
+                - textbox "Describe controls…" [ref=e134]
+              - cell "2" [ref=e135]:
+                - combobox [ref=e136] [cursor=pointer]:
+                  - option "1"
+                  - option "2" [selected]
+                  - option "3"
+                  - option "4"
+                  - option "5"
+              - cell "4" [ref=e137]:
+                - combobox [ref=e138] [cursor=pointer]:
+                  - option "1"
+                  - option "2"
+                  - option "3"
+                  - option "4" [selected]
+                  - option "5"
+              - cell "8" [ref=e139]
+              - cell [ref=e140]:
+                - textbox "Name / Role" [ref=e141]
+              - cell [ref=e142]:
+                - textbox "Describe action…" [ref=e143]
+              - cell [ref=e144]:
+                - textbox [ref=e145]
+              - cell "Open" [ref=e146]:
+                - combobox [ref=e147] [cursor=pointer]:
+                  - option "Open" [selected]
+                  - option "In Progress"
+                  - option "Closed"
+            - row "Baseline Falling Objects 2 3 6 Open" [ref=e148]:
+              - cell "Baseline" [ref=e149]:
+                - generic [ref=e150]: Baseline
+              - cell "Falling Objects" [ref=e151]:
+                - strong [ref=e152]: Falling Objects
+              - cell [ref=e153]:
+                - textbox "Describe controls…" [ref=e154]
+              - cell "2" [ref=e155]:
+                - combobox [ref=e156] [cursor=pointer]:
+                  - option "1"
+                  - option "2" [selected]
+                  - option "3"
+                  - option "4"
+                  - option "5"
+              - cell "3" [ref=e157]:
+                - combobox [ref=e158] [cursor=pointer]:
+                  - option "1"
+                  - option "2"
+                  - option "3" [selected]
+                  - option "4"
+                  - option "5"
+              - cell "6" [ref=e159]
+              - cell [ref=e160]:
+                - textbox "Name / Role" [ref=e161]
+              - cell [ref=e162]:
+                - textbox "Describe action…" [ref=e163]
+              - cell [ref=e164]:
+                - textbox [ref=e165]
+              - cell "Open" [ref=e166]:
+                - combobox [ref=e167] [cursor=pointer]:
+                  - option "Open" [selected]
+                  - option "In Progress"
+                  - option "Closed"
+            - row "Baseline Scaffold Collapse 1 4 4 Open" [ref=e168]:
+              - cell "Baseline" [ref=e169]:
+                - generic [ref=e170]: Baseline
+              - cell "Scaffold Collapse" [ref=e171]:
+                - strong [ref=e172]: Scaffold Collapse
+              - cell [ref=e173]:
+                - textbox "Describe controls…" [ref=e174]
+              - cell "1" [ref=e175]:
+                - combobox [ref=e176] [cursor=pointer]:
+                  - option "1" [selected]
+                  - option "2"
+                  - option "3"
+                  - option "4"
+                  - option "5"
+              - cell "4" [ref=e177]:
+                - combobox [ref=e178] [cursor=pointer]:
+                  - option "1"
+                  - option "2"
+                  - option "3"
+                  - option "4" [selected]
+                  - option "5"
+              - cell "4" [ref=e179]
+              - cell [ref=e180]:
+                - textbox "Name / Role" [ref=e181]
+              - cell [ref=e182]:
+                - textbox "Describe action…" [ref=e183]
+              - cell [ref=e184]:
+                - textbox [ref=e185]
+              - cell "Open" [ref=e186]:
+                - combobox [ref=e187] [cursor=pointer]:
+                  - option "Open" [selected]
+                  - option "In Progress"
+                  - option "Closed"
+            - row "Baseline PPE Non-compliance 3 2 6 Open" [ref=e188]:
+              - cell "Baseline" [ref=e189]:
+                - generic [ref=e190]: Baseline
+              - cell "PPE Non-compliance" [ref=e191]:
+                - strong [ref=e192]: PPE Non-compliance
+              - cell [ref=e193]:
+                - textbox "Describe controls…" [ref=e194]
+              - cell "3" [ref=e195]:
+                - combobox [ref=e196] [cursor=pointer]:
+                  - option "1"
+                  - option "2"
+                  - option "3" [selected]
+                  - option "4"
+                  - option "5"
+              - cell "2" [ref=e197]:
+                - combobox [ref=e198] [cursor=pointer]:
+                  - option "1"
+                  - option "2" [selected]
+                  - option "3"
+                  - option "4"
+                  - option "5"
+              - cell "6" [ref=e199]
+              - cell [ref=e200]:
+                - textbox "Name / Role" [ref=e201]
+              - cell [ref=e202]:
+                - textbox "Describe action…" [ref=e203]
+              - cell [ref=e204]:
+                - textbox [ref=e205]
+              - cell "Open" [ref=e206]:
+                - combobox [ref=e207] [cursor=pointer]:
+                  - option "Open" [selected]
+                  - option "In Progress"
+                  - option "Closed"
+      - heading "Risk Matrix" [level=3] [ref=e208]
+      - generic [ref=e209]:
+        - generic [ref=e210]:
+          - generic [ref=e212]: L5
+          - generic [ref=e214]: "5"
+          - generic [ref=e216]: "10"
+          - generic [ref=e218]: "15"
+          - generic [ref=e220]: "20"
+          - generic [ref=e222]: "25"
+          - generic [ref=e224]: L4
+          - generic [ref=e226]: "4"
+          - generic [ref=e228]: "8"
+          - generic [ref=e229]:
+            - generic [ref=e230]: "12"
+            - generic [ref=e232]: "4"
+          - generic [ref=e234]: "16"
+          - generic [ref=e236]: "20"
+          - generic [ref=e238]: L3
+          - generic [ref=e240]: "3"
+          - generic [ref=e241]:
+            - generic [ref=e242]: "6"
+            - generic [ref=e244]: "4"
+          - generic [ref=e246]: "9"
+          - generic [ref=e247]:
+            - generic [ref=e248]: "12"
+            - generic [ref=e250]: "2"
+          - generic [ref=e251]:
+            - generic [ref=e252]: "15"
+            - generic [ref=e254]: "1"
+          - generic [ref=e256]: L2
+          - generic [ref=e258]: "2"
+          - generic [ref=e260]: "4"
+          - generic [ref=e261]:
+            - generic [ref=e262]: "6"
+            - generic [ref=e264]: "2"
+          - generic [ref=e265]:
+            - generic [ref=e266]: "8"
+            - generic [ref=e268]: "1"
+          - generic [ref=e269]:
+            - generic [ref=e270]: "10"
+            - generic [ref=e272]: "3"
+          - generic [ref=e274]: L1
+          - generic [ref=e276]: "1"
+          - generic [ref=e278]: "2"
+          - generic [ref=e280]: "3"
+          - generic [ref=e281]:
+            - generic [ref=e282]: "4"
+            - generic [ref=e284]: "3"
+          - generic [ref=e286]: "5"
+          - generic [ref=e289]: S1
+          - generic [ref=e291]: S2
+          - generic [ref=e293]: S3
+          - generic [ref=e295]: S4
+          - generic [ref=e297]: S5
+        - generic [ref=e298]:
+          - generic [ref=e299]: Initial Risk
+          - generic [ref=e301]: Residual Risk
+      - heading "Risk Summary Dashboard" [level=3] [ref=e303]
+      - generic [ref=e304]:
+        - generic [ref=e305]:
+          - generic [ref=e306]: Total Hazards Identified
+          - generic [ref=e307]: "4"
+        - generic [ref=e308]:
+          - generic [ref=e309]: Highest Risk Score
+          - generic [ref=e310]: "15"
+        - generic [ref=e311]:
+          - generic [ref=e312]: Critical + High Count
+          - generic [ref=e313]: "4"
+        - generic [ref=e314]:
+          - generic [ref=e315]: Overall Site Risk Rating
+          - generic [ref=e316]: High
+      - heading "Hierarchy of Controls" [level=3] [ref=e317]
+      - table "Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF" [ref=e319]:
+        - caption [ref=e320]: Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF
+        - rowgroup [ref=e321]:
+          - row "# Hazard Eliminate Substitute Engineering Control Administrative Control PPE Required" [ref=e322]:
+            - columnheader "#" [ref=e323]
+            - columnheader "Hazard" [ref=e324]
+            - columnheader "Eliminate" [ref=e325]
+            - columnheader "Substitute" [ref=e326]
+            - columnheader "Engineering Control" [ref=e327]
+            - columnheader "Administrative Control" [ref=e328]
+            - columnheader "PPE Required" [ref=e329]
+        - rowgroup [ref=e330]:
+          - row "1 Fall from Height Eliminate work at height by redesigning the task to ground level where possible Use pre-fabricated ground-level assemblies or elevated work platforms with full enclosures Install guardrails, toe-boards, and safety nets; use scaffolding with full edge protection Implement permit-to-work for work at height; enforce harness use above 2m; daily pre-work briefings Full-body harness with energy-absorbing lanyard; hard hat; non-slip safety boots" [ref=e331]:
+            - cell "1" [ref=e332]
+            - cell "Fall from Height" [ref=e333]:
+              - strong [ref=e334]: Fall from Height
+            - cell "Eliminate work at height by redesigning the task to ground level where possible" [ref=e335]
+            - cell "Use pre-fabricated ground-level assemblies or elevated work platforms with full enclosures" [ref=e336]
+            - cell "Install guardrails, toe-boards, and safety nets; use scaffolding with full edge protection" [ref=e337]
+            - cell "Implement permit-to-work for work at height; enforce harness use above 2m; daily pre-work briefings" [ref=e338]
+            - cell "Full-body harness with energy-absorbing lanyard; hard hat; non-slip safety boots" [ref=e339]
+          - row "2 Falling Objects Establish strict exclusion zones directly below elevated work areas Use tethered tools and tool lanyards to prevent dropped objects Install debris nets, toe-boards, and overhead protection screens on scaffolding Barricade and sign exclusion zones; conduct toolbox talks on dropped object prevention Hard hat (minimum Class E); safety boots; high-visibility vest" [ref=e340]:
+            - cell "2" [ref=e341]
+            - cell "Falling Objects" [ref=e342]:
+              - strong [ref=e343]: Falling Objects
+            - cell "Establish strict exclusion zones directly below elevated work areas" [ref=e344]
+            - cell "Use tethered tools and tool lanyards to prevent dropped objects" [ref=e345]
+            - cell "Install debris nets, toe-boards, and overhead protection screens on scaffolding" [ref=e346]
+            - cell "Barricade and sign exclusion zones; conduct toolbox talks on dropped object prevention" [ref=e347]
+            - cell "Hard hat (minimum Class E); safety boots; high-visibility vest" [ref=e348]
+          - row "3 Scaffold Collapse Use permanent access structures where technically feasible Replace tube-and-fitting scaffolding with proprietary system scaffolding for improved reliability Conduct structural calculations; ensure adequate base plates and sole boards; tie scaffold to structure Competent scaffold erection and inspection by certified scaffolder; tag system (green/red); no overloading Hard hat; safety harness during erection and dismantling; safety boots" [ref=e349]:
+            - cell "3" [ref=e350]
+            - cell "Scaffold Collapse" [ref=e351]:
+              - strong [ref=e352]: Scaffold Collapse
+            - cell "Use permanent access structures where technically feasible" [ref=e353]
+            - cell "Replace tube-and-fitting scaffolding with proprietary system scaffolding for improved reliability" [ref=e354]
+            - cell "Conduct structural calculations; ensure adequate base plates and sole boards; tie scaffold to structure" [ref=e355]
+            - cell "Competent scaffold erection and inspection by certified scaffolder; tag system (green/red); no overloading" [ref=e356]
+            - cell "Hard hat; safety harness during erection and dismantling; safety boots" [ref=e357]
+          - row "4 PPE Non-compliance Evaluate if PPE-free alternative working methods exist Use lighter, more comfortable PPE to improve compliance Install PPE dispensing stations at access points to elevated areas Enforce site PPE policy; daily supervisor checks; disciplinary procedure for non-compliance Hard hat; high-visibility vest; safety harness; gloves; safety boots — all mandatory in zone" [ref=e358]:
+            - cell "4" [ref=e359]
+            - cell "PPE Non-compliance" [ref=e360]:
+              - strong [ref=e361]: PPE Non-compliance
+            - cell "Evaluate if PPE-free alternative working methods exist" [ref=e362]
+            - cell "Use lighter, more comfortable PPE to improve compliance" [ref=e363]
+            - cell "Install PPE dispensing stations at access points to elevated areas" [ref=e364]
+            - cell "Enforce site PPE policy; daily supervisor checks; disciplinary procedure for non-compliance" [ref=e365]
+            - cell "Hard hat; high-visibility vest; safety harness; gloves; safety boots — all mandatory in zone" [ref=e366]
+      - heading "Assessment Details" [level=3] [ref=e367]
+      - generic [ref=e368]:
+        - heading "Assessment Information" [level=4] [ref=e369]
+        - generic [ref=e370]:
+          - generic [ref=e371]: "Assessment Date and Time:"
+          - generic [ref=e372]: February 28, 2026 at 01:45:36 PM
+        - generic [ref=e373]:
+          - generic [ref=e374]: "Industry:"
+          - generic [ref=e375]: Construction
+        - generic [ref=e376]:
+          - generic [ref=e377]: "Task Type:"
+          - generic [ref=e378]: Working at Height
+        - generic [ref=e379]:
+          - generic [ref=e380]: "Location Type:"
+          - generic [ref=e381]: Elevated
+        - generic [ref=e382]:
+          - generic [ref=e383]: "Baseline Hazards:"
+          - generic [ref=e384]: 4 pre-loaded from ADOSH-SF risk profiles
+        - generic [ref=e385]:
+          - generic [ref=e386]: "Assessment Method:"
+          - generic [ref=e387]: AI Visual Analysis — Llama 4 Scout via Groq API
+        - generic [ref=e388]:
+          - generic [ref=e389]: "Standard Reference:"
+          - generic [ref=e390]: ISO 45001:2018 / ADOSH-SF
+        - generic [ref=e391]: This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register.
+      - generic [ref=e392]:
+        - button "Export Report" [ref=e393] [cursor=pointer]
+        - button "📄 Export PDF" [ref=e394] [cursor=pointer]
+        - button "New Assessment" [ref=e395] [cursor=pointer]
