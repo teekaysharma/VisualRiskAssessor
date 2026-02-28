@@ -211,6 +211,7 @@
     .risk-table.table-b th:nth-child(8), .risk-table.table-b td:nth-child(8) { min-width:180px; }
     .risk-table.table-b th:nth-child(9), .risk-table.table-b td:nth-child(9) { min-width:130px; }
     .risk-table.table-b th:nth-child(10), .risk-table.table-b td:nth-child(10) { min-width:100px; }
+    .risk-table.table-b th:nth-child(11), .risk-table.table-b td:nth-child(11) { min-width:70px; text-align:center; }
     .status-open { background:#f44336 !important; color:#fff; }
     .status-open select { background:#f44336; color:#fff; }
     .status-inprogress { background:#ff9800 !important; color:#fff; }
@@ -290,7 +291,153 @@
     .data-source-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
     .data-source-dot.ai { background:#6a1b9a; }
     .data-source-dot.verified { background:#1565c0; }
-  </style>
+  
+    /* Override and Verification Styles */
+    .edit-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    .edit-icon-btn:hover:not(:disabled) {
+      background: #e3f2fd;
+    }
+    .edit-icon-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .overridden-cell {
+      background: #2196f3 !important;
+      color: #fff !important;
+    }
+    .overridden-cell select {
+      background: #2196f3;
+      color: #fff;
+    }
+    .verified-row {
+      background: #c8e6c9 !important;
+    }
+    .verified-row td {
+      background: #c8e6c9 !important;
+    }
+    .verified-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #4caf50;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 4px;
+    }
+    
+    /* HSE Officer Sign-off Section */
+    .hse-signoff-block {
+      background: #fafafa;
+      border: 2px solid #424242;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    .hse-signoff-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #212121;
+      margin: 0 0 16px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .hse-signoff-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    @media (max-width:680px) {
+      .hse-signoff-grid { grid-template-columns: 1fr; }
+    }
+    .hse-signoff-field label {
+      display: block;
+      font-weight: 600;
+      font-size: 12px;
+      color: #616161;
+      margin-bottom: 4px;
+    }
+    .hse-signoff-field input[type="text"],
+    .hse-signoff-field input[type="date"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #bdbdbd;
+      border-radius: 6px;
+      font-size: 13px;
+      background: #fff;
+    }
+    .hse-signoff-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 16px 0;
+      padding: 12px;
+      background: #fff;
+      border-radius: 6px;
+      border: 1px solid #e0e0e0;
+    }
+    .hse-signoff-checkbox input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      margin-top: 2px;
+      cursor: pointer;
+    }
+    .hse-signoff-checkbox label {
+      font-size: 13px;
+      color: #424242;
+      line-height: 1.5;
+      cursor: pointer;
+    }
+    .hse-signoff-signature {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #e0e0e0;
+    }
+    .hse-signoff-signature label {
+      display: block;
+      font-weight: 600;
+      font-size: 12px;
+      color: #616161;
+      margin-bottom: 8px;
+    }
+    .signature-line {
+      border-bottom: 1px solid #424242;
+      height: 30px;
+      width: 100%;
+      max-width: 400px;
+    }
+    
+    /* Tooltip for disabled PDF button */
+    .btn-disabled-tooltip {
+      position: relative;
+    }
+    .btn-disabled-tooltip[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 100;
+      margin-bottom: 6px;
+    }
+</style>
 </head>
 <body>
   <header class="header">
@@ -548,6 +695,25 @@
   let imageMetadata = null;
   let reviewData = {};  // Store override and verification data per hazard index
   let signoffData = { verified: false, name: '', designation: '', date: '' };
+  
+  // HSE Officer sign-off data
+  window.hseSignoffData = { name: '', designation: '', organisation: '', date: '', confirmed: false };
+  
+  // Function to update PDF button state based on confirmation
+  function updatePDFButtonState() {
+    const pdfBtn = document.getElementById('btnPDF');
+    if (!pdfBtn) return;
+    
+    if (window.hseSignoffData && window.hseSignoffData.confirmed) {
+      pdfBtn.disabled = false;
+      pdfBtn.classList.remove('btn-disabled-tooltip');
+      pdfBtn.removeAttribute('title');
+    } else {
+      pdfBtn.disabled = true;
+      pdfBtn.classList.add('btn-disabled-tooltip');
+      pdfBtn.setAttribute('title', 'HSE Officer verification required before export.');
+    }
+  }
 
 
   const BASELINE_DB = {
@@ -1400,6 +1566,7 @@ function extractImageMetadata(file) {
       <th>Risk Score</th>
       <th>Rating</th>
       <th>Confidence</th>
+      <th>Actions</th>
     </tr>`;
     tableA.appendChild(theadA);
     const tbodyA = document.createElement('tbody');
@@ -1425,6 +1592,7 @@ function extractImageMetadata(file) {
       <th>Corrective Action</th>
       <th>Target Date</th>
       <th>Status</th>
+      <th>Verified</th>
     </tr>`;
     tableB.appendChild(theadB);
     const tbodyB = document.createElement('tbody');
@@ -1437,25 +1605,138 @@ function extractImageMetadata(file) {
       const initialResidualScore = defaultRL * defaultRS;
       const rrr = riskFor(initialResidualScore);
 
-      // Determine # column content - show source badge for baseline and manual entries
-      let numberCell;
-      if (h.isBaseline) numberCell = `<span class="baseline-badge">Baseline</span>`;
-      else if (h.isManual) numberCell = `<span class="manual-badge">Manual</span>`;
-      else numberCell = String(i + 1);
+      // Hazard properties initialization for override/verification
+      if (h.manualOverride === undefined) h.manualOverride = false;
+      if (h.verified === undefined) h.verified = false;
 
       // Table A row
       const trA = document.createElement('tr');
-      trA.innerHTML = `
-        <td>${numberCell}</td>
-        <td><strong>${h.name}</strong></td>
-        <td>${h.details || '-'}</td>
-        <td>${h.L}</td>
-        <td>${h.S}</td>
-        <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
-        <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
-        <td>${Math.round((h.conf || 0) * 100)}%</td>
-      `;
+      trA.id = `tableA_row_${i}`;
+      if (h.verified) trA.classList.add('verified-row');
+      
+      // Determine number cell content
+      let numberCellContent;
+      if (h.verified) {
+        numberCellContent = `${i + 1} <span class="verified-badge">✓ Verified</span>`;
+      } else if (h.isBaseline) {
+        numberCellContent = `<span class="baseline-badge">Baseline</span>`;
+      } else if (h.isManual) {
+        numberCellContent = `<span class="manual-badge">Manual</span>`;
+      } else {
+        numberCellContent = String(i + 1);
+      }
+      
+      // Check if this row is in edit mode
+      const isEditing = h.isEditing || false;
+      const isOverridden = h.manualOverride || false;
+      
+      if (isEditing) {
+        // Edit mode: show dropdowns for L and S
+        trA.innerHTML = `
+          <td>${numberCellContent}</td>
+          <td><strong>${h.name}</strong></td>
+          <td>${h.details || '-'}</td>
+          <td class="${isOverridden && h.L !== h.originalL ? 'overridden-cell' : ''}" id="tableA_L_cell_${i}">
+            <select id="tableA_L_${i}" style="width:100%">
+              <option value="1" ${h.L === 1 ? 'selected' : ''}>1</option>
+              <option value="2" ${h.L === 2 ? 'selected' : ''}>2</option>
+              <option value="3" ${h.L === 3 ? 'selected' : ''}>3</option>
+              <option value="4" ${h.L === 4 ? 'selected' : ''}>4</option>
+              <option value="5" ${h.L === 5 ? 'selected' : ''}>5</option>
+            </select>
+          </td>
+          <td class="${isOverridden && h.S !== h.originalS ? 'overridden-cell' : ''}" id="tableA_S_cell_${i}">
+            <select id="tableA_S_${i}" style="width:100%">
+              <option value="1" ${h.S === 1 ? 'selected' : ''}>1</option>
+              <option value="2" ${h.S === 2 ? 'selected' : ''}>2</option>
+              <option value="3" ${h.S === 3 ? 'selected' : ''}>3</option>
+              <option value="4" ${h.S === 4 ? 'selected' : ''}>4</option>
+              <option value="5" ${h.S === 5 ? 'selected' : ''}>5</option>
+            </select>
+          </td>
+          <td id="tableA_risk_${i}" style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
+          <td id="tableA_rating_${i}">${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
+          <td>${Math.round((h.conf || 0) * 100)}%</td>
+          <td>
+            <button class="edit-icon-btn" id="tableA_save_${i}" title="Save">💾</button>
+            <button class="edit-icon-btn" id="tableA_cancel_${i}" title="Cancel">❌</button>
+          </td>
+        `;
+      } else {
+        // View mode: show static values
+        trA.innerHTML = `
+          <td>${numberCellContent}</td>
+          <td><strong>${h.name}</strong></td>
+          <td>${h.details || '-'}</td>
+          <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_L_display_${i}">${h.L}</td>
+          <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
+          <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
+          <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
+          <td>${Math.round((h.conf || 0) * 100)}%</td>
+          <td>
+            <button class="edit-icon-btn" id="tableA_edit_${i}" title="Edit L/S" ${h.verified ? 'disabled' : ''}>✏️</button>
+          </td>
+        `;
+      }
       tbodyA.appendChild(trA);
+      
+      // Attach event listeners after adding to DOM
+      if (isEditing) {
+        const lSelect = document.getElementById(`tableA_L_${i}`);
+        const sSelect = document.getElementById(`tableA_S_${i}`);
+        const saveBtn = document.getElementById(`tableA_save_${i}`);
+        const cancelBtn = document.getElementById(`tableA_cancel_${i}`);
+        
+        const updateRisk = () => {
+          const newL = parseInt(lSelect.value, 10);
+          const newS = parseInt(sSelect.value, 10);
+          const newRisk = newL * newS;
+          const newHr = riskFor(newRisk);
+          const riskCell = document.getElementById(`tableA_risk_${i}`);
+          const ratingCell = document.getElementById(`tableA_rating_${i}`);
+          riskCell.textContent = newRisk;
+          riskCell.style.backgroundColor = newHr.bg;
+          riskCell.style.color = newHr.textColor;
+          ratingCell.textContent = newHr.label.replace(' Risk', '');
+          
+          // Update cell backgrounds
+          const lCell = document.getElementById(`tableA_L_cell_${i}`);
+          const sCell = document.getElementById(`tableA_S_cell_${i}`);
+          if (newL !== h.originalL) lCell.classList.add('overridden-cell');
+          else lCell.classList.remove('overridden-cell');
+          if (newS !== h.originalS) sCell.classList.add('overridden-cell');
+          else sCell.classList.remove('overridden-cell');
+        };
+        
+        lSelect.addEventListener('change', updateRisk);
+        sSelect.addEventListener('change', updateRisk);
+        
+        saveBtn.addEventListener('click', () => {
+          const newL = parseInt(lSelect.value, 10);
+          const newS = parseInt(sSelect.value, 10);
+          h.L = newL;
+          h.S = newS;
+          h.risk = newL * newS;
+          h.manualOverride = true;
+          h.isEditing = false;
+          render();
+        });
+        
+        cancelBtn.addEventListener('click', () => {
+          h.isEditing = false;
+          render();
+        });
+      } else {
+        const editBtn = document.getElementById(`tableA_edit_${i}`);
+        if (editBtn && !h.verified) {
+          editBtn.addEventListener('click', () => {
+            h.isEditing = true;
+            if (!h.originalL) h.originalL = h.L;
+            if (!h.originalS) h.originalS = h.S;
+            render();
+          });
+        }
+      }
 
       // Table B row
       const trB = document.createElement('tr');
@@ -1543,6 +1824,20 @@ function extractImageMetadata(file) {
       tdStatus.appendChild(selStatus);
       trB.appendChild(tdStatus);
 
+      // Verified checkbox column
+      const tdVerified = document.createElement('td');
+      tdVerified.style.textAlign = 'center';
+      const verifiedCb = document.createElement('input');
+      verifiedCb.type = 'checkbox';
+      verifiedCb.id = `verified_${i}`;
+      verifiedCb.checked = h.verified || false;
+      verifiedCb.addEventListener('change', (e) => {
+        h.verified = e.target.checked;
+        render();
+      });
+      tdVerified.appendChild(verifiedCb);
+      trB.appendChild(tdVerified);
+
       tbodyB.appendChild(trB);
     });
 
@@ -1553,12 +1848,75 @@ function extractImageMetadata(file) {
     tablesContainer.appendChild(tableBWrapper);
     els.hazardsList.appendChild(tablesContainer);
 
+    // ── HSE Officer Sign-off Block ─────────────────────────────────────────────
+    const signoffBlock = document.createElement('div');
+    signoffBlock.className = 'hse-signoff-block';
+    const today = new Date().toISOString().split('T')[0];
+    signoffBlock.innerHTML = `
+      <h4 class="hse-signoff-title">HSE Officer Verification</h4>
+      <div class="hse-signoff-grid">
+        <div class="hse-signoff-field">
+          <label for="hseReviewerName">Reviewed by:</label>
+          <input type="text" id="hseReviewerName" placeholder="Name" value="${window.hseSignoffData?.name || ''}">
+        </div>
+        <div class="hse-signoff-field">
+          <label for="hseReviewerDesignation">Designation:</label>
+          <input type="text" id="hseReviewerDesignation" placeholder="Job Title" value="${window.hseSignoffData?.designation || ''}">
+        </div>
+        <div class="hse-signoff-field">
+          <label for="hseReviewerOrg">Organisation:</label>
+          <input type="text" id="hseReviewerOrg" placeholder="Organisation" value="${window.hseSignoffData?.organisation || ''}">
+        </div>
+        <div class="hse-signoff-field">
+          <label for="hseReviewDate">Review Date:</label>
+          <input type="date" id="hseReviewDate" value="${window.hseSignoffData?.date || today}">
+        </div>
+      </div>
+      <div class="hse-signoff-checkbox">
+        <input type="checkbox" id="hseConfirmationCheckbox" ${window.hseSignoffData?.confirmed ? 'checked' : ''}>
+        <label for="hseConfirmationCheckbox">
+          I confirm this assessment has been reviewed and verified by a competent person as defined under ADOSH OSH Law No. 8 of 1980
+        </label>
+      </div>
+      <div class="hse-signoff-signature">
+        <label>Signature:</label>
+        <div class="signature-line"></div>
+      </div>
+    `;
+    els.hazardsList.appendChild(signoffBlock);
+    
+    // Store signoff data when changed
+    const nameInput = document.getElementById('hseReviewerName');
+    const desigInput = document.getElementById('hseReviewerDesignation');
+    const orgInput = document.getElementById('hseReviewerOrg');
+    const dateInput = document.getElementById('hseReviewDate');
+    const confirmCb = document.getElementById('hseConfirmationCheckbox');
+    
+    const updateSignoffData = () => {
+      if (!window.hseSignoffData) window.hseSignoffData = {};
+      window.hseSignoffData.name = nameInput?.value || '';
+      window.hseSignoffData.designation = desigInput?.value || '';
+      window.hseSignoffData.organisation = orgInput?.value || '';
+      window.hseSignoffData.date = dateInput?.value || '';
+      window.hseSignoffData.confirmed = confirmCb?.checked || false;
+      updatePDFButtonState();
+    };
+    
+    if (nameInput) nameInput.addEventListener('input', updateSignoffData);
+    if (desigInput) desigInput.addEventListener('input', updateSignoffData);
+    if (orgInput) orgInput.addEventListener('input', updateSignoffData);
+    if (dateInput) dateInput.addEventListener('change', updateSignoffData);
+    if (confirmCb) confirmCb.addEventListener('change', updateSignoffData);
+
     // ── Risk Matrix ────────────────────────────────────────────────────────────
     els.riskMatrix.textContent = '';
 
     const hazardPositions = new Map();
     allHazards.forEach((h, i) => {
-      const key = `${h.L}-${h.S}`;
+      // Use overridden values if present
+      const l = h.L;
+      const s = h.S;
+      const key = `${l}-${s}`;
       if (!hazardPositions.has(key)) hazardPositions.set(key, []);
       hazardPositions.get(key).push({ seq: i + 1, name: h.name, isManual: h.isManual });
     });
@@ -1750,6 +2108,9 @@ function extractImageMetadata(file) {
     
     // Render the HSE Officer Review table
     renderReviewTable();
+    
+    // Update PDF button state
+    updatePDFButtonState();
   }
 
 
@@ -2580,6 +2941,9 @@ function extractImageMetadata(file) {
         },
         didParseCell(data) {
           if (data.section === 'body') {
+            const rowIdx = data.row.index;
+            const hazard = allHazardsForPDF[rowIdx];
+            
             if (data.column.index === 5) {
               const score = parseInt(data.cell.raw, 10);
               const col = scoreColor(score);
@@ -2593,6 +2957,15 @@ function extractImageMetadata(file) {
               data.cell.styles.fillColor = col;
               data.cell.styles.textColor = score > 4 && score <= 9 ? [33,33,33] : [255,255,255];
               data.cell.styles.fontStyle = 'bold';
+            }
+            // Highlight overridden L (column 3) and S (column 4) cells in blue
+            if ((data.column.index === 3 || data.column.index === 4) && hazard && hazard.manualOverride) {
+              data.cell.styles.fillColor = [33, 150, 243];  // Blue
+              data.cell.styles.textColor = [255, 255, 255];
+            }
+            // Highlight verified rows with light green background
+            if (hazard && hazard.verified && data.column.index !== 5 && data.column.index !== 11 && data.column.index !== 15) {
+              data.cell.styles.fillColor = [200, 230, 201];  // Light green
             }
             if (data.column.index === 15) {
               const status = data.cell.raw;
@@ -2819,10 +3192,53 @@ function extractImageMetadata(file) {
         }
       }
 
-      // ── Footer on all pages with data sources ──
+      // ── Legend for Risk Register ──
+      checkPageBreak(25);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(33, 33, 33);
+      doc.text('Legend:', margin, y);
+      y += 5;
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      
+      // Blue cell legend
+      doc.setFillColor(33, 150, 243);
+      doc.rect(margin, y - 3, 8, 6, 'F');
+      doc.text('Blue cell = Value manually overridden by HSE Officer', margin + 12, y);
+      y += 6;
+      
+      // Green row legend
+      doc.setFillColor(200, 230, 201);
+      doc.rect(margin, y - 3, 8, 6, 'F');
+      doc.setDrawColor(76, 175, 80);
+      doc.setLineWidth(0.2);
+      doc.rect(margin, y - 3, 8, 6, 'S');
+      doc.text('Green row = Hazard verified by competent person', margin + 12, y);
+      y += 6;
+      
+      // Unshaded legend
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(150, 150, 150);
+      doc.rect(margin, y - 3, 8, 6, 'FD');
+      doc.text('Unshaded = AI-generated or rule-based, pending verification', margin + 12, y);
+      y += 10;
+      
+      // Count hazards by status
+      const overriddenCount = allHazardsForPDF.filter(h => h.manualOverride).length;
+      const verifiedCountPdf = allHazardsForPDF.filter(h => h.verified).length;
+      const aiGeneratedCount = allHazardsForPDF.filter(h => !h.manualOverride && !h.verified).length;
+      
+      doc.setFontSize(8);
+      doc.setTextColor(80, 80, 80);
+      doc.text(`AI-generated fields: ${aiGeneratedCount} (non-overridden, non-verified hazards)`, margin, y);
+      y += 5;
+      doc.text(`Competent Person verified fields: ${verifiedCountPdf} (verified hazards)`, margin, y);
+      y += 10;
+
+      // ── Footer on all pages ──
       const totalPages = doc.internal.getNumberOfPages();
-      const aiCount = allHazardsForPDF.length - verifiedHazards;
-      const verifiedCount = verifiedHazards;
       
       for (let pg = 1; pg <= totalPages; pg++) {
         doc.setPage(pg);
@@ -2842,13 +3258,13 @@ function extractImageMetadata(file) {
         doc.setFillColor(106, 27, 154);  // Purple for AI
         doc.circle(margin + 4, pageH - 6, 2, 'F');
         doc.setTextColor(80, 80, 80);
-        doc.text(`AI-Generated: ${aiCount} hazards`, margin + 8, pageH - 5);
+        doc.text(`AI-Generated: ${aiGeneratedCount} hazards`, margin + 8, pageH - 5);
         
         // Verified indicator
-        if (verifiedCount > 0) {
+        if (verifiedCountPdf > 0) {
           doc.setFillColor(21, 101, 192);  // Blue for verified
           doc.circle(margin + 60, pageH - 6, 2, 'F');
-          doc.text(`Competent Person Verified: ${verifiedCount} hazards`, margin + 64, pageH - 5);
+          doc.text(`Competent Person Verified: ${verifiedCountPdf} hazards`, margin + 64, pageH - 5);
         }
       }
 
@@ -2927,6 +3343,7 @@ function extractImageMetadata(file) {
     manualModeActive = false;
     reviewData = {};
     signoffData = { verified: false, name: '', designation: '', date: '' };
+    window.hseSignoffData = { name: '', designation: '', organisation: '', date: '', confirmed: false };
     els.manualModeToggle.checked = false;
     els.manualEntrySection.classList.add('hidden');
     els.fileInput.value = '';
