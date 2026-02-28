@@ -825,6 +825,22 @@
       cocoToHazard[cls].push(key);
     });
   });
+  // Additional COCO-to-hazard mappings
+  cocoToHazard['person'] = ['ppe'];
+  cocoToHazard['truck'] = ['struck', 'machinery'];
+  cocoToHazard['car'] = ['struck'];
+  cocoToHazard['bus'] = ['struck'];
+  cocoToHazard['motorcycle'] = ['struck', 'machinery'];
+  cocoToHazard['bicycle'] = ['struck'];
+  cocoToHazard['scissors'] = ['machinery'];
+  cocoToHazard['knife'] = ['machinery'];
+  cocoToHazard['bottle'] = ['chemical', 'slip'];
+  cocoToHazard['cup'] = ['chemical'];
+  cocoToHazard['chair'] = ['ergonomic'];
+  cocoToHazard['laptop'] = ['electrical', 'ergonomic'];
+  cocoToHazard['cell phone'] = ['electrical'];
+  cocoToHazard['fire hydrant'] = ['fire'];
+  cocoToHazard['suitcase'] = ['slip', 'ergonomic'];
 
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
   function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
@@ -933,14 +949,71 @@
   function openFilePicker() { els.fileInput.click(); }
 
   const KEYWORD_LOOKUP_TABLE = {
+    // Height and fall
     'ladder': { name: 'Working at Height', L: 3, S: 4, key: 'height' },
+    'scaffold': { name: 'Fall from Height', L: 3, S: 5, key: 'height' },
+    'roof': { name: 'Fall from Height', L: 3, S: 5, key: 'height' },
+    'platform': { name: 'Working at Height', L: 3, S: 4, key: 'height' },
+    'staircase': { name: 'Fall from Height', L: 3, S: 4, key: 'height' },
+    'elevated': { name: 'Working at Height', L: 3, S: 4, key: 'height' },
+    'derrick': { name: 'Fall from Height - Rig', L: 3, S: 5, key: 'height' },
+    'mast': { name: 'Working at Height', L: 3, S: 4, key: 'height' },
+    'guardrail': { name: 'Fall from Height', L: 2, S: 5, key: 'height' },
+    // Electrical
+    'cable': { name: 'Electrical Hazard', L: 3, S: 4, key: 'electrical' },
+    'wire': { name: 'Electrical Hazard', L: 3, S: 4, key: 'electrical' },
+    'panel': { name: 'Electrical Hazard', L: 2, S: 4, key: 'electrical' },
+    'switchboard': { name: 'Electrical Hazard', L: 2, S: 5, key: 'electrical' },
+    'generator': { name: 'Electrical Hazard', L: 3, S: 4, key: 'electrical' },
+    'transformer': { name: 'Electrical Hazard', L: 2, S: 5, key: 'electrical' },
+    // Chemical and fire
     'chemical drum': { name: 'Chemical Exposure', L: 2, S: 5, key: 'chemical' },
-    'cable': { name: 'Electrical', L: 3, S: 4, key: 'electrical' },
-    'puddle': { name: 'Slip', L: 3, S: 3, key: 'slip' },
-    'liquid': { name: 'Slip', L: 3, S: 3, key: 'slip' },
-    'scaffold': { name: 'Fall from Height', L: 2, S: 5, key: 'height' },
+    'barrel': { name: 'Chemical Storage', L: 2, S: 4, key: 'chemical' },
+    'cylinder': { name: 'Pressurised Gas', L: 2, S: 5, key: 'chemical' },
+    'tank': { name: 'Chemical Storage', L: 2, S: 4, key: 'chemical' },
+    'pipe': { name: 'Pressurised Line / Struck-By', L: 3, S: 4, key: 'struck' },
+    'canister': { name: 'Chemical Exposure', L: 2, S: 4, key: 'chemical' },
+    'smoke': { name: 'Fire Hazard', L: 3, S: 5, key: 'fire' },
+    'flame': { name: 'Fire Hazard', L: 4, S: 5, key: 'fire' },
+    'welding': { name: 'Hot Work / Fire Hazard', L: 3, S: 4, key: 'fire' },
+    'flammable': { name: 'Fire and Explosion Risk', L: 3, S: 5, key: 'fire' },
+    // Slip and trip
+    'puddle': { name: 'Slip Hazard', L: 3, S: 3, key: 'slip' },
+    'liquid': { name: 'Slip Hazard', L: 3, S: 3, key: 'slip' },
+    'spill': { name: 'Slip / Chemical Hazard', L: 4, S: 4, key: 'slip' },
+    'hose': { name: 'Tripping Hazard', L: 3, S: 3, key: 'slip' },
+    'debris': { name: 'Slip / Trip Hazard', L: 3, S: 3, key: 'slip' },
+    'clutter': { name: 'Poor Housekeeping / Trip Hazard', L: 4, S: 3, key: 'slip' },
+    'wet floor': { name: 'Slip Hazard', L: 4, S: 3, key: 'slip' },
+    // Machinery and struck-by
     'forklift': { name: 'Struck by Vehicle', L: 3, S: 4, key: 'struck' },
-    'worker without helmet': { name: 'PPE Missing/Inadequate', L: 4, S: 3, key: 'ppe' }
+    'crane': { name: 'Lifting / Struck-By Risk', L: 3, S: 5, key: 'struck' },
+    'vehicle': { name: 'Struck by Vehicle', L: 3, S: 4, key: 'struck' },
+    'machinery': { name: 'Machinery Risk', L: 3, S: 4, key: 'machinery' },
+    'rotating': { name: 'Rotating Machinery', L: 3, S: 4, key: 'machinery' },
+    'conveyor': { name: 'Machinery Entanglement', L: 3, S: 4, key: 'machinery' },
+    'drill': { name: 'Drilling Machinery Risk', L: 3, S: 4, key: 'machinery' },
+    'grinder': { name: 'Abrasive Wheel Risk', L: 3, S: 4, key: 'machinery' },
+    // PPE
+    'worker without helmet': { name: 'PPE Non-Compliance', L: 4, S: 3, key: 'ppe' },
+    'no helmet': { name: 'Head Protection Missing', L: 4, S: 4, key: 'ppe' },
+    'no harness': { name: 'Fall Arrest Missing', L: 4, S: 5, key: 'ppe' },
+    'no gloves': { name: 'Hand Protection Missing', L: 4, S: 3, key: 'ppe' },
+    'no vest': { name: 'High-Visibility PPE Missing', L: 4, S: 3, key: 'ppe' },
+    // Confined space
+    'manhole': { name: 'Confined Space Entry', L: 2, S: 5, key: 'confined' },
+    'pit': { name: 'Confined Space / Fall Risk', L: 2, S: 5, key: 'confined' },
+    'tunnel': { name: 'Confined Space Hazard', L: 2, S: 5, key: 'confined' },
+    'vault': { name: 'Confined Space Hazard', L: 2, S: 4, key: 'confined' },
+    // Ergonomic
+    'heavy load': { name: 'Manual Handling', L: 4, S: 3, key: 'ergonomic' },
+    'lifting': { name: 'Manual Handling / Ergonomic', L: 4, S: 3, key: 'ergonomic' },
+    'repetitive': { name: 'Ergonomic Risk', L: 3, S: 2, key: 'ergonomic' },
+    // Structural
+    'rust': { name: 'Structural Integrity / Corrosion', L: 3, S: 4, key: 'machinery' },
+    'corrosion': { name: 'Structural Integrity Risk', L: 3, S: 4, key: 'machinery' },
+    'crack': { name: 'Structural Failure Risk', L: 2, S: 5, key: 'machinery' },
+    'unstable': { name: 'Structural Instability', L: 3, S: 5, key: 'machinery' }
   };
 
   function ruleBasedHazards(detectedLabels) {
@@ -2235,6 +2308,22 @@ function extractImageMetadata(file) {
               hazards = ruleBasedHazards(['general']);
               analysisMode = 'rule-based';
             }
+            // Also run keyword match against image filename
+            if (window.currentImageMeta && window.currentImageMeta.filename) {
+              const filenameWords = window.currentImageMeta.filename
+                .replace(/[-_\.]/g, ' ')
+                .toLowerCase()
+                .split(' ')
+                .filter(w => w.length > 3);
+              const filenameHazards = ruleBasedHazards(filenameWords);
+              filenameHazards.forEach(h => {
+                if (!hazards.find(existing => existing.name === h.name)) {
+                  h.source = 'rule-based-filename';
+                  h.details = `Detected from image filename keyword match`;
+                  hazards.push(h);
+                }
+              });
+            }
           }
         } catch (aiErr) {
           showWarning(`AI analysis error: ${aiErr.message}. Falling back to object detection.`);
@@ -2250,6 +2339,22 @@ function extractImageMetadata(file) {
         } else if (cocoResult.labels.length > 0) {
           hazards = ruleBasedHazards(cocoResult.labels);
           analysisMode = 'rule-based';
+        }
+        // Also run keyword match against image filename
+        if (window.currentImageMeta && window.currentImageMeta.filename) {
+          const filenameWords = window.currentImageMeta.filename
+            .replace(/[-_\.]/g, ' ')
+            .toLowerCase()
+            .split(' ')
+            .filter(w => w.length > 3);
+          const filenameHazards = ruleBasedHazards(filenameWords);
+          filenameHazards.forEach(h => {
+            if (!hazards.find(existing => existing.name === h.name)) {
+              h.source = 'rule-based-filename';
+              h.details = `Detected from image filename keyword match`;
+              hazards.push(h);
+            }
+          });
         }
       }
 
