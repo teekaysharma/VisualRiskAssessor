@@ -1,0 +1,56 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - heading "VisualRiskAssessor" [level=1] [ref=e3]
+    - paragraph [ref=e4]: HSE visual risk assessment — AI powered
+  - main [ref=e5]:
+    - status [ref=e6]: 📦 Loading ML model...
+    - generic [ref=e7]:
+      - heading "🏗️ Assessment Context" [level=2] [ref=e8]
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Industry
+          - combobox "Industry" [ref=e12] [cursor=pointer]:
+            - option "— Select Industry —"
+            - option "Construction"
+            - option "Oil & Gas" [selected]
+            - option "Manufacturing"
+            - option "Chemical"
+            - option "Logistics"
+            - option "General Workplace"
+        - generic [ref=e13]:
+          - generic [ref=e14]: Task Type
+          - combobox "Task Type" [ref=e15] [cursor=pointer]:
+            - option "— Select Task —" [selected]
+            - option "Working at Height"
+            - option "Confined Space Entry"
+            - option "Hot Work"
+            - option "Electrical Work"
+            - option "Manual Handling"
+            - option "Chemical Handling"
+            - option "General Maintenance"
+        - generic [ref=e16]:
+          - generic [ref=e17]: Location Type
+          - combobox "Location Type" [ref=e18] [cursor=pointer]:
+            - option "— Select Location —" [selected]
+            - option "Indoor"
+            - option "Outdoor"
+            - option "Confined"
+            - option "Elevated"
+            - option "Underground"
+      - generic [ref=e19]: 💡 Select all three fields to pre-load a baseline hazard set into the risk register.
+    - generic [ref=e20]:
+      - heading "Image Input" [level=2] [ref=e21]
+      - button "📷 Open Camera" [ref=e22] [cursor=pointer]
+      - button "🖼 Upload Image" [ref=e23] [cursor=pointer]
+      - button "Upload an image" [ref=e24] [cursor=pointer]: Click or press Enter/Space to upload an image.
+      - generic [ref=e26] [cursor=pointer]:
+        - checkbox "Manual Entry Mode" [ref=e27]
+        - generic [ref=e28]: Manual Entry Mode
+      - generic [ref=e29]:
+        - generic [ref=e30]: 🤖 Groq API Key (optional — enables deep AI analysis)
+        - textbox "🤖 Groq API Key (optional — enables deep AI analysis)" [ref=e31]:
+          - /placeholder: Paste your Groq API key here...
+        - paragraph [ref=e32]:
+          - text: Key stays in your browser only. Enables scene-understanding beyond object labels.
+          - link "Get a free key →" [ref=e33] [cursor=pointer]:
+            - /url: https://console.groq.com/keys

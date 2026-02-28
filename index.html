@@ -222,6 +222,19 @@
     .mode-heuristic { background:#757575; color:#fff; }
     .mode-manual { background:#e65100; color:#fff; }
     .manual-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#e65100; color:#fff; margin-left:4px; }
+    .baseline-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#00695c; color:#fff; margin-left:4px; }
+    .context-panel { background:linear-gradient(135deg,#e8f5e9,#e3f2fd); border:2px solid #1565c0; border-radius:14px; padding:18px; margin-bottom:16px; }
+    .context-panel h2 { margin:0 0 14px; color:#0d47a1; font-size:1.1rem; display:flex; align-items:center; gap:8px; }
+    .context-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    @media (max-width:680px) { .context-grid { grid-template-columns:1fr; } }
+    .context-group label { display:block; font-weight:700; font-size:.82rem; color:#1565c0; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
+    .context-select { width:100%; padding:9px 10px; border:1.5px solid #90caf9; border-radius:8px; font-size:.93rem; background:#fff; color:#212121; cursor:pointer; font-family:inherit; transition:border-color .2s; }
+    .context-select:focus { outline:none; border-color:#1565c0; box-shadow:0 0 0 2px rgba(21,101,192,.2); }
+    .context-hint { margin-top:10px; font-size:.8rem; color:#388e3c; font-style:italic; display:flex; align-items:center; gap:5px; }
+    .baseline-info { margin-top:12px; padding:10px 12px; background:#fff; border-radius:8px; border-left:4px solid #00695c; display:none; }
+    .baseline-info strong { color:#00695c; }
+    .baseline-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+    .baseline-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:#e0f2f1; border:1px solid #80cbc4; border-radius:999px; font-size:.78rem; font-weight:600; color:#00695c; }
     #manualEntrySection { border:1px solid #ff9800; border-radius:10px; padding:14px; background:#fff3e0; margin-top:12px; }
     #manualEntrySection h3 { margin:0 0 12px; font-size:1rem; color:#e65100; }
     .manual-form-row { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
@@ -248,6 +261,53 @@
     <div id="envWarning" class="warning hidden" role="alert"></div>
     <div id="cameraStatus" class="warning hidden" role="status"></div>
     <div id="modelStatus" class="info" role="status">📦 Loading ML model...</div>
+
+    <section id="contextPanel" class="context-panel">
+      <h2>🏗️ Assessment Context</h2>
+      <div class="context-grid">
+        <div class="context-group">
+          <label for="ctxIndustry">Industry</label>
+          <select id="ctxIndustry" class="context-select">
+            <option value="">— Select Industry —</option>
+            <option value="construction">Construction</option>
+            <option value="oilgas">Oil &amp; Gas</option>
+            <option value="manufacturing">Manufacturing</option>
+            <option value="chemical">Chemical</option>
+            <option value="logistics">Logistics</option>
+            <option value="general">General Workplace</option>
+          </select>
+        </div>
+        <div class="context-group">
+          <label for="ctxTask">Task Type</label>
+          <select id="ctxTask" class="context-select">
+            <option value="">— Select Task —</option>
+            <option value="height">Working at Height</option>
+            <option value="confined">Confined Space Entry</option>
+            <option value="hotwork">Hot Work</option>
+            <option value="electrical">Electrical Work</option>
+            <option value="manual">Manual Handling</option>
+            <option value="chemical">Chemical Handling</option>
+            <option value="maintenance">General Maintenance</option>
+          </select>
+        </div>
+        <div class="context-group">
+          <label for="ctxLocation">Location Type</label>
+          <select id="ctxLocation" class="context-select">
+            <option value="">— Select Location —</option>
+            <option value="indoor">Indoor</option>
+            <option value="outdoor">Outdoor</option>
+            <option value="confined">Confined</option>
+            <option value="elevated">Elevated</option>
+            <option value="underground">Underground</option>
+          </select>
+        </div>
+      </div>
+      <div class="context-hint">💡 Select all three fields to pre-load a baseline hazard set into the risk register.</div>
+      <div id="baselineInfo" class="baseline-info">
+        <strong>✅ Baseline hazards loaded:</strong> <span id="baselineCount">0</span> hazard(s) pre-populated from ADOSH-SF typical risk profiles.
+        <div id="baselineTags" class="baseline-tags"></div>
+      </div>
+    </section>
 
     <section id="inputSec" class="card">
       <h2 style="margin-top:0">Image Input</h2>
@@ -370,12 +430,223 @@
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let manualHazards = [];
+  let baselineHazards = [];
   let analysisMode = 'heuristic';
   let modelLoading = true;
   let modelLoadError = null;
   let pendingAnalysis = null;
   let assessmentTimestamp = null;
   let manualModeActive = false;
+
+  const BASELINE_DB = {
+    'construction|height|elevated': [
+      { name:'Fall from Height', L:3, S:5, key:'height', details:'Risk of falling from elevated work platforms, scaffolding, or open edges', eliminate:'Eliminate work at height by redesigning the task to ground level where possible', substitute:'Use pre-fabricated ground-level assemblies or elevated work platforms with full enclosures', engineering:'Install guardrails, toe-boards, and safety nets; use scaffolding with full edge protection', administrative:'Implement permit-to-work for work at height; enforce harness use above 2m; daily pre-work briefings', ppe:'Full-body harness with energy-absorbing lanyard; hard hat; non-slip safety boots' },
+      { name:'Falling Objects', L:3, S:4, key:'struck', details:'Tools, materials, or debris falling from elevated work areas onto persons below', eliminate:'Establish strict exclusion zones directly below elevated work areas', substitute:'Use tethered tools and tool lanyards to prevent dropped objects', engineering:'Install debris nets, toe-boards, and overhead protection screens on scaffolding', administrative:'Barricade and sign exclusion zones; conduct toolbox talks on dropped object prevention', ppe:'Hard hat (minimum Class E); safety boots; high-visibility vest' },
+      { name:'Scaffold Collapse', L:2, S:5, key:'machinery', details:'Structural failure of scaffolding due to overloading, inadequate erection, or ground instability', eliminate:'Use permanent access structures where technically feasible', substitute:'Replace tube-and-fitting scaffolding with proprietary system scaffolding for improved reliability', engineering:'Conduct structural calculations; ensure adequate base plates and sole boards; tie scaffold to structure', administrative:'Competent scaffold erection and inspection by certified scaffolder; tag system (green/red); no overloading', ppe:'Hard hat; safety harness during erection and dismantling; safety boots' },
+      { name:'PPE Non-compliance', L:4, S:3, key:'ppe', details:'Workers not wearing required PPE in elevated work zones, increasing injury severity', eliminate:'Evaluate if PPE-free alternative working methods exist', substitute:'Use lighter, more comfortable PPE to improve compliance', engineering:'Install PPE dispensing stations at access points to elevated areas', administrative:'Enforce site PPE policy; daily supervisor checks; disciplinary procedure for non-compliance', ppe:'Hard hat; high-visibility vest; safety harness; gloves; safety boots — all mandatory in zone' }
+    ],
+    'construction|height|outdoor': [
+      { name:'Fall from Height', L:3, S:5, key:'height', details:'Risk of fall from roof, scaffolding, or elevated work area in outdoor conditions', eliminate:'Redesign work processes to minimise height exposure', substitute:'Use elevated work platforms with full enclosure instead of open scaffolding', engineering:'Guardrails, safety nets, and edge protection on all open sides above 2m', administrative:'Permit-to-work; rescue plan; daily weather assessment; suspend work in high winds above 45 km/h', ppe:'Full-body harness; hard hat; non-slip boots; high-visibility clothing' },
+      { name:'Weather / Wind Exposure', L:3, S:3, key:'other', details:'High winds, rain, or extreme temperature creating unstable conditions at height', eliminate:'Schedule work during favourable weather windows', substitute:'Use enclosed elevated platforms instead of open scaffolding', engineering:'Install windbreaks and weather monitoring equipment on site', administrative:'Define wind-speed thresholds for suspension of work; monitor weather forecasts daily', ppe:'Weatherproof clothing; hard hat with chin strap; non-slip footwear' },
+      { name:'Falling Objects', L:3, S:4, key:'struck', details:'Unsecured tools or materials blown or dropped onto persons below', eliminate:'Establish exclusion zones below elevated work', substitute:'Use enclosed debris chutes for material lowering', engineering:'Toe-boards, safety nets, and debris screens on all scaffolding levels', administrative:'Tethered tools policy; barricaded exclusion zone with signage', ppe:'Hard hat; safety boots; high-visibility vest' },
+      { name:'Scaffold Instability', L:2, S:5, key:'machinery', details:'Scaffolding destabilised by wind, uneven ground, or inadequate anchorage', eliminate:'Use prefabricated access towers with built-in stabilisers', substitute:'Proprietary system scaffold with engineered wind-load calculations', engineering:'Tie scaffold to permanent structure; use outriggers on soft ground; install base plates', administrative:'Structural inspection after any storm event; scaffold tag system; no overloading', ppe:'Hard hat; safety harness during erection; safety boots' }
+    ],
+    'construction|height|indoor': [
+      { name:'Fall from Height', L:3, S:4, key:'height', details:'Falls from internal scaffolding, ladders, or mezzanine levels', eliminate:'Use ground-level prefabrication where possible', substitute:'Mobile elevated work platforms (MEWP) with guardrails instead of ladders', engineering:'Edge protection on all internal openings; floor opening covers; scaffold handrails', administrative:'Permit-to-work; ensure all openings are covered or guarded before work starts', ppe:'Full-body harness at heights above 2m; hard hat; safety boots' },
+      { name:'Overhead Obstruction Strike', L:3, S:3, key:'struck', details:'Head strikes against beams, pipes, or structural elements at low ceiling clearances', eliminate:'Redesign work layout to avoid low-clearance zones', substitute:'Mark and pad low obstacles with high-visibility foam protectors', engineering:'Install warning tape and padded protectors on fixed obstructions', administrative:'Site induction covering low-clearance hazard locations; mandatory hard hat', ppe:'Hard hat (bump cap where full hard hat is impractical); safety boots' },
+      { name:'PPE Non-compliance', L:4, S:3, key:'ppe', details:'Workers omitting PPE in indoor elevated work zones', eliminate:'N/A', substitute:'Investigate lighter PPE alternatives to improve voluntary compliance', engineering:'PPE stations at access points', administrative:'Daily supervisor checks; enforce site PPE policy strictly', ppe:'Hard hat; harness; safety boots; high-visibility vest — all mandatory' }
+    ],
+    'construction|confined|confined': [
+      { name:'Oxygen Deficiency', L:3, S:5, key:'confined', details:'Oxygen levels below safe threshold in confined trench, pit, or enclosed structure', eliminate:'Avoid confined space entry; use remote-operated equipment where possible', substitute:'Use forced-air ventilation to maintain safe oxygen levels before entry', engineering:'Install continuous atmospheric monitoring with audible alarms; forced ventilation system', administrative:'Confined space permit-to-work; pre-entry atmospheric testing; attendant on standby; rescue plan', ppe:'SCBA or supplied-air breathing apparatus if oxygen < 19.5%; full-body harness with tripod retrieval' },
+      { name:'Toxic Gas Accumulation', L:3, S:5, key:'chemical', details:'Build-up of H2S, CO, methane or other toxic gases in confined excavations', eliminate:'Eliminate confined entry through use of robotics or remote sensing', substitute:'Purge and ventilate space with forced air blower before and during entry', engineering:'Continuous multi-gas monitoring (O2, LEL, CO, H2S); extraction ventilation', administrative:'Gas testing log; entry prohibited if readings exceed action levels; rescue plan with trained rescuers', ppe:'Supplied-air or SCBA; chemical-resistant suit if H2S present; full-body harness' },
+      { name:'Engulfment / Entrapment', L:2, S:5, key:'confined', details:'Risk of being engulfed by soil collapse or trapped by structural elements in confined space', eliminate:'Use trenchless technology to avoid excavation entry', substitute:'Trench shoring systems instead of open-face excavation', engineering:'Install trench shields, hydraulic shores, or benching to prevent collapse', administrative:'Competent person to inspect daily; no entry during adverse weather; ground vibration monitoring', ppe:'Full-body harness with retrieval line; hard hat; safety boots' },
+      { name:'Communication Failure', L:3, S:4, key:'other', details:'Loss of contact between entrant and surface attendant in confined space', eliminate:'Minimise time in confined space and use remote tools', substitute:'Use intrinsically safe two-way radios or communication systems', engineering:'Install communication cable or intrinsically safe radio relay if depth exceeds radio range', administrative:'Mandatory check-in protocol every 5–10 minutes; defined non-response rescue trigger', ppe:'N/A' }
+    ],
+    'construction|electrical|indoor': [
+      { name:'Electrical Contact / Electrocution', L:3, S:5, key:'electrical', details:'Direct contact with live conductors during installation or maintenance work indoors', eliminate:'Complete de-energisation before work commences (LOTO)', substitute:'Use battery-powered tools instead of hardwired connections during construction phase', engineering:'Install RCD/GFCI protection on all temporary supplies; use insulated tools', administrative:'Permit-to-work for live electrical work; only qualified electricians on panel work; LOTO procedure', ppe:'Insulated gloves (Class 00 minimum); arc-flash face shield; dielectric boots; insulated tools' },
+      { name:'Arc Flash / Arc Blast', L:2, S:5, key:'electrical', details:'Explosive electrical arc release causing severe burns or blast injury', eliminate:'Perform all switching with equipment de-energised', substitute:'Implement remote switching devices to increase worker distance', engineering:'Install arc-flash barriers; use remote racking devices for switchgear', administrative:'Arc flash hazard analysis; PPE labelling on all panels; authorised persons list', ppe:'Arc-rated FR clothing (minimum 8 cal/cm²); arc-flash face shield; insulated gloves; leather outer gloves' },
+      { name:'Temporary Supply Overloading', L:3, S:3, key:'electrical', details:'Overloaded temporary distribution boards causing fire or equipment failure', eliminate:'Design adequately rated distribution systems before construction commences', substitute:'Use proprietary spider boxes with built-in overload protection', engineering:'Install RCDs and MCBs on all temporary circuits; inspect regularly', administrative:'Qualified electrician to approve all temporary supplies; monthly inspection regime', ppe:'Insulated gloves when connecting/disconnecting; safety boots; hard hat' }
+    ],
+    'construction|maintenance|outdoor': [
+      { name:'Slip / Trip / Fall', L:4, S:3, key:'slip', details:'Slipping on muddy, wet, or uneven outdoor construction site surfaces', eliminate:'Maintain site to prevent standing water and mud accumulation', substitute:'Install temporary walkways and mats over problem areas', engineering:'Proper drainage; anti-slip aggregate on temporary access paths', administrative:'Daily site inspections; housekeeping procedures; prompt repair of trip hazards', ppe:'Safety boots with ankle support and slip-resistant soles; high-visibility vest' },
+      { name:'Manual Handling Injury', L:4, S:3, key:'ergonomic', details:'Musculoskeletal injury from lifting, carrying, or awkward postures on site', eliminate:'Eliminate manual lifting tasks by mechanical means where feasible', substitute:'Use mechanical aids: forklifts, pallet trucks, hoists for loads > 25 kg', engineering:'Reduce package sizes; provide handling aids and trolleys', administrative:'Manual handling training; buddy lifting system; task rotation to limit exposure', ppe:'Gloves; safety boots; back support belt (advisory, not a substitute for technique)' },
+      { name:'Struck by Plant / Vehicles', L:3, S:4, key:'struck', details:'Workers struck by on-site vehicles, plant, or mobile equipment', eliminate:'Separate pedestrian and vehicle routes entirely', substitute:'Implement one-way vehicle traffic system to reduce conflict points', engineering:'Physical barriers, signage, and designated pedestrian walkways', administrative:'Traffic management plan; site induction; speed limits; banksman for reversing vehicles', ppe:'High-visibility vest (minimum Class 2); safety boots; hard hat' }
+    ],
+    'oilgas|height|elevated': [
+      { name:'Fall from Height (Derrick/Rig)', L:3, S:5, key:'height', details:'Fall from derrick floor, monkey board, or elevated rig structure during drilling operations', eliminate:'Use automated pipe-handling equipment to remove need for elevated manual work', substitute:'Remote-operated pipe handling systems; replace personnel with automated racking arms', engineering:'Full fall arrest systems; fixed ladders with ladder cages; horizontal lifelines on derrick', administrative:'Work-at-height permit; certified riggers only; emergency evacuation plan from elevated positions', ppe:'Full-body harness with self-retracting lifeline; hard hat; non-slip boots' },
+      { name:'Dropped Objects (Rig Floor)', L:4, S:4, key:'struck', details:'Tools, equipment, or tubulars falling from rig floor or elevated work areas', eliminate:'Use fully enclosed rig floor design with no open drops to lower levels', substitute:'Tethered tools and equipment retention devices on all elevated work', engineering:'Mesh barriers; secondary retention systems; dropped object prevention screens', administrative:'Dropped object prevention programme (DROPS); pre-job hazard assessment for all elevated tasks', ppe:'Hard hat (API-rated); safety boots; safety glasses; neck protection' },
+      { name:'H2S Exposure at Height', L:2, S:5, key:'chemical', details:'H2S gas release in elevated rig areas where evacuation routes are limited', eliminate:'Install automated H2S detection with automatic alarm and shutdown', substitute:'Use enclosed rig design with forced ventilation to prevent H2S accumulation', engineering:'Continuous H2S monitoring at multiple levels; wind direction indicator at rig', administrative:'H2S emergency response plan; muster point upwind; personnel accountability', ppe:'SCBA or escape breathing apparatus; personnel gas detector; H2S training certification' }
+    ],
+    'oilgas|hotwork|outdoor': [
+      { name:'Hydrocarbon Fire / Explosion', L:2, S:5, key:'fire', details:'Ignition of hydrocarbon vapours or gases by hot work activities in process areas', eliminate:'Relocate all hot work to designated safe areas away from process equipment', substitute:'Use mechanical cold-cutting methods instead of hot work where structurally feasible', engineering:'Gas testing before and continuously during hot work; blast walls; portable gas detectors', administrative:'Hot work permit with gas test countersignature; fire watch during and 60 min post-work; standby firefighting', ppe:'FR/antistatic coveralls; face shield with welding lens; leather gloves; safety boots; SCBA if gas detected' },
+      { name:'Flash Fire / Burns', L:3, S:4, key:'fire', details:'Flash fire from unexpected vapour cloud ignition during welding, cutting, or grinding', eliminate:'Purge and gas-free equipment before hot work commences', substitute:'Use cold-work alternatives (bolting, mechanical cutting) where feasible', engineering:'Fire suppression system standby; fire blankets to contain sparks', administrative:'Hot work permit; continuous gas monitoring; fire watcher positioned with extinguisher', ppe:'FR coveralls (minimum NFPA 2112 rated); leather welding gauntlets; face shield; leather boots' },
+      { name:'UV Radiation (Welding Arc)', L:4, S:3, key:'ppe', details:'Exposure to UV radiation from welding arc causing arc eye or skin burns', eliminate:'Enclose welding area with opaque screens to protect others in area', substitute:'Use automated welding equipment where possible', engineering:'Welding screens and barriers around work area; ventilation extraction', administrative:'Welding permit; eye protection enforcement for all workers in vicinity', ppe:'Auto-darkening welding helmet (shade 10–13); UV-blocking safety glasses for nearby workers; FR sleeves' },
+      { name:'Toxic Fume Inhalation', L:3, S:3, key:'chemical', details:'Inhalation of welding fumes, cutting gases, or coating burn-off vapours', eliminate:'Eliminate coated/painted materials from hot work scope where possible', substitute:'Use low-fume welding consumables and processes', engineering:'Local exhaust ventilation (LEV) at source; general area ventilation', administrative:'Assess base materials for lead, chromate, or isocyanate coatings before hot work; RPE programme', ppe:'Minimum FFP3 welding fume mask; PAPR where high-toxicity coatings present; safety boots; gloves' }
+    ],
+    'oilgas|confined|confined': [
+      { name:'H2S Gas Exposure', L:4, S:5, key:'chemical', details:'Hydrogen sulphide accumulation in confined vessels, tanks, or pipework', eliminate:'Avoid confined entry; use remote inspection technology', substitute:'Purge vessel with nitrogen then fresh air before entry', engineering:'Continuous H2S monitoring inside and at entry point; forced ventilation', administrative:'Confined space permit; pre-entry gas test log; trained rescuers in H2S on standby; buddy system', ppe:'SCBA (not SCBA-equivalent); full-body harness with tripod retrieval; gas detector badge' },
+      { name:'Oxygen Deficiency', L:3, S:5, key:'confined', details:'Oxygen depletion in vessels due to inert gas purging, rust oxidation, or biological activity', eliminate:'Use remote tools to avoid entry; inspect externally where possible', substitute:'Positive-pressure supplied-air breathing apparatus if O2 cannot be maintained', engineering:'Continuous atmospheric monitoring; forced air ventilation prior to and during entry', administrative:'Gas test before entry and every 30 minutes; entry prohibited if O2 < 19.5%; attendant with rescue capability', ppe:'Supplied-air breathing apparatus; full-body harness; intrinsically safe equipment only' },
+      { name:'Toxic Residue Contact', L:3, S:4, key:'chemical', details:'Skin or eye contact with toxic residues on vessel internals (hydrocarbon sludge, scale)', eliminate:'Use high-pressure water or chemical cleaning system to clean remotely', substitute:'Use robotic cleaning devices to minimise personnel exposure', engineering:'Provide decontamination station at vessel entry; air monitoring', administrative:'COSHH assessment for all residue types; medical surveillance programme; buddy system', ppe:'Chemical-resistant coveralls; nitrile or neoprene gloves; face shield; chemical resistant boots; RPE' }
+    ],
+    'oilgas|electrical|indoor': [
+      { name:'Electrical Ignition of Flammables', L:2, S:5, key:'electrical', details:'Electrical equipment generating sparks or arcs in classified hazardous areas (ATEX/NEC zones)', eliminate:'Re-classify area or use intrinsically safe processes that eliminate ignition risk', substitute:'Replace non-ATEX equipment with certified explosion-proof alternatives', engineering:'Zone classification drawings; earthing and bonding of all metallic equipment; intrinsically safe instruments', administrative:'Permit-to-work for electrical work in hazardous areas; verify ATEX certification before installation', ppe:'Anti-static coveralls; conductive safety boots; anti-static gloves; insulated tools' },
+      { name:'Arc Flash', L:2, S:5, key:'electrical', details:'Explosive electrical arc in high-voltage switchgear rooms or MCC rooms', eliminate:'De-energise before any electrical work; LOTO programme', substitute:'Remote-racking devices for circuit breakers; remote monitoring systems', engineering:'Arc flash hazard analysis; install arc flash PPE labelling on all panels', administrative:'Authorised persons register; hot work permit for energised work; LOTO procedure', ppe:'Arc-rated FR suit (minimum 25 cal/cm² for HV); arc-flash hood; insulated gloves; leather outer gloves; dielectric boots' },
+      { name:'Electrical Contact', L:3, S:4, key:'electrical', details:'Contact with live conductors during installation, repair, or inspection activities', eliminate:'LOTO — complete de-energisation and verification before work', substitute:'Use battery-powered hand tools to reduce exposure', engineering:'Insulated barriers; test before touch procedure; RCD protection', administrative:'Qualified electricians only; LOTO log; two-person verification of isolation', ppe:'Insulated gloves; arc-rated face shield; dielectric boots; insulated tools' }
+    ],
+    'oilgas|manual|indoor': [
+      { name:'Manual Handling Injury', L:4, S:3, key:'ergonomic', details:'Musculoskeletal injury from handling heavy tubulars, pipe spools, or valves', eliminate:'Use mechanical handling systems for all loads > 25 kg', substitute:'Pre-fabricate assemblies at ground level to reduce field manipulation', engineering:'Chain hoists, monorail cranes, and powered pallet trucks for heavy items', administrative:'Manual handling risk assessment; buddy-lift system; task rotation; warm-up programme', ppe:'Gloves; safety boots; back support belt (advisory)' },
+      { name:'Pinch Point / Crush Injury', L:3, S:4, key:'machinery', details:'Hands or fingers caught in pipe fittings, valve stems, or rotating equipment', eliminate:'Use pipe-handling tongs and mechanical manipulators', substitute:'Install remote-operated valve actuators to remove manual operation', engineering:'Machine guarding on rotating parts; anti-crush protection on pipe handling equipment', administrative:'Pre-task briefing on pinch points; LOTO before maintenance on rotating equipment; glove enforcement', ppe:'Cut-resistant gloves; safety boots; eye protection' }
+    ],
+    'manufacturing|machinery|indoor': [
+      { name:'Machinery Entanglement', L:3, S:4, key:'machinery', details:'Body part or clothing entanglement in rotating machinery, conveyors, or presses', eliminate:'Eliminate manual interaction with running machinery; full automation', substitute:'Use cobots (collaborative robots) with force-limiting safety features', engineering:'Fixed guards, interlocked guards, and emergency stop devices on all dangerous parts', administrative:'LOTO procedure before any maintenance; machinery guarding inspection register; no loose clothing policy', ppe:'Tight-fitting overalls; no jewellery or loose clothing; safety boots; eye protection' },
+      { name:'Struck by Ejected Material', L:3, S:4, key:'struck', details:'Ejection of workpieces, swarf, or tool fragments from machining operations', eliminate:'Fully enclose machining operations with interlocked guards', substitute:'Use CNC centres with full enclosures instead of open machine tools', engineering:'Splash guards; tool-breakage detection; auto-shutdown on tool failure', administrative:'Machine set-up procedure; correct tool selection and condition checks; bystander exclusion zone', ppe:'Safety glasses (minimum); face shield for grinding/turning; steel toe-capped boots; cut-resistant gloves' },
+      { name:'Noise-Induced Hearing Loss', L:4, S:3, key:'other', details:'Chronic noise exposure from manufacturing machinery exceeding 85 dB(A) action level', eliminate:'Eliminate noise source through machinery redesign or replacement with quieter equipment', substitute:'Use low-noise machinery and acoustic dampening where feasible', engineering:'Acoustic enclosures; vibration damping mounts; noise barriers around loud equipment', administrative:'Noise risk assessment; audiometric surveillance; hearing conservation programme; noise zone signage', ppe:'Ear defenders (minimum SNR 20 dB) or custom-moulded ear plugs; enforced in >85 dB(A) zones' }
+    ],
+    'manufacturing|height|elevated': [
+      { name:'Fall from Mezzanine / Platform', L:3, S:4, key:'height', details:'Falls from factory mezzanine floors, elevated walkways, or production platforms', eliminate:'Redesign to minimise elevated work requirements', substitute:'Use MEWP with full guardrails instead of open access platforms', engineering:'Fixed guardrails (minimum 1.1m), mid-rail, and toe-board on all elevated edges', administrative:'Work-at-height permit; competent supervision; no work on wet or slippery grating', ppe:'Full-body harness if work requires lean-over or reach beyond guardrail; safety boots; hard hat' },
+      { name:'Falling Objects onto Production Floor', L:3, S:4, key:'struck', details:'Tools, parts, or assemblies dropped from elevated work onto workers below', eliminate:'Schedule elevated work during production shutdown to clear workers below', substitute:'Use tethered tools and tool lanyards', engineering:'Toe-boards and debris nets under elevated work areas; barricade floor below', administrative:'Exclusion zone on floor below elevated work; hard hat mandatory in drop zone', ppe:'Hard hat; safety boots; high-visibility vest for all in proximity' },
+      { name:'PPE Non-compliance', L:3, S:3, key:'ppe', details:'Workers on elevated factory platforms not using required fall protection PPE', eliminate:'N/A', substitute:'Investigate height work elimination; use drones for elevated inspections', engineering:'Increase number of fixed anchor points for harnesses on elevated platforms', administrative:'Supervisor checks at start of every elevated task; disciplinary process', ppe:'Full-body harness; hard hat; safety boots — mandatory above 2m' }
+    ],
+    'manufacturing|chemical|indoor': [
+      { name:'Chemical Skin/Eye Contact', L:3, S:4, key:'chemical', details:'Splashing of process chemicals, solvents, or cleaning agents causing burns or irritation', eliminate:'Substitute hazardous chemicals with safer alternatives where technically feasible', substitute:'Use safer solvent alternatives with lower toxicity profiles', engineering:'Closed-loop chemical transfer systems; local exhaust ventilation; emergency eyewash and shower', administrative:'COSHH assessment for every chemical; SDS accessible at point of use; chemical handling training', ppe:'Chemical-resistant gloves; splash-proof safety goggles; chemical apron; safety boots' },
+      { name:'Inhalation of Chemical Vapours', L:3, S:4, key:'chemical', details:'Breathing in solvent vapours, aerosols, or chemical mists during processing or cleaning', eliminate:'Eliminate volatile chemicals; switch to water-based processes', substitute:'Use low-VOC or water-based cleaning agents', engineering:'General and local exhaust ventilation; airflow monitoring; fume extraction hoods', administrative:'Exposure monitoring programme; health surveillance; RPE face-fit testing', ppe:'Half-face respirator with OV/P100 cartridges; chemical-resistant gloves; safety goggles' },
+      { name:'Chemical Spill / Contamination', L:3, S:3, key:'chemical', details:'Uncontrolled release of process chemicals contaminating work area or drains', eliminate:'Fully enclosed chemical delivery and dispensing systems', substitute:'Use pre-diluted chemicals in smaller, sealed containers', engineering:'Bunded storage areas; spill containment berms; automatic shut-off valves', administrative:'Spill response plan; trained spill response team; regular chemical inventory checks', ppe:'Chemical-resistant coveralls; face shield; impermeable boots; thick gloves during spill response' }
+    ],
+    'manufacturing|electrical|indoor': [
+      { name:'Contact with Live Parts', L:3, S:4, key:'electrical', details:'Electrical shock from contact with exposed live terminals, bus bars, or conductors during maintenance', eliminate:'Complete de-energisation and LOTO before all electrical maintenance', substitute:'Use condition monitoring to reduce maintenance frequency and invasiveness', engineering:'Insulated enclosures; restricted access to electrical rooms; LOTO stations', administrative:'Qualified electricians only; two-person LOTO verification; hot-work permit for live work', ppe:'Class 2 insulated gloves; arc-rated face shield; dielectric boots; insulated tools' },
+      { name:'Electrical Fire', L:2, S:4, key:'fire', details:'Electrical fault causing fire in distribution boards, cable trays, or electrical rooms', eliminate:'Design systems to current standards with adequate derating and protection', substitute:'Use fire-retardant cable types (LSZH) throughout facility', engineering:'RCDs, MCBs, and thermal overload protection on all circuits; thermal imaging inspection programme', administrative:'Annual electrical inspection by certified engineer; hot-work permit; fire extinguisher adjacent to panels', ppe:'Fire-retardant clothing for electrical workers; insulated gloves; safety boots' }
+    ],
+    'chemical|chemical|indoor': [
+      { name:'Toxic Chemical Inhalation', L:3, S:5, key:'chemical', details:'Inhalation of high-toxicity chemical vapours or aerosols during process operations or maintenance', eliminate:'Substitute with less toxic alternatives; enclose process entirely', substitute:'Use lower-toxicity reagents in process chemistry where feasible', engineering:'Forced ventilation with HEPA/carbon filtration; local exhaust at all chemical handling points; continuous air monitoring', administrative:'Chemical exposure monitoring; biological health surveillance; restricted entry for non-essential personnel', ppe:'PAPR or full-face air-purifying respirator; chemical-resistant suit; impermeable gloves and boots' },
+      { name:'Skin / Eye Chemical Burn', L:3, S:4, key:'chemical', details:'Direct contact with corrosive acids, caustics, or reactive chemicals causing injury', eliminate:'Eliminate human contact through fully automated chemical dispensing systems', substitute:'Replace concentrated acids/caustics with dilute or safer alternatives', engineering:'Closed-loop dispensing; emergency eyewash and safety shower within 10 seconds of hazard; bunded transfer areas', administrative:'COSHH assessment; SDS at point of use; first aid trained in chemical burns on every shift', ppe:'Chemical-resistant apron; face shield (not just goggles); nitrile or neoprene gloves; chemical-resistant boots' },
+      { name:'Runaway Reaction / Explosion', L:2, S:5, key:'fire', details:'Exothermic runaway reaction in reactor vessels or storage causing explosion or fire', eliminate:'Redesign process to operate within inherently safer temperature and pressure ranges', substitute:'Use continuous flow micro-reactors to limit inventory at any one time', engineering:'Temperature and pressure monitoring with automatic emergency shutdown (ESD); relief valves; blast shields', administrative:'Hazop review; qualified process chemist sign-off on all changes; emergency response plan with ESD test schedule', ppe:'Full face shield; FR/antistatic coveralls; chemical-resistant gloves; chemical-resistant boots; SCBA on standby' },
+      { name:'Chemical Spill / Environmental Release', L:3, S:3, key:'chemical', details:'Uncontrolled release of process chemicals posing environmental and personnel hazard', eliminate:'Fully enclosed process systems with no atmospheric venting', substitute:'Use double-walled vessels and secondary containment for all hazardous materials', engineering:'Bunded storage; automatic leak detection; drain isolation valves; spill containment pits', administrative:'Spill response plan; trained emergency response team; environmental monitoring programme', ppe:'Chemical-resistant coveralls; face shield; impermeable gloves and boots for spill response' }
+    ],
+    'chemical|hotwork|outdoor': [
+      { name:'Ignition of Flammable Atmosphere', L:2, S:5, key:'fire', details:'Ignition of flammable vapour cloud from process leaks or storage by hot work activities', eliminate:'Relocate hot work to designated safe area; use cold-cutting methods where possible', substitute:'Water-cooled cutting systems or mechanical alternatives', engineering:'Gas detection at work site; continuous monitoring; blast walls if work within hazardous zone', administrative:'Hot work permit with signed gas tests; process isolation and purge of adjacent equipment; fire watch', ppe:'FR/antistatic coveralls; SCBA if flammable atmosphere detected; face shield; leather gloves; conductive boots' },
+      { name:'Flash Fire from Vapour Release', L:3, S:5, key:'fire', details:'Sudden vapour ignition during welding or cutting near process piping', eliminate:'Purge, gas-free, and blind off all process lines before hot work starts', substitute:'Mechanical cold-cutting for tie-in work adjacent to live process', engineering:'Portable gas detection; fire suppression standby; blast-rated barriers if needed', administrative:'Permit-to-work with gas test every 30 min; dedicated fire watcher; emergency evacuation route', ppe:'FR coveralls (NFPA 2112 minimum); SCBA escape set; face shield; leather gloves and boots' },
+      { name:'Toxic Fume from Chemical Coating Burn-off', L:3, S:4, key:'chemical', details:'Burning of chemical coatings (isocyanates, lead, chromate) releasing toxic fumes', eliminate:'Remove all coatings by mechanical means before hot work', substitute:'Mechanical surface preparation instead of burn-off', engineering:'Local exhaust ventilation; air monitoring for specific chemicals', administrative:'COSHH assessment for all surface coatings; stop-work authority if fume levels exceed limits', ppe:'PAPR with OV/P100 cartridge or supplied-air respirator; FR coveralls; face shield; gloves' }
+    ],
+    'chemical|confined|confined': [
+      { name:'Toxic Atmosphere in Vessel', L:4, S:5, key:'chemical', details:'Toxic chemical residues off-gassing inside storage tanks or reactor vessels', eliminate:'Use remote inspection technology to avoid entry', substitute:'Purge and clean remotely before any entry', engineering:'Forced air ventilation; continuous multi-gas monitoring (O2, LEL, specific toxics); SCBA required', administrative:'Confined space permit with multi-gas test record; trained rescue team in chemical PPE on standby', ppe:'SCBA (not air-purifying); chemical-resistant suit; full-body harness with tripod retrieval; chemical-resistant boots' },
+      { name:'Oxygen Deficiency in Inerted Vessel', L:3, S:5, key:'confined', details:'Oxygen depletion from nitrogen blanketing or inert gas purging in chemical vessels', eliminate:'Avoid entry; use remote tools for inspection and minor work', substitute:'Purge with fresh air and verify O2 level before entry', engineering:'Oxygen monitoring at entry point and inside; continuous forced ventilation', administrative:'Confined space permit; entry prohibited if O2 < 19.5%; gas test log; attendant on standby', ppe:'Supplied-air breathing apparatus; full-body harness; intrinsically safe equipment' },
+      { name:'Chemical Residue Contact', L:3, S:4, key:'chemical', details:'Skin or eye contact with toxic or corrosive chemical residues on vessel internals', eliminate:'Remotely clean vessel before entry', substitute:'Use robotic cleaning systems', engineering:'Decontamination station at entry point; air monitoring inside', administrative:'COSHH assessment for residues; first aid trained personnel on standby; emergency eyewash at entry', ppe:'Chemical-resistant suit (Type 3 or higher); full-face air-purifying respirator; impermeable gloves and boots' }
+    ],
+    'logistics|manual|indoor': [
+      { name:'Manual Handling Musculoskeletal Injury', L:5, S:3, key:'ergonomic', details:'Back, shoulder, or limb injury from repetitive lifting, carrying, or awkward posture in warehouse', eliminate:'Automate picking and packing operations to eliminate manual lifting', substitute:'Use powered conveyors and sorters to replace manual carrying', engineering:'Provide pallet trucks, pump trucks, and electric stackers; height-adjustable work stations', administrative:'Manual handling risk assessment; training on safe lifting technique; task rotation to limit cumulative exposure', ppe:'Gloves; safety boots; back support belt (advisory, not primary control)' },
+      { name:'Forklift / Vehicle Pedestrian Strike', L:3, S:5, key:'struck', details:'Pedestrian struck by forklift truck or pallet mover in warehouse aisles', eliminate:'Fully segregate pedestrian and forklift routes with physical barriers', substitute:'Automated guided vehicles (AGV) with pedestrian detection instead of manned forklifts', engineering:'Physical barriers; pedestrian priority crossings with signals; proximity warning systems on forklifts', administrative:'Traffic management plan; pedestrian walkway enforcement; forklift operator training and licensing', ppe:'High-visibility vest (minimum Class 2); safety boots; hard hat in loading dock areas' },
+      { name:'Racking Collapse', L:2, S:5, key:'machinery', details:'Storage racking failure causing collapse of palletised goods onto workers below', eliminate:'Use automated storage and retrieval systems (ASRS) to eliminate human entry to racking areas', substitute:'Use lower, more stable racking configurations with wider base ratings', engineering:'Racking load rating labels; column protectors; racking inspection and damage repair programme; floor anchoring', administrative:'Racking inspection by competent person quarterly; stop-use tags for damaged racking; overloading prohibition', ppe:'Hard hat when working near or in racking aisles; safety boots; high-visibility vest' },
+      { name:'Slip / Trip on Warehouse Floor', L:4, S:3, key:'slip', details:'Slipping on wet or contaminated warehouse floor, or tripping on wrapping materials and debris', eliminate:'Install drainage and impermeable floors to eliminate pooling', substitute:'Use dry-cleaning methods instead of wet mopping during operational hours', engineering:'Anti-slip floor coating in high-risk areas; proper drainage; adequate lighting', administrative:'Housekeeping schedule; wet floor signage; immediate clean-up of spills; clear walkways policy', ppe:'Safety boots with slip-resistant soles; high-visibility vest' }
+    ],
+    'logistics|height|elevated': [
+      { name:'Fall from Loading Bay / Dock Edge', L:3, S:4, key:'height', details:'Fall from raised loading dock or trailer edge during loading and unloading operations', eliminate:'Use dock levellers and enclosed dock shelters to eliminate open fall exposure', substitute:'Use automated loading equipment to replace manual dock-edge work', engineering:'Dock edge barriers and dock safety gates; dock levellers; vehicle restraints to prevent trailer pull-away', administrative:'Safe system of work for loading dock; no unsecured trailer entry; daily dock equipment checks', ppe:'Safety boots; high-visibility vest; hard hat when under raised loads' },
+      { name:'Fall from Pallet Racking Level', L:3, S:4, key:'height', details:'Falls when accessing upper racking levels for stock placement or retrieval', eliminate:'Use automated storage to remove need for elevated manual access', substitute:'Order-pick trucks with operator platforms instead of manual ladder access', engineering:'Order-pick truck with full operator cage and fall arrest anchor; fixed platforms for frequently accessed levels', administrative:'No unsanctioned climbing of racking; permit for elevated picking; operator certification for order-pick trucks', ppe:'Full-body harness when accessing fixed elevated platforms; safety boots; hard hat' },
+      { name:'Falling Load from Height', L:3, S:4, key:'struck', details:'Palletised goods or individual items falling from upper racking levels onto workers or forklift operators', eliminate:'Implement automated storage and retrieval to eliminate unsecured elevated storage', substitute:'Use shrink-wrapped and strapped pallet loads only in elevated positions', engineering:'Racking safety clips; pallet support bars; load backguards on forklift masts; floor barricades during picking', administrative:'Racking load integrity checks; no damaged packaging in elevated positions; exclusion zones during crane lifts', ppe:'Hard hat in all racking aisles; safety boots; high-visibility vest' }
+    ],
+    'logistics|electrical|indoor': [
+      { name:'Battery Charging Hydrogen Explosion', L:2, S:4, key:'fire', details:'Hydrogen gas accumulation in forklift battery charging room causing explosion risk', eliminate:'Use lithium-ion battery trucks with minimal off-gassing to eliminate hydrogen risk', substitute:'Replace lead-acid batteries with sealed VRLA or Li-ion alternatives', engineering:'Continuous ventilation in charging area; H2 gas detection; no ignition sources within 3m of charging points', administrative:'Charging area access control; no hot work in charging area; housekeeping and ventilation checks daily', ppe:'Safety boots; eye protection for battery acid; anti-static clothing in charging zone' },
+      { name:'Electrical Contact from Damaged Equipment', L:3, S:3, key:'electrical', details:'Shock from damaged cables, charging units, or electrical faults on warehouse machinery', eliminate:'LOTO before all electrical maintenance', substitute:'Wireless charging systems to reduce cable wear and trip hazards', engineering:'RCD protection on all circuits; regular cable inspection programme; portable appliance testing (PAT)', administrative:'Defect reporting system; take-out-of-service procedure for damaged equipment; qualified electrician for all repairs', ppe:'Insulated gloves for electrical work; safety boots; eye protection' }
+    ],
+    'logistics|confined|confined': [
+      { name:'Oxygen Deficiency in Refrigerated Container', L:3, S:5, key:'confined', details:'Oxygen depletion in refrigerated shipping containers from CO2 or nitrogen atmosphere', eliminate:'Avoid entry into refrigerated containers; use remote inspection', substitute:'Ventilate container for minimum 30 minutes before entry; verify O2 level', engineering:'Continuous O2 monitoring at entry; forced ventilation before and during entry', administrative:'Confined space permit; gas test before entry; attendant outside at all times', ppe:'Supplied-air or SCBA if O2 cannot be confirmed; full-body harness' },
+      { name:'Crush Injury from Shifting Cargo', L:3, S:4, key:'machinery', details:'Crushing from unstable palletised cargo or shifting loads inside containers or trailers', eliminate:'Use mechanised loading/unloading to avoid personnel entry with unsecured loads', substitute:'Ensure all loads are secured with strapping and dunnage before entry', engineering:'Cargo restraint systems; shoring bars to prevent load shift during transport', administrative:'Safe system for container entry; no entry until load stability confirmed; buddy system', ppe:'Safety boots; hard hat; cut-resistant gloves' }
+    ],
+    'general|maintenance|indoor': [
+      { name:'Slip / Trip / Fall', L:4, S:3, key:'slip', details:'Slips, trips, and falls on general workplace floors, stairwells, or access routes', eliminate:'Eliminate slip/trip hazards by redesigning flooring and access routes', substitute:'Install permanent anti-slip flooring instead of temporary mats', engineering:'Anti-slip surfaces; adequate lighting; handrails on all stairways; step nosing highlighting', administrative:'Regular housekeeping inspection; immediate repair of defects; wet floor signage; clear walkway policy', ppe:'Safety footwear with slip-resistant soles' },
+      { name:'Manual Handling Injury', L:4, S:3, key:'ergonomic', details:'Musculoskeletal injury from manual lifting, carrying, or repetitive tasks', eliminate:'Automate material handling where economically feasible', substitute:'Mechanical aids for loads > 10 kg; avoid manual handling above shoulder height', engineering:'Trolleys, sack trucks, conveyor systems, and height-adjustable work surfaces', administrative:'Manual handling training; weight limit signage on packages; buddy system for heavy items', ppe:'Gloves; safety boots; back support (advisory)' },
+      { name:'Electrical Contact', L:3, S:4, key:'electrical', details:'Contact with live wires or electrical outlets during maintenance or office activities', eliminate:'LOTO before all electrical work', substitute:'Use battery-powered tools wherever possible', engineering:'RCD protection on all circuits; insulated outlet covers; PAT testing schedule', administrative:'Qualified electrician for all wiring work; defect reporting; no DIY electrical repair', ppe:'Insulated gloves for electrical work; safety boots' },
+      { name:'Fire Hazard', L:2, S:4, key:'fire', details:'Fire risk from electrical faults, accumulated combustibles, or improperly stored flammables', eliminate:'Eliminate fire load by removing unnecessary combustibles', substitute:'Replace flammable materials with fire-retardant alternatives', engineering:'Smoke detectors; fire suppression; emergency lighting; clear escape routes', administrative:'Fire risk assessment; fire drills; housekeeping to prevent accumulation of combustibles; extinguisher maintenance', ppe:'N/A — evacuation only; fire warden vest for designated fire wardens' }
+    ],
+    'general|chemical|indoor': [
+      { name:'Chemical Inhalation', L:3, S:3, key:'chemical', details:'Breathing in cleaning products, aerosols, or workplace chemical vapours', eliminate:'Substitute with non-chemical or low-VOC alternatives', substitute:'Use water-based or less hazardous cleaning products', engineering:'Ventilation in chemical storage and use areas; extract ventilation hoods', administrative:'SDS at point of use; COSHH training; correct dilution procedures', ppe:'RPE (FFP3 mask or half-face respirator with OV cartridge) for concentrated chemicals; gloves; goggles' },
+      { name:'Skin/Eye Chemical Contact', L:3, S:3, key:'chemical', details:'Direct contact with cleaning products, disinfectants, or laboratory chemicals', eliminate:'Use safer alternatives that do not require PPE', substitute:'Use RTU (ready-to-use) dilute formulations instead of concentrates', engineering:'Emergency eyewash stations accessible within 10 seconds; enclosed chemical dispensing', administrative:'COSHH assessment; first aid training for chemical burns; SDS training', ppe:'Chemical-resistant gloves; safety goggles; apron where splash risk exists' }
+    ],
+    'general|height|elevated': [
+      { name:'Fall from Ladder', L:3, S:4, key:'height', details:'Falls from portable ladders during access, maintenance, or housekeeping tasks', eliminate:'Eliminate ladder use by providing permanent fixed access solutions', substitute:'Use podium steps or MEWP for work requiring extended time at height', engineering:'Secure top and base of all portable ladders; use ladder stand-offs; ensure 300mm above landing point', administrative:'No lone working at height; face-the-ladder rule; 3-point contact at all times; no overreaching', ppe:'Safety boots with ankle support; no use of harness on standard portable ladders (use MEWP instead)' },
+      { name:'Fall from Stepladder', L:3, S:3, key:'height', details:'Falls from stepladders used for tasks requiring only short-duration work at low height', eliminate:'Use adjustable-height workbenches or pedestals instead of stepladders', substitute:'Use podium steps (anti-tipping design) for longer-duration tasks', engineering:'Ensure stepladder is fully open and locked; level surface; non-slip feet', administrative:'No standing on top step or working one-handed above shoulder height from stepladder; training required', ppe:'Safety boots; no PPE substitutes for safe use procedures on stepladders' },
+      { name:'Falling Objects from Height', L:2, S:3, key:'struck', details:'Tools or materials dropped from elevated work areas onto people below', eliminate:'Minimise elevated work; use purpose-built tool storage at height with retention', substitute:'Use tethered tools', engineering:'Toe-boards on any elevated platform; barricade below area of work', administrative:'Exclusion zone below elevated work; hard hat mandatory in drop zone', ppe:'Hard hat for anyone within drop zone; safety boots' }
+    ]
+  };
+
+  function getBaselineKey(industry, task, location) {
+    const candidates = [
+      `${industry}|${task}|${location}`,
+      `${industry}|${task}|indoor`,
+      `${industry}|${task}|outdoor`,
+      `${industry}|maintenance|${location}`,
+      `general|${task}|${location}`,
+      `general|maintenance|indoor`
+    ];
+    for (const key of candidates) {
+      if (BASELINE_DB[key]) return key;
+    }
+    return null;
+  }
+
+  function buildBaselineHazards(industry, task, location) {
+    const key = getBaselineKey(industry, task, location);
+    if (!key) return [];
+    return BASELINE_DB[key].map(entry => {
+      const dbEntry = hazardDB[entry.key] || hazardDB.other;
+      return {
+        name: entry.name,
+        L: entry.L,
+        S: entry.S,
+        risk: entry.L * entry.S,
+        conf: 1.0,
+        recs: dbEntry.recs,
+        source: 'baseline',
+        details: entry.details,
+        eliminate: entry.eliminate,
+        substitute: entry.substitute,
+        engineering: entry.engineering,
+        administrative: entry.administrative,
+        ppe: entry.ppe,
+        isBaseline: true
+      };
+    });
+  }
+
+  function applyContextSelection() {
+    const industry = $('ctxIndustry').value;
+    const task = $('ctxTask').value;
+    const location = $('ctxLocation').value;
+    if (!industry || !task || !location) {
+      baselineHazards = [];
+      $('baselineInfo').style.display = 'none';
+      if (!imageData && manualHazards.length === 0) {
+        els.results.classList.add('hidden');
+      }
+      return;
+    }
+    baselineHazards = buildBaselineHazards(industry, task, location);
+    const infoEl = $('baselineInfo');
+    const countEl = $('baselineCount');
+    const tagsEl = $('baselineTags');
+    countEl.textContent = baselineHazards.length;
+    tagsEl.innerHTML = baselineHazards.map(h => {
+      const score = h.risk;
+      let color = '#00695c';
+      if (score >= 17) color = '#c0392b';
+      else if (score >= 10) color = '#e67e22';
+      else if (score >= 5) color = '#b07d00';
+      return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${h.name} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
+    }).join('');
+    infoEl.style.display = baselineHazards.length > 0 ? 'block' : 'none';
+    if (baselineHazards.length > 0) {
+      if (!imageData) {
+        imageData = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+      }
+      assessmentTimestamp = assessmentTimestamp || new Date();
+      render();
+    }
+  }
+
+  function initContextPanel() {
+    ['ctxIndustry', 'ctxTask', 'ctxLocation'].forEach(id => {
+      $(id).addEventListener('change', applyContextSelection);
+    });
+  }
 
   const hazardDB = {
     electrical: {
@@ -845,19 +1116,21 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
   function render() {
     els.results.classList.remove('hidden');
-    els.resultImg.src = imageData;
+    const isPlaceholderImage = imageData && imageData.startsWith('data:image/svg+xml');
+    els.resultImg.src = isPlaceholderImage ? '' : (imageData || '');
+    els.resultImg.style.display = isPlaceholderImage || !imageData ? 'none' : 'block';
 
     els.fallbackWarning.classList.toggle('hidden', !(analysisMode === 'heuristic' && modelLoadError));
     els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
 
-    const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'], manual: ['Manual Entry', 'mode-manual'] };
-    const activeMode = manualHazards.length > 0 && hazards.length === 0 ? 'manual' : (analysisMode || 'heuristic');
+    const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'], manual: ['Manual Entry', 'mode-manual'], baseline: ['Baseline Context', 'mode-heuristic'] };
+    const activeMode = baselineHazards.length > 0 && hazards.length === 0 && manualHazards.length === 0 ? 'baseline' : (manualHazards.length > 0 && hazards.length === 0 && baselineHazards.length === 0 ? 'manual' : (analysisMode || 'heuristic'));
     const [modeText, modeCls] = modeLabels[activeMode] || ['Unknown', 'mode-heuristic'];
     els.modeBadge.textContent = modeText;
     els.modeBadge.className = `mode-badge ${modeCls}`;
 
-    // Combine AI-detected hazards and manual hazards
-    const allHazards = [...hazards, ...manualHazards];
+    // Combine baseline, AI-detected, and manual hazards
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
     overall = allHazards.length ? Math.max(...allHazards.map(h => h.risk)) : 0;
     const r = riskFor(overall);
     els.overallScore.textContent = String(overall);
@@ -925,8 +1198,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const initialResidualScore = defaultRL * defaultRS;
       const rrr = riskFor(initialResidualScore);
 
-      // Determine # column content - show "Manual" badge for manual entries
-      const numberCell = h.isManual ? '<span class="manual-badge">Manual</span>' : String(i + 1);
+      // Determine # column content - show source badge for baseline and manual entries
+      let numberCell;
+      if (h.isBaseline) numberCell = `<span class="baseline-badge">Baseline</span>`;
+      else if (h.isManual) numberCell = `<span class="manual-badge">Manual</span>`;
+      else numberCell = String(i + 1);
 
       // Table A row
       const trA = document.createElement('tr');
@@ -946,7 +1222,12 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const trB = document.createElement('tr');
 
       const tdNumB = document.createElement('td');
-      if (h.isManual) {
+      if (h.isBaseline) {
+        const badge = document.createElement('span');
+        badge.className = 'baseline-badge';
+        badge.textContent = 'Baseline';
+        tdNumB.appendChild(badge);
+      } else if (h.isManual) {
         const badge = document.createElement('span');
         badge.className = 'manual-badge';
         badge.textContent = 'Manual';
@@ -1186,12 +1467,36 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       year: 'numeric', month: 'long', day: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
+    const ctxIndustryEl = $('ctxIndustry');
+    const ctxTaskEl = $('ctxTask');
+    const ctxLocationEl = $('ctxLocation');
+    const ctxIndustryLabel = ctxIndustryEl.options[ctxIndustryEl.selectedIndex]?.text || '';
+    const ctxTaskLabel = ctxTaskEl.options[ctxTaskEl.selectedIndex]?.text || '';
+    const ctxLocationLabel = ctxLocationEl.options[ctxLocationEl.selectedIndex]?.text || '';
+    const hasContext = ctxIndustryEl.value && ctxTaskEl.value && ctxLocationEl.value;
+    const contextRow = hasContext ? `
+      <div class="metadata-row">
+        <span class="metadata-label">Industry:</span>
+        <span class="metadata-value">${ctxIndustryLabel}</span>
+      </div>
+      <div class="metadata-row">
+        <span class="metadata-label">Task Type:</span>
+        <span class="metadata-value">${ctxTaskLabel}</span>
+      </div>
+      <div class="metadata-row">
+        <span class="metadata-label">Location Type:</span>
+        <span class="metadata-value">${ctxLocationLabel}</span>
+      </div>
+      <div class="metadata-row">
+        <span class="metadata-label">Baseline Hazards:</span>
+        <span class="metadata-value">${baselineHazards.length} pre-loaded from ADOSH-SF risk profiles</span>
+      </div>` : '';
     els.metadataFooter.innerHTML = `
       <h4>Assessment Information</h4>
       <div class="metadata-row">
         <span class="metadata-label">Assessment Date and Time:</span>
         <span class="metadata-value">${formattedDate}</span>
-      </div>
+      </div>${contextRow}
       <div class="metadata-row">
         <span class="metadata-label">Assessment Method:</span>
         <span class="metadata-value">AI Visual Analysis — Llama 4 Scout via Groq API</span>
@@ -1217,6 +1522,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       imageData = dataUrl;
       hazards = [];
       analysisMode = 'heuristic';
+      // Note: baselineHazards from context panel are preserved and combined in render()
 
       const img = new Image();
       img.src = dataUrl;
@@ -1271,7 +1577,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   }
 
   function exportReport() {
-    const allHazardsForExport = [...hazards, ...manualHazards];
+    const allHazardsForExport = [...baselineHazards, ...hazards, ...manualHazards];
     const modeLabel = { ai: 'AI Vision (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)', manual: 'Manual Entry' }[analysisMode] || analysisMode;
     const hasManual = manualHazards.length > 0;
     const fullModeLabel = hasManual ? (modeLabel + (hazards.length > 0 ? ' + Manual Entry' : '')) : modeLabel;
@@ -1279,7 +1585,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
     allHazardsForExport.forEach((h, i) => {
       const d = getRowResidualData(i);
-      const sourceLabel = h.isManual ? 'Manual' : `AI (#${i + 1 - manualHazards.length})`;
+      const sourceLabel = h.isBaseline ? 'Baseline' : (h.isManual ? 'Manual' : `AI (#${i + 1 - baselineHazards.length - manualHazards.length})`);
       out += `${i + 1}. [${sourceLabel}] ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk} | ResidualRisk=${d.residualScore} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
     });
     out += `\nRecommendations:\n${[...new Set(allHazardsForExport.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
@@ -1347,12 +1653,20 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const ts = assessmentTimestamp || new Date();
       const formattedDate = ts.toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       const modeLabel = { ai: 'AI Vision — Llama 4 Scout (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
+      const ctxI = $('ctxIndustry'); const ctxT = $('ctxTask'); const ctxL = $('ctxLocation');
+      const pdfCtxRows = (ctxI.value && ctxT.value && ctxL.value) ? [
+        ['Industry', ctxI.options[ctxI.selectedIndex]?.text || ''],
+        ['Task Type', ctxT.options[ctxT.selectedIndex]?.text || ''],
+        ['Location Type', ctxL.options[ctxL.selectedIndex]?.text || ''],
+        ['Baseline Hazards', `${baselineHazards.length} pre-loaded (ADOSH-SF)`]
+      ] : [];
       const metaRows = [
         ['Date & Time', formattedDate],
         ['Analysis Method', modeLabel],
         ['Standard Reference', 'ISO 45001:2018 / ADOSH-SF'],
         ['Overall Risk Score', `${overall} / 25`],
-        ['Overall Risk Level', riskFor(overall).label]
+        ['Overall Risk Level', riskFor(overall).label],
+        ...pdfCtxRows
       ];
       doc.autoTable({
         startY: y,
@@ -1385,7 +1699,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       // ── KPI Summary ──
       checkPageBreak(20);
       sectionTitle('Risk Summary');
-      const allHazardsForPDF = [...hazards, ...manualHazards];
+      const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
       const totalHazards = allHazardsForPDF.length;
       const criticalCount = allHazardsForPDF.filter(h => h.risk >= 17).length;
       const highCount = allHazardsForPDF.filter(h => h.risk >= 10 && h.risk <= 16).length;
@@ -1599,7 +1913,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
   function resetApp() {
     stopCamera();
-    hazards = []; manualHazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
+    hazards = []; manualHazards = []; baselineHazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
     pendingAnalysis = null; assessmentTimestamp = null;
     manualModeActive = false;
     els.manualModeToggle.checked = false;
@@ -1609,6 +1923,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.fallbackWarning.classList.add('hidden');
     els.aiInfo.classList.add('hidden');
     els.envWarning.classList.add('hidden');
+    $('ctxIndustry').value = '';
+    $('ctxTask').value = '';
+    $('ctxLocation').value = '';
+    $('baselineInfo').style.display = 'none';
   }
 
   function captureFromCamera() {
@@ -1701,6 +2019,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   }
 
   initManualMode();
+  initContextPanel();
 
   initModel();
 })();
