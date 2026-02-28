@@ -3033,7 +3033,7 @@ function extractImageMetadata(file) {
         });
 
         // Build matrix data: 5 rows (L5 to L1), each with 5 score cells
-        const matrixHead = [['', 'S1', 'S2', 'S3', 'S4', 'S5']];
+        const matrixHead = [['', '', '', '', '', '']];  // S labels rendered below matrix
         const matrixBody = [];
         const likelihoods = [5, 4, 3, 2, 1];
         const severities = [1, 2, 3, 4, 5];
@@ -3082,6 +3082,23 @@ function extractImageMetadata(file) {
               const l = likelihoods[data.row.index];
               const s = severities[data.column.index - 1];
               const key = `${l}-${s}`;
+              const cellX = data.cell.x;
+              const cellY = data.cell.y;
+              const cellW = data.cell.width;
+              const cellH = data.cell.height;
+
+              // Draw score number at top-center of cell (always visible)
+              const score = l * s;
+              doc.setFontSize(9);
+              doc.setFont('helvetica', 'bold');
+              // Use dark text on yellow, white on others
+              if (score > 4 && score <= 9) {
+                doc.setTextColor(33, 33, 33);
+              } else {
+                doc.setTextColor(255, 255, 255);
+              }
+              const scoreY = cellY + 6; // Top of cell with small padding
+              doc.text(String(score), cellX + cellW / 2, scoreY, { align: 'center' });
 
               // Draw initial risk markers (white filled circles with hazard numbers)
               const initials = initialHazards.get(key) || [];
@@ -3089,38 +3106,35 @@ function extractImageMetadata(file) {
               const allMarkers = [...initials.map(n => ({ n, type: 'initial' })), ...residuals.map(n => ({ n, type: 'residual' }))];
 
               if (allMarkers.length > 0) {
-                const cellX = data.cell.x;
-                const cellY = data.cell.y;
-                const cellW = data.cell.width;
-                const cellH = data.cell.height;
-                const markerRadius = 3.5;
-                const startX = cellX + cellW / 2 - ((allMarkers.length - 1) * 5);
-                const markerY = cellY + cellH - 5;
+                // Circle diameter max 10px = ~3.5mm at 72 DPI, radius ~1.75mm
+                // Use 1.5mm radius for safety margin (fits within cell)
+                const markerRadius = 1.5;
+                const markerSpacing = 5; // Space between marker centers
+                const startX = cellX + cellW / 2 - ((allMarkers.length - 1) * markerSpacing / 2);
+                const markerY = cellY + cellH - 4; // Bottom of cell with small padding
 
                 allMarkers.forEach((marker, idx) => {
-                  const mx = startX + (idx * 10);
+                  const mx = startX + (idx * markerSpacing);
 
                   if (marker.type === 'initial') {
                     // White filled circle for initial risk
                     doc.setFillColor(255, 255, 255);
                     doc.setDrawColor(33, 33, 33);
-                    doc.setLineWidth(0.3);
+                    doc.setLineWidth(0.2);
                     doc.circle(mx, markerY, markerRadius, 'FD');
                   } else {
-                    // Hollow circle for residual risk
+                    // Hollow circle for residual risk (white fill with thicker border)
                     doc.setFillColor(255, 255, 255);
                     doc.setDrawColor(33, 33, 33);
-                    doc.setLineWidth(0.5);
+                    doc.setLineWidth(0.4);
                     doc.circle(mx, markerY, markerRadius, 'FD');
                   }
 
-                  // Hazard number in white bold text centered in cell above marker
-                  doc.setFontSize(7);
+                  // Hazard number inside marker (small black text)
+                  doc.setFontSize(5);
                   doc.setFont('helvetica', 'bold');
-                  doc.setTextColor(255, 255, 255);
-                  const textX = mx;
-                  const textY = cellY + cellH / 2 - 1;
-                  doc.text(String(marker.n), textX, textY, { align: 'center' });
+                  doc.setTextColor(33, 33, 33);
+                  doc.text(String(marker.n), mx, markerY + 1.5, { align: 'center' });
                 });
               }
             }
@@ -3129,11 +3143,23 @@ function extractImageMetadata(file) {
         });
         y = doc.lastAutoTable.finalY + 6;
 
+        // Draw S labels below the matrix (S1 at left, S5 at right)
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(21, 101, 192);
+        const tableWidth = contentW - 10; // Approximate width minus L column
+        const sCellWidth = tableWidth / 5;
+        const sStartX = margin + 10 + sCellWidth / 2; // After L column + half cell width
+        severities.forEach((s, idx) => {
+          doc.text(`S${s}`, sStartX + idx * sCellWidth, y, { align: 'center' });
+        });
+        y += 6;
+
         // Legend for matrix
         doc.setFontSize(8);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(80, 80, 80);
-        doc.text('Filled circle = Initial Risk    Hollow circle = Residual Risk    White numbers = Hazard sequence numbers', margin, y);
+        doc.text('Filled circle = Initial Risk    Hollow circle = Residual Risk    Numbers in circles = Hazard sequence numbers', margin, y);
         y += 8;
         doc.setTextColor(33, 33, 33);
       } catch (_) {}
