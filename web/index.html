@@ -226,6 +226,29 @@
     #loading { position:fixed; inset:0; background:rgba(0,0,0,.72); color:#fff; display:none; place-items:center; font-size:1.1rem; z-index:999; }
     #loading.active { display:grid; }
     #loadingMsg { text-align:center; }
+    /* Manual Entry Section */
+    .manual-toggle { display:flex; align-items:center; gap:10px; margin-bottom:12px; padding:12px; background:#e8f5e9; border-radius:10px; border:2px solid #4caf50; }
+    .manual-toggle label { font-weight:600; color:#2e7d32; cursor:pointer; display:flex; align-items:center; gap:8px; }
+    .manual-toggle input[type="checkbox"] { width:20px; height:20px; cursor:pointer; }
+    #manualEntrySection { display:none; background:#f1f8e9; border:2px solid #66bb6a; border-radius:10px; padding:16px; margin-top:12px; }
+    #manualEntrySection.active { display:block; }
+    #manualEntrySection h3 { margin:0 0 12px; color:#2e7d32; font-size:1.1rem; }
+    .manual-form-row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+    .manual-form-group { flex:1; min-width:180px; }
+    .manual-form-group label { display:block; font-weight:600; font-size:.85rem; color:#33691e; margin-bottom:4px; }
+    .manual-form-group select, .manual-form-group input[type="text"], .manual-form-group textarea { width:100%; padding:8px 10px; border:1px solid #a5d6a7; border-radius:6px; font-size:.9rem; font-family:inherit; }
+    .manual-form-group textarea { resize:vertical; min-height:60px; }
+    .manual-form-group select:focus, .manual-form-group input:focus, .manual-form-group textarea:focus { outline:2px solid #4caf50; border-color:#2e7d32; }
+    .manual-btn-add { background:#4caf50 !important; color:#fff !important; }
+    .manual-btn-add:hover { background:#388e3c !important; }
+    .manual-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#4caf50; color:#fff; }
+    .manual-toggle-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .toggle-btn { background:#fff; color:#666; border:2px solid #ccc; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:.85rem; font-weight:600; transition:all .2s; }
+    .toggle-btn:hover { border-color:#999; }
+    .toggle-btn.active { background:#4caf50; color:#fff; border-color:#4caf50; }
+    .likelihood-labels, .severity-labels { display:flex; gap:4px; margin-top:4px; }
+    .likelihood-labels span, .severity-labels span { flex:1; text-align:center; font-size:.65rem; color:#558b2f; background:#c8e6c9; padding:2px 4px; border-radius:4px; }
+    .likelihood-labels span.selected, .severity-labels span.selected { background:#4caf50; color:#fff; font-weight:700; }
   </style>
 </head>
 <body>
@@ -256,6 +279,65 @@
         <label for="apiKeyInput">🤖 Groq API Key (optional — enables deep AI analysis)</label>
         <input id="apiKeyInput" type="password" placeholder="Paste your Groq API key here..." autocomplete="off" />
         <p style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only. Enables scene-understanding beyond object labels. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a free key →</a></p>
+      </div>
+
+      <div class="manual-toggle">
+        <label for="manualModeToggle">
+          <input type="checkbox" id="manualModeToggle" />
+          📝 Enable Manual Entry Mode
+        </label>
+        <span style="font-size:.8rem;color:#2e7d32;margin-left:auto;">Add hazards manually without an image</span>
+      </div>
+
+      <div id="manualEntrySection">
+        <h3>Add Manual Hazard Entry</h3>
+        <div class="manual-form-row">
+          <div class="manual-form-group">
+            <label for="manualHazardType">Hazard Type</label>
+            <select id="manualHazardType"></select>
+          </div>
+          <div class="manual-form-group">
+            <label for="manualDescription">Description</label>
+            <textarea id="manualDescription" placeholder="Describe the hazard..."></textarea>
+          </div>
+        </div>
+        <div class="manual-form-row">
+          <div class="manual-form-group">
+            <label for="manualLikelihood">Likelihood (1-5)</label>
+            <div class="manual-toggle-row">
+              <button type="button" class="toggle-btn" data-l="1">1</button>
+              <button type="button" class="toggle-btn" data-l="2">2</button>
+              <button type="button" class="toggle-btn" data-l="3">3</button>
+              <button type="button" class="toggle-btn" data-l="4">4</button>
+              <button type="button" class="toggle-btn" data-l="5">5</button>
+            </div>
+            <div class="likelihood-labels">
+              <span data-l="1">Rare</span>
+              <span data-l="2">Unlikely</span>
+              <span data-l="3">Possible</span>
+              <span data-l="4">Likely</span>
+              <span data-l="5">Certain</span>
+            </div>
+          </div>
+          <div class="manual-form-group">
+            <label for="manualSeverity">Severity (1-5)</label>
+            <div class="manual-toggle-row">
+              <button type="button" class="toggle-btn" data-s="1">1</button>
+              <button type="button" class="toggle-btn" data-s="2">2</button>
+              <button type="button" class="toggle-btn" data-s="3">3</button>
+              <button type="button" class="toggle-btn" data-s="4">4</button>
+              <button type="button" class="toggle-btn" data-s="5">5</button>
+            </div>
+            <div class="severity-labels">
+              <span data-s="1">Negligible</span>
+              <span data-s="2">Minor</span>
+              <span data-s="3">Moderate</span>
+              <span data-s="4">Major</span>
+              <span data-s="5">Catastrophic</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn manual-btn-add" id="btnAddManualHazard">➕ Add Hazard to Register</button>
       </div>
     </section>
 
@@ -303,7 +385,10 @@
     riskSummary: $('riskSummary'), hocTable: $('hocTable'), metadataFooter: $('metadataFooter'),
     btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'),
     btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'), btnPDF: $('btnPDF'),
-    apiKeyInput: $('apiKeyInput')
+    apiKeyInput: $('apiKeyInput'),
+    manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
+    manualHazardType: $('manualHazardType'), manualDescription: $('manualDescription'),
+    btnAddManualHazard: $('btnAddManualHazard')
   };
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
@@ -312,6 +397,7 @@
   let modelLoadError = null;
   let pendingAnalysis = null;
   let assessmentTimestamp = null;
+  let manualL = 3, manualS = 3;
 
   const hazardDB = {
     electrical: {
@@ -688,7 +774,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
       const key = `${rl}-${rs}`;
       if (!residualPositions.has(key)) residualPositions.set(key, []);
-      residualPositions.get(key).push({ seq: i + 1, name: h.name });
+      residualPositions.get(key).push({ seq: i + 1, name: h.name, source: h.source });
     });
 
     // Rebuild the entire risk matrix to update markers
@@ -698,7 +784,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     hazards.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
       if (!hazardPositions.has(key)) hazardPositions.set(key, []);
-      hazardPositions.get(key).push({ seq: i + 1, name: h.name });
+      hazardPositions.get(key).push({ seq: i + 1, name: h.name, source: h.source });
     });
 
     const add = (txt, cls, l, s) => {
@@ -725,7 +811,13 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         cellHazards.forEach(h => {
           const marker = document.createElement('div');
           marker.className = 'hazard-marker';
-          marker.textContent = h.seq;
+          if (h.source === 'manual') {
+            marker.style.background = '#4caf50';
+            marker.style.color = '#fff';
+            marker.textContent = 'M';
+          } else {
+            marker.textContent = h.seq;
+          }
           markerRow.appendChild(marker);
         });
       }
@@ -859,8 +951,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
       // Table A row
       const trA = document.createElement('tr');
+      const numCellA = h.source === 'manual' 
+        ? '<span class="manual-badge">Manual</span>' 
+        : i + 1;
       trA.innerHTML = `
-        <td>${i + 1}</td>
+        <td>${numCellA}</td>
         <td><strong>${h.name}</strong></td>
         <td>${h.details || '-'}</td>
         <td>${h.L}</td>
@@ -875,7 +970,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const trB = document.createElement('tr');
 
       const tdNumB = document.createElement('td');
-      tdNumB.textContent = i + 1;
+      if (h.source === 'manual') {
+        tdNumB.innerHTML = '<span class="manual-badge">Manual</span>';
+      } else {
+        tdNumB.textContent = i + 1;
+      }
       trB.appendChild(tdNumB);
 
       const tdNameB = document.createElement('td');
@@ -962,7 +1061,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     hazards.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
       if (!hazardPositions.has(key)) hazardPositions.set(key, []);
-      hazardPositions.get(key).push({ seq: i + 1, name: h.name });
+      hazardPositions.get(key).push({ seq: i + 1, name: h.name, source: h.source });
     });
 
     const residualPositions = new Map();
@@ -971,7 +1070,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const rs = Math.max(1, h.S - 1);
       const key = `${rl}-${rs}`;
       if (!residualPositions.has(key)) residualPositions.set(key, []);
-      residualPositions.get(key).push({ seq: i + 1, name: h.name });
+      residualPositions.get(key).push({ seq: i + 1, name: h.name, source: h.source });
     });
 
     const add = (txt, cls, l, s) => {
@@ -998,7 +1097,13 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         cellHazards.forEach(h => {
           const marker = document.createElement('div');
           marker.className = 'hazard-marker';
-          marker.textContent = h.seq;
+          if (h.source === 'manual') {
+            marker.style.background = '#4caf50';
+            marker.style.color = '#fff';
+            marker.textContent = 'M';
+          } else {
+            marker.textContent = h.seq;
+          }
           markerRow.appendChild(marker);
         });
       }
@@ -1088,8 +1193,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     const hocTbody = document.createElement('tbody');
     hazards.forEach((h, i) => {
       const tr = document.createElement('tr');
+      const numCellHoc = h.source === 'manual' 
+        ? '<span class="manual-badge">Manual</span>' 
+        : i + 1;
       tr.innerHTML = `
-        <td>${i + 1}</td>
+        <td>${numCellHoc}</td>
         <td><strong>${h.name}</strong></td>
         <td>${h.eliminate || 'N/A'}</td>
         <td>${h.substitute || 'N/A'}</td>
@@ -1555,6 +1663,93 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   });
   els.uploadArea.addEventListener('click', openFilePicker);
   els.uploadArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFilePicker(); } });
+
+  // Initialize manual entry: populate hazard type dropdown
+  Object.entries(hazardDB).forEach(([key, h]) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = h.name;
+    els.manualHazardType.appendChild(opt);
+  });
+
+  // Toggle manual entry section visibility
+  els.manualModeToggle.addEventListener('change', () => {
+    els.manualEntrySection.classList.toggle('active', els.manualModeToggle.checked);
+    if (els.manualModeToggle.checked && hazards.length > 0) {
+      els.results.classList.remove('hidden');
+    }
+  });
+
+  // Initialize default selection for likelihood and severity (both default to 3)
+  document.querySelectorAll('.toggle-btn[data-l]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.l === '3');
+  });
+  document.querySelectorAll('.likelihood-labels span').forEach(span => {
+    span.classList.toggle('selected', span.dataset.l === '3');
+  });
+  document.querySelectorAll('.toggle-btn[data-s]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.s === '3');
+  });
+  document.querySelectorAll('.severity-labels span').forEach(span => {
+    span.classList.toggle('selected', span.dataset.s === '3');
+  });
+
+  // Handle likelihood button clicks
+  document.querySelectorAll('.toggle-btn[data-l]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.toggle-btn[data-l]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.likelihood-labels span').forEach(s => s.classList.remove('selected'));
+      btn.classList.add('active');
+      const l = parseInt(btn.dataset.l, 10);
+      manualL = l;
+      document.querySelectorAll(`.likelihood-labels span[data-l="${l}"]`).forEach(s => s.classList.add('selected'));
+    });
+  });
+
+  // Handle severity button clicks
+  document.querySelectorAll('.toggle-btn[data-s]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.toggle-btn[data-s]').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.severity-labels span').forEach(s => s.classList.remove('selected'));
+      btn.classList.add('active');
+      const s = parseInt(btn.dataset.s, 10);
+      manualS = s;
+      document.querySelectorAll(`.severity-labels span[data-s="${s}"]`).forEach(s => s.classList.add('selected'));
+    });
+  });
+
+  // Add manual hazard to the register
+  els.btnAddManualHazard.addEventListener('click', () => {
+    const hazardKey = els.manualHazardType.value;
+    const description = els.manualDescription.value.trim();
+    const L = manualL;
+    const S = manualS;
+    const risk = L * S;
+    const h = hazardDB[hazardKey];
+
+    const manualHazard = {
+      name: h.name,
+      L: L,
+      S: S,
+      risk: risk,
+      conf: 1.0,
+      recs: h.recs,
+      source: 'manual',
+      details: description || 'Manually entered hazard',
+      eliminate: 'Eliminate the hazard source through engineering or administrative changes',
+      substitute: 'Substitute with less hazardous materials or processes where feasible',
+      engineering: 'Install engineering controls (guards, barriers, ventilation) to reduce exposure',
+      administrative: 'Implement safe work procedures, training, and supervision',
+      ppe: 'Provide appropriate PPE (gloves, goggles, respiratory protection) as last line of defense'
+    };
+
+    hazards.push(manualHazard);
+    els.manualDescription.value = '';
+    assessmentTimestamp = assessmentTimestamp || new Date();
+    els.results.classList.remove('hidden');
+    render();
+    els.results.scrollIntoView({ behavior: 'smooth' });
+  });
 
   initModel();
 })();
