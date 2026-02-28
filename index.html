@@ -220,6 +220,16 @@
     .mode-ai { background:#6a1b9a; color:#fff; }
     .mode-ml { background:#1565c0; color:#fff; }
     .mode-heuristic { background:#757575; color:#fff; }
+    .mode-manual { background:#e65100; color:#fff; }
+    .manual-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#e65100; color:#fff; margin-left:4px; }
+    #manualEntrySection { border:1px solid #ff9800; border-radius:10px; padding:14px; background:#fff3e0; margin-top:12px; }
+    #manualEntrySection h3 { margin:0 0 12px; font-size:1rem; color:#e65100; }
+    .manual-form-row { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+    .manual-form-group { flex:1; min-width:150px; }
+    .manual-form-group label { display:block; font-weight:600; margin-bottom:4px; font-size:.85rem; color:#424242; }
+    .manual-form-group input, .manual-form-group select { width:100%; padding:8px 10px; border:1px solid #ffb74d; border-radius:6px; font-size:.9rem; background:#fff; }
+    .manual-form-group input:focus, .manual-form-group select:focus { outline:none; border-color:#e65100; box-shadow:0 0 0 2px rgba(230,81,0,.2); }
+    .manual-form-group .hint { font-size:.75rem; color:#757575; margin-top:2px; }
     #apiKeySection { border:1px solid #ce93d8; border-radius:10px; padding:14px; background:#f3e5f5; margin-top:12px; }
     #apiKeySection label { font-weight:600; display:block; margin-bottom:6px; color:#4a148c; }
     #apiKeyInput { width:100%; padding:8px 10px; border:1px solid #ba68c8; border-radius:6px; font-size:.95rem; }
@@ -250,6 +260,54 @@
         <video id="videoPreview" autoplay playsinline muted></video><br/><br/>
         <button class="btn btn-primary" id="btnCapture">Capture</button>
         <button class="btn btn-outline" id="btnStop">Stop Camera</button>
+      </div>
+
+      <div style="margin-top:16px; padding-top:12px; border-top:1px solid #ddd;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+          <input type="checkbox" id="manualModeToggle" style="width:18px; height:18px;" />
+          <span style="font-weight:600; font-size:1rem;">Manual Entry Mode</span>
+        </label>
+      </div>
+
+      <div id="manualEntrySection" class="hidden">
+        <h3>📝 Add Hazard Manually</h3>
+        <div class="manual-form-row">
+          <div class="manual-form-group" style="flex:2;">
+            <label for="manualHazardType">Hazard Type</label>
+            <select id="manualHazardType">
+              <option value="">Select hazard type...</option>
+            </select>
+          </div>
+        </div>
+        <div class="manual-form-row">
+          <div class="manual-form-group">
+            <label for="manualLikelihood">Likelihood (1-5)</label>
+            <select id="manualLikelihood">
+              <option value="1">1 - Rare</option>
+              <option value="2">2 - Unlikely</option>
+              <option value="3">3 - Possible</option>
+              <option value="4">4 - Likely</option>
+              <option value="5">5 - Almost Certain</option>
+            </select>
+          </div>
+          <div class="manual-form-group">
+            <label for="manualSeverity">Severity (1-5)</label>
+            <select id="manualSeverity">
+              <option value="1">1 - Negligible</option>
+              <option value="2">2 - Minor</option>
+              <option value="3">3 - Moderate</option>
+              <option value="4">4 - Major</option>
+              <option value="5">5 - Catastrophic</option>
+            </select>
+          </div>
+        </div>
+        <div class="manual-form-row">
+          <div class="manual-form-group" style="flex:2;">
+            <label for="manualDescription">Description</label>
+            <input type="text" id="manualDescription" placeholder="Describe the hazard..." />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btnAddHazard">➕ Add Hazard</button>
       </div>
 
       <div id="apiKeySection">
@@ -303,15 +361,21 @@
     riskSummary: $('riskSummary'), hocTable: $('hocTable'), metadataFooter: $('metadataFooter'),
     btnCamera: $('btnCamera'), btnUpload: $('btnUpload'), btnCapture: $('btnCapture'),
     btnStop: $('btnStop'), btnExport: $('btnExport'), btnReset: $('btnReset'), btnPDF: $('btnPDF'),
-    apiKeyInput: $('apiKeyInput')
+    apiKeyInput: $('apiKeyInput'),
+    manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
+    manualHazardType: $('manualHazardType'), manualLikelihood: $('manualLikelihood'),
+    manualSeverity: $('manualSeverity'), manualDescription: $('manualDescription'),
+    btnAddHazard: $('btnAddHazard')
   };
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
+  let manualHazards = [];
   let analysisMode = 'heuristic';
   let modelLoading = true;
   let modelLoadError = null;
   let pendingAnalysis = null;
   let assessmentTimestamp = null;
+  let manualModeActive = false;
 
   const hazardDB = {
     electrical: {
@@ -682,8 +746,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   }
 
   function updateResidualMatrix() {
+    const allHazardsForMatrix = [...hazards, ...manualHazards];
     const residualPositions = new Map();
-    hazards.forEach((h, i) => {
+    allHazardsForMatrix.forEach((h, i) => {
       const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
       const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
       const key = `${rl}-${rs}`;
@@ -695,7 +760,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.riskMatrix.textContent = '';
 
     const hazardPositions = new Map();
-    hazards.forEach((h, i) => {
+    allHazardsForMatrix.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
       if (!hazardPositions.has(key)) hazardPositions.set(key, []);
       hazardPositions.get(key).push({ seq: i + 1, name: h.name });
@@ -764,7 +829,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     add('', '');
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
-    hazards.forEach((h, i) => {
+    allHazardsForMatrix.forEach((h, i) => {
       const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
       const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
       const residualScore = rl * rs;
@@ -785,12 +850,15 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.fallbackWarning.classList.toggle('hidden', !(analysisMode === 'heuristic' && modelLoadError));
     els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
 
-    const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'] };
-    const [modeText, modeCls] = modeLabels[analysisMode] || ['Unknown', 'mode-heuristic'];
+    const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], heuristic: ['Heuristic', 'mode-heuristic'], manual: ['Manual Entry', 'mode-manual'] };
+    const activeMode = manualHazards.length > 0 && hazards.length === 0 ? 'manual' : (analysisMode || 'heuristic');
+    const [modeText, modeCls] = modeLabels[activeMode] || ['Unknown', 'mode-heuristic'];
     els.modeBadge.textContent = modeText;
     els.modeBadge.className = `mode-badge ${modeCls}`;
 
-    overall = hazards.length ? Math.max(...hazards.map(h => h.risk)) : 0;
+    // Combine AI-detected hazards and manual hazards
+    const allHazards = [...hazards, ...manualHazards];
+    overall = allHazards.length ? Math.max(...allHazards.map(h => h.risk)) : 0;
     const r = riskFor(overall);
     els.overallScore.textContent = String(overall);
     els.overallLevel.textContent = r.label;
@@ -849,7 +917,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     tableB.appendChild(theadB);
     const tbodyB = document.createElement('tbody');
 
-    hazards.forEach((h, i) => {
+    allHazards.forEach((h, i) => {
       const hr = riskFor(h.risk);
       const ratingLabel = hr.label.replace(' Risk', '');
       const defaultRL = Math.max(1, h.L - 1);
@@ -857,10 +925,13 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const initialResidualScore = defaultRL * defaultRS;
       const rrr = riskFor(initialResidualScore);
 
+      // Determine # column content - show "Manual" badge for manual entries
+      const numberCell = h.isManual ? '<span class="manual-badge">Manual</span>' : String(i + 1);
+
       // Table A row
       const trA = document.createElement('tr');
       trA.innerHTML = `
-        <td>${i + 1}</td>
+        <td>${numberCell}</td>
         <td><strong>${h.name}</strong></td>
         <td>${h.details || '-'}</td>
         <td>${h.L}</td>
@@ -875,7 +946,14 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       const trB = document.createElement('tr');
 
       const tdNumB = document.createElement('td');
-      tdNumB.textContent = i + 1;
+      if (h.isManual) {
+        const badge = document.createElement('span');
+        badge.className = 'manual-badge';
+        badge.textContent = 'Manual';
+        tdNumB.appendChild(badge);
+      } else {
+        tdNumB.textContent = i + 1;
+      }
       trB.appendChild(tdNumB);
 
       const tdNameB = document.createElement('td');
@@ -959,19 +1037,19 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.riskMatrix.textContent = '';
 
     const hazardPositions = new Map();
-    hazards.forEach((h, i) => {
+    allHazards.forEach((h, i) => {
       const key = `${h.L}-${h.S}`;
       if (!hazardPositions.has(key)) hazardPositions.set(key, []);
-      hazardPositions.get(key).push({ seq: i + 1, name: h.name });
+      hazardPositions.get(key).push({ seq: i + 1, name: h.name, isManual: h.isManual });
     });
 
     const residualPositions = new Map();
-    hazards.forEach((h, i) => {
+    allHazards.forEach((h, i) => {
       const rl = Math.max(1, h.L - 1);
       const rs = Math.max(1, h.S - 1);
       const key = `${rl}-${rs}`;
       if (!residualPositions.has(key)) residualPositions.set(key, []);
-      residualPositions.get(key).push({ seq: i + 1, name: h.name });
+      residualPositions.get(key).push({ seq: i + 1, name: h.name, isManual: h.isManual });
     });
 
     const add = (txt, cls, l, s) => {
@@ -1038,11 +1116,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
     // ── Risk Summary Dashboard ─────────────────────────────────────────────────
-    const totalHazards = hazards.length;
+    const totalHazards = allHazards.length;
     const highestRisk = overall;
     const highestRiskBand = highestRisk <= 4 ? 'kpi-green' : highestRisk <= 9 ? 'kpi-yellow' : highestRisk <= 16 ? 'kpi-amber' : 'kpi-red';
-    const criticalCount = hazards.filter(h => h.risk >= 17).length;
-    const highCount = hazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
+    const criticalCount = allHazards.filter(h => h.risk >= 17).length;
+    const highCount = allHazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
     const criticalHighCombined = criticalCount + highCount;
     let overallSiteRating = 'Low';
     let overallSiteBand = 'kpi-green';
@@ -1052,7 +1130,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     } else if (highCount > 0) {
       overallSiteRating = 'High';
       overallSiteBand = 'kpi-amber';
-    } else if (hazards.length > 0 && hazards.every(h => h.risk <= 9)) {
+    } else if (allHazards.length > 0 && allHazards.every(h => h.risk <= 9)) {
       overallSiteRating = 'Medium';
       overallSiteBand = 'kpi-yellow';
     }
@@ -1086,7 +1164,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     hocThead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Eliminate</th><th>Substitute</th><th>Engineering Control</th><th>Administrative Control</th><th>PPE Required</th></tr>';
     hocTable.appendChild(hocThead);
     const hocTbody = document.createElement('tbody');
-    hazards.forEach((h, i) => {
+    allHazards.forEach((h, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${i + 1}</td>
@@ -1193,14 +1271,18 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   }
 
   function exportReport() {
-    const modeLabel = { ai: 'AI Vision (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)' }[analysisMode] || analysisMode;
+    const allHazardsForExport = [...hazards, ...manualHazards];
+    const modeLabel = { ai: 'AI Vision (Groq)', coco: 'Object Detection (COCO-SSD)', heuristic: 'Heuristic (pixel analysis)', manual: 'Manual Entry' }[analysisMode] || analysisMode;
+    const hasManual = manualHazards.length > 0;
+    const fullModeLabel = hasManual ? (modeLabel + (hazards.length > 0 ? ' + Manual Entry' : '')) : modeLabel;
     const r = riskFor(overall).label;
-    let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${modeLabel}\n\nHazards Detected:\n`;
-    hazards.forEach((h, i) => {
+    let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
+    allHazardsForExport.forEach((h, i) => {
       const d = getRowResidualData(i);
-      out += `${i + 1}. ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk} | ResidualRisk=${d.residualScore} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
+      const sourceLabel = h.isManual ? 'Manual' : `AI (#${i + 1 - manualHazards.length})`;
+      out += `${i + 1}. [${sourceLabel}] ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk} | ResidualRisk=${d.residualScore} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
     });
-    out += `\nRecommendations:\n${[...new Set(hazards.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
+    out += `\nRecommendations:\n${[...new Set(allHazardsForExport.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
     const blob = new Blob([out], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1303,13 +1385,14 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       // ── KPI Summary ──
       checkPageBreak(20);
       sectionTitle('Risk Summary');
-      const totalHazards = hazards.length;
-      const criticalCount = hazards.filter(h => h.risk >= 17).length;
-      const highCount = hazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
+      const allHazardsForPDF = [...hazards, ...manualHazards];
+      const totalHazards = allHazardsForPDF.length;
+      const criticalCount = allHazardsForPDF.filter(h => h.risk >= 17).length;
+      const highCount = allHazardsForPDF.filter(h => h.risk >= 10 && h.risk <= 16).length;
       let overallSiteRating = 'Low';
       if (criticalCount > 0) overallSiteRating = 'Critical';
       else if (highCount > 0) overallSiteRating = 'High';
-      else if (hazards.length > 0 && hazards.every(h => h.risk <= 9)) overallSiteRating = 'Medium';
+      else if (allHazardsForPDF.length > 0 && allHazardsForPDF.every(h => h.risk <= 9)) overallSiteRating = 'Medium';
 
       doc.autoTable({
         startY: y,
@@ -1334,12 +1417,13 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       }
 
       const rrHead = [['#', 'Hazard', 'Details', 'L', 'S', 'Score', 'Rating', 'Conf', 'Controls In Place', 'Res.L', 'Res.S', 'Res.Risk', 'Owner', 'Corrective Action', 'Target Date', 'Status']];
-      const rrBody = hazards.map((h, i) => {
+      const rrBody = allHazardsForPDF.map((h, i) => {
         const d = getRowResidualData(i);
         const hr = riskFor(h.risk);
         const ratingLabel = hr.label.replace(' Risk', '');
+        const numberCell = h.isManual ? 'Manual' : String(i + 1);
         return [
-          i + 1,
+          numberCell,
           h.name,
           h.details || '-',
           h.L,
@@ -1416,7 +1500,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       checkPageBreak(20);
       sectionTitle('Hierarchy of Controls — ISO 45001:2018 / ADOSH-SF');
       const hocHead = [['#', 'Hazard', 'Eliminate', 'Substitute', 'Engineering Control', 'Administrative Control', 'PPE Required']];
-      const hocBody = hazards.map((h, i) => [
+      const hocBody = allHazardsForPDF.map((h, i) => [
         i + 1,
         h.name,
         h.eliminate || 'N/A',
@@ -1515,8 +1599,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
   function resetApp() {
     stopCamera();
-    hazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
+    hazards = []; manualHazards = []; overall = 0; imageData = null; analysisMode = 'heuristic';
     pendingAnalysis = null; assessmentTimestamp = null;
+    manualModeActive = false;
+    els.manualModeToggle.checked = false;
+    els.manualEntrySection.classList.add('hidden');
     els.fileInput.value = '';
     els.results.classList.add('hidden');
     els.fallbackWarning.classList.add('hidden');
@@ -1555,6 +1642,65 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   });
   els.uploadArea.addEventListener('click', openFilePicker);
   els.uploadArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFilePicker(); } });
+
+  // Initialize manual mode
+  function initManualMode() {
+    Object.keys(hazardDB).forEach(key => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = hazardDB[key].name;
+      els.manualHazardType.appendChild(opt);
+    });
+
+    els.manualModeToggle.addEventListener('change', (e) => {
+      manualModeActive = e.target.checked;
+      els.manualEntrySection.classList.toggle('hidden', !manualModeActive);
+      if (manualModeActive) {
+        els.results.classList.remove('hidden');
+      }
+    });
+
+    els.btnAddHazard.addEventListener('click', () => {
+      const hazardKey = els.manualHazardType.value;
+      const L = parseInt(els.manualLikelihood.value, 10);
+      const S = parseInt(els.manualSeverity.value, 10);
+      const description = els.manualDescription.value.trim();
+
+      if (!hazardKey) {
+        showWarning('Please select a hazard type.');
+        return;
+      }
+
+      const h = hazardDB[hazardKey];
+      const manualHazard = {
+        name: h.name,
+        L: L,
+        S: S,
+        risk: L * S,
+        conf: 1.0,
+        recs: h.recs,
+        source: 'manual',
+        details: description || 'Manually entered hazard',
+        eliminate: h.recs[0] || 'N/A',
+        substitute: h.recs[1] || 'N/A',
+        engineering: h.recs[2] || 'N/A',
+        administrative: h.recs[3] || 'N/A',
+        ppe: h.recs[4] || 'N/A',
+        isManual: true
+      };
+
+      manualHazards.push(manualHazard);
+      els.manualDescription.value = '';
+      
+      if (!imageData) {
+        imageData = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+      }
+      assessmentTimestamp = assessmentTimestamp || new Date();
+      render();
+    });
+  }
+
+  initManualMode();
 
   initModel();
 })();
