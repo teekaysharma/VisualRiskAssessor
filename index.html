@@ -250,6 +250,45 @@
     #loading { position:fixed; inset:0; background:rgba(0,0,0,.72); color:#fff; display:none; place-items:center; font-size:1.1rem; z-index:999; }
     #loading.active { display:grid; }
     #loadingMsg { text-align:center; }
+    
+    /* HSE Officer Review Section */
+    .hse-review-section { background:linear-gradient(135deg,#e3f2fd,#bbdefb); border:2px solid #1565c0; border-radius:14px; padding:18px; margin-top:20px; }
+    .hse-review-section h3 { margin:0 0 16px; color:#0d47a1; font-size:1.1rem; display:flex; align-items:center; gap:8px; }
+    .reviewer-info-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:16px; }
+    @media (max-width:680px) { .reviewer-info-grid { grid-template-columns:1fr; } }
+    .reviewer-info-group label { display:block; font-weight:700; font-size:.82rem; color:#1565c0; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
+    .reviewer-info-group input { width:100%; padding:9px 10px; border:1.5px solid #90caf9; border-radius:8px; font-size:.93rem; background:#fff; color:#212121; }
+    .reviewer-info-group input:focus { outline:none; border-color:#1565c0; box-shadow:0 0 0 2px rgba(21,101,192,.2); }
+    .review-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:12px; background:#fff; }
+    .review-table th { background:#1565c0; color:#fff; padding:10px 8px; text-align:left; font-weight:600; border:1px solid #0d47a1; }
+    .review-table td { padding:8px; border:1px solid #ddd; text-align:left; vertical-align:middle; }
+    .review-table tbody tr:nth-child(even) { background:#f5f9ff; }
+    .review-table tbody tr:nth-child(odd) { background:#fff; }
+    .review-table input[type="text"], .review-table input[type="date"], .review-table input[type="number"], .review-table select {
+      width:100%; padding:4px 6px; border:1px solid #ccc; border-radius:4px; font-size:11px; font-family:inherit; background:#fff; box-sizing:border-box;
+    }
+    .review-table input[type="checkbox"] { width:18px; height:18px; cursor:pointer; }
+    .review-table input[type="number"] { width:50px; text-align:center; }
+    .overridden-cell { background:#bbdefb !important; border:2px solid #1565c0 !important; }
+    .override-toggle { display:flex; align-items:center; gap:6px; }
+    .override-toggle label { font-size:11px; color:#1565c0; cursor:pointer; }
+    .verified-row { background:#e8f5e9 !important; }
+    .signoff-section { margin-top:20px; padding:16px; background:#fff; border-radius:10px; border:2px solid #4caf50; }
+    .signoff-section h4 { margin:0 0 12px; color:#2e7d32; font-size:.95rem; }
+    .signoff-checkbox { display:flex; align-items:flex-start; gap:10px; margin-bottom:12px; }
+    .signoff-checkbox input { width:20px; height:20px; margin-top:2px; cursor:pointer; }
+    .signoff-checkbox label { font-size:.85rem; color:#424242; line-height:1.4; cursor:pointer; }
+    .signoff-fields { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px; padding-top:12px; border-top:1px solid #e0e0e0; }
+    @media (max-width:680px) { .signoff-fields { grid-template-columns:1fr; } }
+    .signoff-field label { display:block; font-weight:600; font-size:.8rem; color:#616161; margin-bottom:4px; }
+    .signoff-field input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:.9rem; }
+    .signoff-field input:disabled { background:#f5f5f5; color:#9e9e9e; }
+    .data-source-footer { margin-top:16px; padding:12px; background:#fafafa; border-radius:8px; border-left:4px solid #1565c0; font-size:11px; }
+    .data-source-footer h5 { margin:0 0 8px; color:#424242; font-size:12px; }
+    .data-source-item { display:flex; align-items:center; gap:6px; margin:4px 0; }
+    .data-source-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+    .data-source-dot.ai { background:#6a1b9a; }
+    .data-source-dot.verified { background:#1565c0; }
   </style>
 </head>
 <body>
@@ -400,6 +439,73 @@
       <div id="hocTable"></div>
       <h3>Assessment Details</h3>
       <div id="metadataFooter" class="metadata-footer"></div>
+
+      <div id="hseReviewSection" class="hse-review-section hidden">
+        <h3>📋 HSE Officer Review</h3>
+        <div class="reviewer-info-grid">
+          <div class="reviewer-info-group">
+            <label for="reviewerName">Reviewer Name</label>
+            <input type="text" id="reviewerName" placeholder="Enter full name" />
+          </div>
+          <div class="reviewer-info-group">
+            <label for="reviewerDesignation">Designation</label>
+            <input type="text" id="reviewerDesignation" placeholder="e.g., HSE Manager, Safety Officer" />
+          </div>
+          <div class="reviewer-info-group">
+            <label for="reviewDate">Review Date</label>
+            <input type="date" id="reviewDate" />
+          </div>
+        </div>
+        
+        <h4 style="margin:16px 0 8px;color:#1565c0;font-size:.95rem;">Hazard Review & Override</h4>
+        <div style="overflow-x:auto;">
+          <table class="review-table" id="reviewTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Hazard</th>
+                <th>AI L</th>
+                <th>AI S</th>
+                <th>Override</th>
+                <th>Review L</th>
+                <th>Review S</th>
+                <th>Review Controls</th>
+                <th>Verified</th>
+              </tr>
+            </thead>
+            <tbody id="reviewTableBody">
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="signoff-section">
+          <h4>✅ Competent Person Sign-Off</h4>
+          <div class="signoff-checkbox">
+            <input type="checkbox" id="signoffCheckbox" />
+            <label for="signoffCheckbox">Assessment verified by competent person as defined under ADOSH OSH Law No. 8 of 1980. The undersigned confirms that all identified hazards have been reviewed, risk ratings have been validated or adjusted where necessary, and appropriate control measures have been confirmed.</label>
+          </div>
+          <div class="signoff-fields">
+            <div class="signoff-field">
+              <label for="signoffName">Name</label>
+              <input type="text" id="signoffName" disabled />
+            </div>
+            <div class="signoff-field">
+              <label for="signoffDesignation">Designation</label>
+              <input type="text" id="signoffDesignation" disabled />
+            </div>
+            <div class="signoff-field">
+              <label for="signoffDate">Date</label>
+              <input type="date" id="signoffDate" disabled />
+            </div>
+          </div>
+        </div>
+        
+        <div class="data-source-footer">
+          <h5>Data Source Legend</h5>
+          <div class="data-source-item"><span class="data-source-dot ai"></span> AI-Generated Fields (Initial Assessment)</div>
+          <div class="data-source-item"><span class="data-source-dot verified"></span> Competent Person Verified/Overridden Fields</div>
+        </div>
+      </div>
       <div class="action-buttons">
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
         <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
@@ -439,6 +545,9 @@
   let assessmentTimestamp = null;
   let manualModeActive = false;
   let imageMetadata = null;
+  let reviewData = {};  // Store override and verification data per hazard index
+  let signoffData = { verified: false, name: '', designation: '', date: '' };
+
 
   const BASELINE_DB = {
     'construction|height|elevated': [
@@ -1522,8 +1631,320 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       </div>${imageMetadata ? renderImageMetadata(imageMetadata, assessmentTimestamp) : ''}
       <div class="disclaimer">This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register.</div>
     `;
+    
+    // Render the HSE Officer Review table
+    renderReviewTable();
   }
 
+
+
+  // ── HSE Officer Review Section ──────────────────────────────────────────────
+  function renderReviewTable() {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const tbody = $('reviewTableBody');
+    const reviewSection = $('hseReviewSection');
+    
+    if (allHazards.length === 0) {
+      reviewSection.classList.add('hidden');
+      return;
+    }
+    
+    reviewSection.classList.remove('hidden');
+    tbody.innerHTML = '';
+    
+    allHazards.forEach((h, i) => {
+      // Initialize review data for this hazard if not exists
+      if (!reviewData[i]) {
+        reviewData[i] = {
+          override: false,
+          reviewL: h.L,
+          reviewS: h.S,
+          reviewControls: '',
+          verified: false
+        };
+      }
+      
+      const rd = reviewData[i];
+      const tr = document.createElement('tr');
+      tr.id = `review_row_${i}`;
+      if (rd.verified) tr.classList.add('verified-row');
+      
+      // Number cell
+      const tdNum = document.createElement('td');
+      tdNum.textContent = i + 1;
+      tr.appendChild(tdNum);
+      
+      // Hazard name cell
+      const tdName = document.createElement('td');
+      tdName.innerHTML = `<strong>${h.name}</strong>`;
+      tr.appendChild(tdName);
+      
+      // AI L cell
+      const tdAIL = document.createElement('td');
+      tdAIL.textContent = h.L;
+      tdAIL.id = `ai_l_${i}`;
+      tr.appendChild(tdAIL);
+      
+      // AI S cell
+      const tdAIS = document.createElement('td');
+      tdAIS.textContent = h.S;
+      tdAIS.id = `ai_s_${i}`;
+      tr.appendChild(tdAIS);
+      
+      // Override toggle cell
+      const tdOverride = document.createElement('td');
+      const overrideDiv = document.createElement('div');
+      overrideDiv.className = 'override-toggle';
+      const overrideCb = document.createElement('input');
+      overrideCb.type = 'checkbox';
+      overrideCb.id = `override_${i}`;
+      overrideCb.checked = rd.override;
+      overrideCb.addEventListener('change', () => toggleOverride(i));
+      const overrideLabel = document.createElement('label');
+      overrideLabel.htmlFor = `override_${i}`;
+      overrideLabel.textContent = 'Override';
+      overrideDiv.appendChild(overrideCb);
+      overrideDiv.appendChild(overrideLabel);
+      tdOverride.appendChild(overrideDiv);
+      tr.appendChild(tdOverride);
+      
+      // Review L cell
+      const tdReviewL = document.createElement('td');
+      tdReviewL.id = `review_l_cell_${i}`;
+      const reviewLSel = document.createElement('select');
+      reviewLSel.id = `review_l_${i}`;
+      reviewLSel.disabled = !rd.override;
+      [1,2,3,4,5].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === rd.reviewL) opt.selected = true;
+        reviewLSel.appendChild(opt);
+      });
+      reviewLSel.addEventListener('change', () => updateReviewData(i));
+      if (rd.override && rd.reviewL !== h.L) tdReviewL.classList.add('overridden-cell');
+      tdReviewL.appendChild(reviewLSel);
+      tr.appendChild(tdReviewL);
+      
+      // Review S cell
+      const tdReviewS = document.createElement('td');
+      tdReviewS.id = `review_s_cell_${i}`;
+      const reviewSSel = document.createElement('select');
+      reviewSSel.id = `review_s_${i}`;
+      reviewSSel.disabled = !rd.override;
+      [1,2,3,4,5].forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === rd.reviewS) opt.selected = true;
+        reviewSSel.appendChild(opt);
+      });
+      reviewSSel.addEventListener('change', () => updateReviewData(i));
+      if (rd.override && rd.reviewS !== h.S) tdReviewS.classList.add('overridden-cell');
+      tdReviewS.appendChild(reviewSSel);
+      tr.appendChild(tdReviewS);
+      
+      // Review Controls cell
+      const tdControls = document.createElement('td');
+      tdControls.id = `review_controls_cell_${i}`;
+      const controlsInput = document.createElement('input');
+      controlsInput.type = 'text';
+      controlsInput.id = `review_controls_${i}`;
+      controlsInput.value = rd.reviewControls;
+      controlsInput.placeholder = 'Enter controls...';
+      controlsInput.disabled = !rd.override;
+      controlsInput.addEventListener('input', () => updateReviewData(i));
+      if (rd.override && rd.reviewControls) tdControls.classList.add('overridden-cell');
+      tdControls.appendChild(controlsInput);
+      tr.appendChild(tdControls);
+      
+      // Verified checkbox cell
+      const tdVerified = document.createElement('td');
+      tdVerified.id = `verified_cell_${i}`;
+      const verifiedCb = document.createElement('input');
+      verifiedCb.type = 'checkbox';
+      verifiedCb.id = `verified_${i}`;
+      verifiedCb.checked = rd.verified;
+      verifiedCb.addEventListener('change', () => toggleVerified(i));
+      tdVerified.appendChild(verifiedCb);
+      tr.appendChild(tdVerified);
+      
+      tbody.appendChild(tr);
+    });
+    
+    // Set default review date to today
+    const today = new Date().toISOString().split('T')[0];
+    const reviewDateEl = $('reviewDate');
+    if (reviewDateEl && !reviewDateEl.value) {
+      reviewDateEl.value = today;
+    }
+    
+    // Set up signoff checkbox handler
+    const signoffCb = $('signoffCheckbox');
+    if (signoffCb) {
+      signoffCb.checked = signoffData.verified;
+      signoffCb.addEventListener('change', handleSignoff);
+    }
+    
+    // Populate signoff fields if already filled
+    updateSignoffFields();
+  }
+  
+  function toggleOverride(index) {
+    const cb = $(`override_${index}`);
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const h = allHazards[index];
+    
+    reviewData[index].override = cb.checked;
+    
+    // Enable/disable review inputs
+    const reviewL = $(`review_l_${index}`);
+    const reviewS = $(`review_s_${index}`);
+    const reviewControls = $(`review_controls_${index}`);
+    
+    reviewL.disabled = !cb.checked;
+    reviewS.disabled = !cb.checked;
+    reviewControls.disabled = !cb.checked;
+    
+    // Reset to AI values if override is turned off
+    if (!cb.checked) {
+      reviewL.value = h.L;
+      reviewS.value = h.S;
+      reviewData[index].reviewL = h.L;
+      reviewData[index].reviewS = h.S;
+    }
+    
+    // Update cell highlighting
+    updateCellHighlighting(index);
+  }
+  
+  function updateReviewData(index) {
+    const reviewL = parseInt($(`review_l_${index}`).value, 10);
+    const reviewS = parseInt($(`review_s_${index}`).value, 10);
+    const reviewControls = $(`review_controls_${index}`).value;
+    
+    reviewData[index].reviewL = reviewL;
+    reviewData[index].reviewS = reviewS;
+    reviewData[index].reviewControls = reviewControls;
+    
+    updateCellHighlighting(index);
+    
+    // Update residual matrix with new values if verified
+    if (reviewData[index].verified) {
+      updateResidualMatrix();
+    }
+  }
+  
+  function updateCellHighlighting(index) {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const h = allHazards[index];
+    const rd = reviewData[index];
+    
+    const lCell = $(`review_l_cell_${index}`);
+    const sCell = $(`review_s_cell_${index}`);
+    const controlsCell = $(`review_controls_cell_${index}`);
+    
+    // Remove and re-add highlighting class
+    lCell.classList.remove('overridden-cell');
+    sCell.classList.remove('overridden-cell');
+    controlsCell.classList.remove('overridden-cell');
+    
+    if (rd.override) {
+      if (rd.reviewL !== h.L) lCell.classList.add('overridden-cell');
+      if (rd.reviewS !== h.S) sCell.classList.add('overridden-cell');
+      if (rd.reviewControls) controlsCell.classList.add('overridden-cell');
+    }
+  }
+  
+  function toggleVerified(index) {
+    const cb = $(`verified_${index}`);
+    const row = $(`review_row_${index}`);
+    
+    reviewData[index].verified = cb.checked;
+    
+    if (cb.checked) {
+      row.classList.add('verified-row');
+    } else {
+      row.classList.remove('verified-row');
+    }
+    
+    updateDataSourcesDisplay();
+  }
+  
+  function handleSignoff() {
+    const cb = $('signoffCheckbox');
+    signoffData.verified = cb.checked;
+    
+    if (cb.checked) {
+      // Auto-populate signoff fields from reviewer info
+      const reviewerName = $('reviewerName')?.value || '';
+      const reviewerDesignation = $('reviewerDesignation')?.value || '';
+      const reviewDate = $('reviewDate')?.value || new Date().toISOString().split('T')[0];
+      
+      signoffData.name = reviewerName;
+      signoffData.designation = reviewerDesignation;
+      signoffData.date = reviewDate;
+    } else {
+      signoffData.name = '';
+      signoffData.designation = '';
+      signoffData.date = '';
+    }
+    
+    updateSignoffFields();
+    updateDataSourcesDisplay();
+  }
+  
+  function updateSignoffFields() {
+    const signoffName = $('signoffName');
+    const signoffDesignation = $('signoffDesignation');
+    const signoffDate = $('signoffDate');
+    
+    if (signoffData.verified) {
+      signoffName.value = signoffData.name;
+      signoffDesignation.value = signoffData.designation;
+      signoffDate.value = signoffData.date;
+      signoffName.disabled = false;
+      signoffDesignation.disabled = false;
+      signoffDate.disabled = false;
+    } else {
+      signoffName.value = '';
+      signoffDesignation.value = '';
+      signoffDate.value = '';
+      signoffName.disabled = true;
+      signoffDesignation.disabled = true;
+      signoffDate.disabled = true;
+    }
+  }
+  
+  function updateDataSourcesDisplay() {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const overriddenCount = Object.values(reviewData).filter(r => r.override).length;
+    const verifiedCount = Object.values(reviewData).filter(r => r.verified).length;
+    
+    // Could update a display here if needed
+  }
+  
+  // Get effective risk data for a hazard (verified/overridden takes precedence)
+  function getEffectiveRiskData(index) {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const h = allHazards[index];
+    const rd = reviewData[index];
+    
+    if (rd && rd.verified && rd.override) {
+      return {
+        L: rd.reviewL,
+        S: rd.reviewS,
+        controls: rd.reviewControls,
+        source: 'verified'
+      };
+    }
+    return {
+      L: h.L,
+      S: h.S,
+      controls: '',
+      source: 'ai'
+    };
+  }
 
   // Extract EXIF metadata from image file
   async function extractImageMetadata(file) {
@@ -2120,14 +2541,167 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       });
       y = sigY + 24;
 
-      // ── Footer on all pages ──
+      // ── HSE Officer Review Section ──
+      const reviewerName = $('reviewerName')?.value || '';
+      const reviewerDesignation = $('reviewerDesignation')?.value || '';
+      const reviewDateVal = $('reviewDate')?.value || '';
+      
+      // Count overridden and verified hazards
+      const overriddenHazards = Object.values(reviewData).filter(r => r.override && r.verified).length;
+      const verifiedHazards = Object.values(reviewData).filter(r => r.verified).length;
+      const hasReviewData = reviewerName || overriddenHazards > 0 || signoffData.verified;
+      
+      if (hasReviewData) {
+        checkPageBreak(30);
+        sectionTitle('HSE Officer Review');
+        
+        // Reviewer info table
+        const reviewerRows = [
+          ['Reviewer Name', reviewerName || '-'],
+          ['Designation', reviewerDesignation || '-'],
+          ['Review Date', reviewDateVal || '-']
+        ];
+        doc.autoTable({
+          startY: y,
+          head: [],
+          body: reviewerRows,
+          theme: 'plain',
+          styles: { fontSize: 9, cellPadding: 2 },
+          columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 1: { cellWidth: contentW - 40 } },
+          margin: { left: margin, right: margin }
+        });
+        y = doc.lastAutoTable.finalY + 6;
+        
+        // Review table with overrides
+        if (overriddenHazards > 0 || verifiedHazards > 0) {
+          checkPageBreak(20);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(21, 101, 192);
+          doc.text('Hazard Review & Override Summary', margin, y);
+          y += 4;
+          
+          const reviewHead = [['#', 'Hazard', 'AI L', 'AI S', 'Review L', 'Review S', 'Controls', 'Source', 'Verified']];
+          const reviewBody = allHazardsForPDF.map((h, i) => {
+            const rd = reviewData[i] || {};
+            const effective = getEffectiveRiskData(i);
+            const isOverridden = rd.override && (rd.reviewL !== h.L || rd.reviewS !== h.S);
+            return [
+              i + 1,
+              h.name.substring(0, 20),
+              h.L,
+              h.S,
+              rd.override ? rd.reviewL : h.L,
+              rd.override ? rd.reviewS : h.S,
+              (rd.reviewControls || '').substring(0, 25) || '-',
+              rd.override && rd.verified ? 'Verified' : 'AI',
+              rd.verified ? 'Yes' : 'No'
+            ];
+          }).filter((row, i) => reviewData[i]?.override || reviewData[i]?.verified);
+          
+          doc.autoTable({
+            startY: y,
+            head: reviewHead,
+            body: reviewBody,
+            theme: 'grid',
+            headStyles: { fillColor: [21, 101, 192], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+            bodyStyles: { fontSize: 7, cellPadding: 2 },
+            columnStyles: {
+              0: { cellWidth: 6 },
+              1: { cellWidth: 25 },
+              2: { cellWidth: 8 },
+              3: { cellWidth: 8 },
+              4: { cellWidth: 10 },
+              5: { cellWidth: 10 },
+              6: { cellWidth: 30 },
+              7: { cellWidth: 14 },
+              8: { cellWidth: 10 }
+            },
+            didParseCell(data) {
+              if (data.section === 'body') {
+                // Highlight overridden cells in blue
+                if (data.column.index === 4 || data.column.index === 5) {
+                  const rowIdx = data.row.index;
+                  const actualRow = reviewBody[rowIdx];
+                  if (actualRow && actualRow[7] === 'Verified') {
+                    data.cell.styles.fillColor = [187, 222, 251];
+                  }
+                }
+              }
+            },
+            margin: { left: margin, right: margin }
+          });
+          y = doc.lastAutoTable.finalY + 6;
+        }
+        
+        // Sign-off section
+        if (signoffData.verified) {
+          checkPageBreak(25);
+          doc.setFillColor(232, 245, 233);
+          doc.roundedRect(margin, y, contentW, 35, 2, 2, 'F');
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(46, 125, 50);
+          doc.text('Competent Person Sign-Off', margin + 4, y + 6);
+          y += 10;
+          
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(66, 66, 66);
+          const signoffText = 'Assessment verified by competent person as defined under ADOSH OSH Law No. 8 of 1980.';
+          doc.text(signoffText, margin + 4, y);
+          y += 8;
+          
+          // Sign-off signature fields
+          const sigFields = [
+            ['Name', signoffData.name || reviewerName],
+            ['Designation', signoffData.designation || reviewerDesignation],
+            ['Date', signoffData.date || reviewDateVal]
+          ];
+          doc.autoTable({
+            startY: y,
+            head: [],
+            body: sigFields,
+            theme: 'plain',
+            styles: { fontSize: 8, cellPadding: 1 },
+            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 25 }, 1: { cellWidth: 50 } },
+            margin: { left: margin + 4, right: margin }
+          });
+          y = doc.lastAutoTable.finalY + 4;
+        }
+      }
+
+      // ── Footer on all pages with data sources ──
       const totalPages = doc.internal.getNumberOfPages();
+      const aiCount = allHazardsForPDF.length - verifiedHazards;
+      const verifiedCount = verifiedHazards;
+      
       for (let pg = 1; pg <= totalPages; pg++) {
         doc.setPage(pg);
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setTextColor(130, 130, 130);
-        doc.text(`Page ${pg} of ${totalPages}  |  VisualRiskAssessor — HSE Risk Assessment Report`, margin, pageH - 8);
-        doc.text(new Date().toISOString().slice(0, 10), pageW - margin, pageH - 8, { align: 'right' });
+        
+        // Page number and title
+        doc.text(`Page ${pg} of ${totalPages}  |  VisualRiskAssessor — HSE Risk Assessment Report`, margin, pageH - 12);
+        doc.text(new Date().toISOString().slice(0, 10), pageW - margin, pageH - 12, { align: 'right' });
+        
+        // Data sources footer
+        doc.setFontSize(6);
+        doc.setFillColor(250, 250, 250);
+        doc.rect(margin, pageH - 10, contentW, 8, 'F');
+        
+        // AI-generated indicator
+        doc.setFillColor(106, 27, 154);  // Purple for AI
+        doc.circle(margin + 4, pageH - 6, 2, 'F');
+        doc.setTextColor(80, 80, 80);
+        doc.text(`AI-Generated: ${aiCount} hazards`, margin + 8, pageH - 5);
+        
+        // Verified indicator
+        if (verifiedCount > 0) {
+          doc.setFillColor(21, 101, 192);  // Blue for verified
+          doc.circle(margin + 60, pageH - 6, 2, 'F');
+          doc.text(`Competent Person Verified: ${verifiedCount} hazards`, margin + 64, pageH - 5);
+        }
       }
 
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -2230,6 +2804,8 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     hazards = []; manualHazards = []; baselineHazards = []; overall = 0; imageData = null; analysisMode = 'rule-based';
     pendingAnalysis = null; assessmentTimestamp = null;
     manualModeActive = false;
+    reviewData = {};
+    signoffData = { verified: false, name: '', designation: '', date: '' };
     els.manualModeToggle.checked = false;
     els.manualEntrySection.classList.add('hidden');
     els.fileInput.value = '';
