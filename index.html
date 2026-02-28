@@ -577,8 +577,14 @@
       <div class="matrix-wrap">
         <div id="riskMatrix" class="matrix"></div>
         <div class="matrix-legend">
-          <div class="matrix-legend-item"><span class="legend-dot-initial"></span> Initial Risk</div>
-          <div class="matrix-legend-item"><span class="legend-dot-residual"></span> Residual Risk</div>
+          <div class="matrix-legend-item">
+            <span style="display:inline-block;width:16px;height:16px;background:#fff;border-radius:50%;border:2px solid #212121;flex-shrink:0;"></span>
+            <span>Initial Risk</span>
+          </div>
+          <div class="matrix-legend-item">
+            <span style="display:inline-block;width:16px;height:16px;background:transparent;border-radius:50%;border:3px solid #212121;flex-shrink:0;"></span>
+            <span>Residual Risk</span>
+          </div>
         </div>
       </div>
       <h3>Risk Summary Dashboard</h3>
@@ -3004,26 +3010,132 @@ function extractImageMetadata(file) {
       });
       y = doc.lastAutoTable.finalY + 6;
 
-      // ── Risk Matrix screenshot ──
+      // ── Risk Matrix (rendered as data table) ──
       try {
         checkPageBreak(10);
         sectionTitle('Risk Matrix');
-        const matrixEl = $('riskMatrix');
-        if (matrixEl && window.html2canvas) {
-          const canvas = await html2canvas(matrixEl, { backgroundColor: '#ffffff', scale: 2 });
-          const imgData = canvas.toDataURL('image/png');
-          const mxW = Math.min(contentW * 0.6, 100);
-          const mxH = (canvas.height / canvas.width) * mxW;
-          checkPageBreak(mxH + 4);
-          doc.addImage(imgData, 'PNG', margin, y, mxW, mxH);
-          y += mxH + 4;
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(80, 80, 80);
-          doc.text('● Filled circle = Initial Risk   ○ Hollow circle = Residual Risk', margin, y);
-          y += 6;
-          doc.setTextColor(33, 33, 33);
+
+        // Build hazard position maps for initial and residual risks
+        const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
+        const initialHazards = new Map();
+        const residualHazards = new Map();
+
+        allHazardsForPDF.forEach((h, i) => {
+          const key = `${h.L}-${h.S}`;
+          if (!initialHazards.has(key)) initialHazards.set(key, []);
+          initialHazards.get(key).push(i + 1);
+
+          const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
+          const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
+          const rKey = `${rl}-${rs}`;
+          if (!residualHazards.has(rKey)) residualHazards.set(rKey, []);
+          residualHazards.get(rKey).push(i + 1);
+        });
+
+        // Build matrix data: 5 rows (L5 to L1), each with 5 score cells
+        const matrixHead = [['', 'S1', 'S2', 'S3', 'S4', 'S5']];
+        const matrixBody = [];
+        const likelihoods = [5, 4, 3, 2, 1];
+        const severities = [1, 2, 3, 4, 5];
+
+        likelihoods.forEach(l => {
+          const row = [`L${l}`];
+          severities.forEach(s => {
+            const score = l * s;
+            row.push(String(score));
+          });
+          matrixBody.push(row);
+        });
+
+        // Color mapping for risk levels
+        function matrixCellColor(score) {
+          if (score <= 4) return [39, 174, 96];    // Low - green
+          if (score <= 9) return [241, 196, 15];   // Medium - yellow
+          if (score <= 16) return [230, 126, 34];  // High - orange
+          return [192, 57, 43];                     // Extreme - red
         }
+
+        // Draw the matrix table
+        doc.autoTable({
+          startY: y,
+          head: matrixHead,
+          body: matrixBody,
+          theme: 'grid',
+          headStyles: { fillColor: [21, 101, 192], textColor: 255, fontStyle: 'bold', fontSize: 9, halign: 'center' },
+          bodyStyles: { fontSize: 10, cellPadding: 4, halign: 'center', valign: 'middle' },
+          columnStyles: {
+            0: { fillColor: [21, 101, 192], textColor: 255, fontStyle: 'bold', fontSize: 9, cellWidth: 10 }
+          },
+          didParseCell(data) {
+            if (data.section === 'body' && data.column.index > 0) {
+              const l = likelihoods[data.row.index];
+              const s = severities[data.column.index - 1];
+              const score = l * s;
+              const col = matrixCellColor(score);
+              data.cell.styles.fillColor = col;
+              data.cell.styles.textColor = (score > 4 && score <= 9) ? [33, 33, 33] : [255, 255, 255];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          },
+          didDrawCell(data) {
+            if (data.section === 'body' && data.column.index > 0) {
+              const l = likelihoods[data.row.index];
+              const s = severities[data.column.index - 1];
+              const key = `${l}-${s}`;
+
+              // Draw initial risk markers (white filled circles with hazard numbers)
+              const initials = initialHazards.get(key) || [];
+              const residuals = residualHazards.get(key) || [];
+              const allMarkers = [...initials.map(n => ({ n, type: 'initial' })), ...residuals.map(n => ({ n, type: 'residual' }))];
+
+              if (allMarkers.length > 0) {
+                const cellX = data.cell.x;
+                const cellY = data.cell.y;
+                const cellW = data.cell.width;
+                const cellH = data.cell.height;
+                const markerRadius = 3.5;
+                const startX = cellX + cellW / 2 - ((allMarkers.length - 1) * 5);
+                const markerY = cellY + cellH - 5;
+
+                allMarkers.forEach((marker, idx) => {
+                  const mx = startX + (idx * 10);
+
+                  if (marker.type === 'initial') {
+                    // White filled circle for initial risk
+                    doc.setFillColor(255, 255, 255);
+                    doc.setDrawColor(33, 33, 33);
+                    doc.setLineWidth(0.3);
+                    doc.circle(mx, markerY, markerRadius, 'FD');
+                  } else {
+                    // Hollow circle for residual risk
+                    doc.setFillColor(255, 255, 255);
+                    doc.setDrawColor(33, 33, 33);
+                    doc.setLineWidth(0.5);
+                    doc.circle(mx, markerY, markerRadius, 'FD');
+                  }
+
+                  // Hazard number in white bold text centered in cell above marker
+                  doc.setFontSize(7);
+                  doc.setFont('helvetica', 'bold');
+                  doc.setTextColor(255, 255, 255);
+                  const textX = mx;
+                  const textY = cellY + cellH / 2 - 1;
+                  doc.text(String(marker.n), textX, textY, { align: 'center' });
+                });
+              }
+            }
+          },
+          margin: { left: margin, right: margin }
+        });
+        y = doc.lastAutoTable.finalY + 6;
+
+        // Legend for matrix
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        doc.text('Filled circle = Initial Risk    Hollow circle = Residual Risk    White numbers = Hazard sequence numbers', margin, y);
+        y += 8;
+        doc.setTextColor(33, 33, 33);
       } catch (_) {}
 
       // ── Disclaimer ──
