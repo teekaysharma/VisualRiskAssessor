@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VisualRiskAssessor - HSE Risk Assessment</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1237,6 +1238,47 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       }
     });
   }
+function extractImageMetadata(file) {
+  return new Promise((resolve) => {
+    const meta = {
+      filename: file.name,
+      filesize: (file.size / 1024).toFixed(1) + ' KB',
+      filetype: file.type,
+      captureDate: null,
+      gps: null,
+      device: null,
+      stale: false
+    };
+    EXIF.getData(file, function() {
+      const dt = EXIF.getTag(this, 'DateTimeOriginal');
+      const make = EXIF.getTag(this, 'Make');
+      const model = EXIF.getTag(this, 'Model');
+      const lat = EXIF.getTag(this, 'GPSLatitude');
+      const latRef = EXIF.getTag(this, 'GPSLatitudeRef');
+      const lon = EXIF.getTag(this, 'GPSLongitude');
+      const lonRef = EXIF.getTag(this, 'GPSLongitudeRef');
+      if (dt) {
+        meta.captureDate = dt;
+        const parsed = new Date(dt.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'));
+        const daysDiff = (new Date() - parsed) / (1000 * 60 * 60 * 24);
+        meta.stale = daysDiff > 7;
+      }
+      if (make || model) meta.device = [make, model].filter(Boolean).join(' ');
+      if (lat && lon) {
+        const toDecimal = (arr, ref) => {
+          const d = arr[0] + arr[1]/60 + arr[2]/3600;
+          return (ref === 'S' || ref === 'W') ? -d : d;
+        };
+        meta.gps = {
+          lat: toDecimal(lat, latRef).toFixed(6),
+          lon: toDecimal(lon, lonRef).toFixed(6)
+        };
+      }
+      resolve(meta);
+    });
+  });
+}
+
 
   function render() {
     els.results.classList.remove('hidden');
@@ -1628,7 +1670,8 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       <div class="metadata-row">
         <span class="metadata-label">Standard Reference:</span>
         <span class="metadata-value">ISO 45001:2018 / ADOSH-SF</span>
-      </div>${imageMetadata ? renderImageMetadata(imageMetadata, assessmentTimestamp) : ''}
+      </div>${window.currentImageMeta ? renderImageMetadata(window.currentImageMeta, assessmentTimestamp) : ''}
+      ${window.currentImageDimensions && (window.currentImageDimensions.width < 640 || window.currentImageDimensions.height < 480) ? '<div class="warning" style="margin-top:8px;">⚠️ Low resolution image detected — AI hazard detection accuracy may be reduced. Minimum recommended resolution is 640×480.</div>' : ''}
       <div class="disclaimer">This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register.</div>
     `;
     
@@ -2718,82 +2761,55 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   function renderImageMetadata(metadata, assessmentDate) {
     let html = '<h4 style="margin-top:16px;">Image Metadata</h4>';
 
+    // Check if we have EXIF data at all
+    const hasExifData = metadata.captureDate || metadata.device || metadata.gps;
+
     html += `
       <div class="metadata-row">
-        <span class="metadata-label">Image Filename:</span>
-        <span class="metadata-value">${metadata.filename}</span>
-      </div>`;
-
-    if (metadata.dimensions) {
-      const isLowRes = metadata.dimensions.resolution < 640000;
-      html += `
-      <div class="metadata-row">
-        <span class="metadata-label">Dimensions:</span>
-        <span class="metadata-value">${metadata.dimensions.width} × ${metadata.dimensions.height} px</span>
-        ${isLowRes ? '<span style="color:#f44336;font-weight:700;margin-left:8px;">⚠️ Low Resolution</span>' : ''}
+        <span class="metadata-label">Filename:</span>
+        <span class="metadata-value">${metadata.filename || 'Not available'}</span>
       </div>
       <div class="metadata-row">
-        <span class="metadata-label">Resolution:</span>
-        <span class="metadata-value">${metadata.dimensions.megapixels} MP</span>
-      </div>`;
-      if (isLowRes) {
-        html += `
-      <div class="warning" style="margin-top:8px;font-size:11px;">
-        ⚠️ Low resolution image detected. This may affect AI analysis accuracy. For best results, use images with at least 1280×720 resolution.
-      </div>`;
-      }
-    }
-
-    html += `
+        <span class="metadata-label">File size:</span>
+        <span class="metadata-value">${metadata.filesize || 'Not available'}</span>
+      </div>
       <div class="metadata-row">
-        <span class="metadata-label">File Size:</span>
-        <span class="metadata-value">${(metadata.size / 1024).toFixed(1)} KB</span>
-      </div>`;
-
-    if (metadata.exif) {
-      if (metadata.exif.Make || metadata.exif.Model) {
-        html += `
+        <span class="metadata-label">Capture date:</span>
+        <span class="metadata-value">${metadata.captureDate || 'Not available'}</span>
+      </div>
       <div class="metadata-row">
         <span class="metadata-label">Device:</span>
-        <span class="metadata-value">${metadata.exif.Make || ''} ${metadata.exif.Model || ''}</span>
+        <span class="metadata-value">${metadata.device || 'Not available'}</span>
       </div>`;
-      }
 
-      if (metadata.exif.DateTimeOriginal) {
-        const captureDate = new Date(metadata.exif.DateTimeOriginal);
-        const daysDiff = Math.floor((assessmentDate - captureDate) / (1000 * 60 * 60 * 24));
-        const isStale = Math.abs(daysDiff) > 7;
-
-        html += `
+    if (metadata.gps) {
+      html += `
       <div class="metadata-row">
-        <span class="metadata-label">Capture Date:</span>
-        <span class="metadata-value">${captureDate.toLocaleString()}</span>
-        ${isStale ? '<span style="color:#f44336;font-weight:700;margin-left:8px;">⚠️ Stale Image</span>' : ''}
+        <span class="metadata-label">GPS coordinates:</span>
+        <span class="metadata-value">${metadata.gps.lat}, ${metadata.gps.lon}</span>
+        <a href="https://www.google.com/maps?q=${metadata.gps.lat},${metadata.gps.lon}" target="_blank" rel="noopener" style="margin-left:8px;color:#1565c0;text-decoration:none;font-size:11px;">📍 View Map</a>
       </div>`;
-
-        if (isStale) {
-          html += `
-      <div class="warning" style="margin-top:8px;font-size:11px;">
-        ⚠️ Image may not reflect current site conditions (captured ${Math.abs(daysDiff)} days ${daysDiff > 0 ? 'ago' : 'in the future'}).
-      </div>`;
-        }
-      }
-
-      if (metadata.exif.GPS && metadata.exif.GPS.latitude !== null && metadata.exif.GPS.longitude !== null) {
-        const lat = metadata.exif.GPS.latitude.toFixed(6);
-        const lon = metadata.exif.GPS.longitude.toFixed(6);
-        html += `
-      <div class="metadata-row">
-        <span class="metadata-label">GPS Coordinates:</span>
-        <span class="metadata-value">${lat}, ${lon}</span>
-        <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener" style="margin-left:8px;color:#1565c0;text-decoration:none;font-size:11px;">📍 View Map</a>
-      </div>`;
-      }
     } else {
       html += `
       <div class="metadata-row">
-        <span class="metadata-label">EXIF Data:</span>
+        <span class="metadata-label">GPS coordinates:</span>
         <span class="metadata-value">Not available</span>
+      </div>`;
+    }
+
+    // Stale warning
+    if (metadata.stale) {
+      html += `
+      <div class="warning" style="margin-top:8px;">
+        ⚠️ Image captured more than 7 days ago — may not reflect current site conditions. Verify before submitting to ADOSH.
+      </div>`;
+    }
+
+    // No EXIF data message
+    if (!hasExifData) {
+      html += `
+      <div class="metadata-row" style="margin-top:8px;">
+        <span class="metadata-value" style="color:#666;font-style:italic;">No embedded metadata found in this image.</span>
       </div>`;
     }
 
@@ -2844,8 +2860,24 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     if (!f) return;
     if (!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value = ''; return; }
     imageMetadata = await extractImageMetadata(f);
+    extractImageMetadata(f).then(meta => {
+      window.currentImageMeta = meta;
+    });
+    // Get image dimensions for quality check
+    const img = new Image();
+    const imgLoadPromise = new Promise((resolve) => {
+      img.onload = () => {
+        window.currentImageDimensions = { width: img.width, height: img.height };
+        resolve();
+      };
+      img.onerror = resolve;
+    });
     const reader = new FileReader();
-    reader.onload = ev => analyze(ev.target.result);
+    reader.onload = async ev => {
+      img.src = ev.target.result;
+      await imgLoadPromise;
+      analyze(ev.target.result);
+    };
     reader.onerror = () => showWarning('Failed to read selected image.');
     reader.readAsDataURL(f);
   });
