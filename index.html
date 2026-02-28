@@ -1682,10 +1682,10 @@ function extractImageMetadata(file) {
       
       // Attach event listeners after adding to DOM
       if (isEditing) {
-        const lSelect = document.getElementById(`tableA_L_${i}`);
-        const sSelect = document.getElementById(`tableA_S_${i}`);
-        const saveBtn = document.getElementById(`tableA_save_${i}`);
-        const cancelBtn = document.getElementById(`tableA_cancel_${i}`);
+        const lSelect = trA.querySelector(`#tableA_L_${i}`);
+        const sSelect = trA.querySelector(`#tableA_S_${i}`);
+        const saveBtn = trA.querySelector(`#tableA_save_${i}`);
+        const cancelBtn = trA.querySelector(`#tableA_cancel_${i}`);
         
         const updateRisk = () => {
           const newL = parseInt(lSelect.value, 10);
@@ -1727,7 +1727,7 @@ function extractImageMetadata(file) {
           render();
         });
       } else {
-        const editBtn = document.getElementById(`tableA_edit_${i}`);
+        const editBtn = trA.querySelector(`#tableA_edit_${i}`);
         if (editBtn && !h.verified) {
           editBtn.addEventListener('click', () => {
             h.isEditing = true;
