@@ -82,7 +82,6 @@ The app will analyze and provide risk assessments based on detected objects and 
 
 ## Source of Truth for GitHub Pages
 
-- Canonical web app file: `web/index.html`
-- Root `index.html` is deployment mirror for GitHub Pages compatibility.
-- Run `./scripts_sync_web.sh` after web edits to sync the root copy.
+- GitHub Pages serves the root `index.html` in this repository.
+- The `web/` directory now only stores supporting assets (models, vendor scripts, docs).
 
