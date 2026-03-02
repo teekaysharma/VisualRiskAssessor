@@ -2888,10 +2888,10 @@ function extractImageMetadata(file) {
       sectionTitle('Risk Register');
 
       function scoreColor(score) {
-        if (score <= 4) return [39, 174, 96];
-        if (score <= 9) return [241, 196, 15];
-        if (score <= 16) return [230, 126, 34];
-        return [192, 57, 43];
+        if (score >= 17) return [192, 57, 43];   // Extreme - red #c0392b
+        if (score >= 10) return [230, 126, 34];   // High - amber #e67e22
+        if (score >= 5)  return [241, 196, 15];  // Medium - yellow #f1c40f
+        return [39, 174, 96];                     // Low - green #27ae60
       }
 
       const rrHead = [['#', 'Hazard', 'Details', 'L', 'S', 'Score', 'Rating', 'Conf', 'Controls In Place', 'Res.L', 'Res.S', 'Res.Risk', 'Owner', 'Corrective Action', 'Target Date', 'Status']];
@@ -2993,11 +2993,11 @@ function extractImageMetadata(file) {
       const hocBody = allHazardsForPDF.map((h, i) => [
         i + 1,
         h.name,
-        h.eliminate || 'N/A',
-        h.substitute || 'N/A',
-        h.engineering || 'N/A',
-        h.administrative || 'N/A',
-        h.ppe || 'N/A'
+        h.eliminate || '',
+        h.substitute || '',
+        h.engineering || '',
+        h.administrative || '',
+        h.ppe || ''
       ]);
       doc.autoTable({
         startY: y,
@@ -3041,18 +3041,17 @@ function extractImageMetadata(file) {
         likelihoods.forEach(l => {
           const row = [`L${l}`];
           severities.forEach(s => {
-            const score = l * s;
-            row.push(String(score));
+            row.push('');  // Score will be drawn manually in didDrawCell at top-center
           });
           matrixBody.push(row);
         });
 
         // Color mapping for risk levels
         function matrixCellColor(score) {
-          if (score <= 4) return [39, 174, 96];    // Low - green
-          if (score <= 9) return [241, 196, 15];   // Medium - yellow
-          if (score <= 16) return [230, 126, 34];  // High - orange
-          return [192, 57, 43];                     // Extreme - red
+          if (score >= 17) return [192, 57, 43];   // Extreme - red #c0392b
+          if (score >= 10) return [230, 126, 34];   // High - amber #e67e22
+          if (score >= 5)  return [241, 196, 15];  // Medium - yellow #f1c40f
+          return [39, 174, 96];                     // Low - green #27ae60
         }
 
         // Draw the matrix table
