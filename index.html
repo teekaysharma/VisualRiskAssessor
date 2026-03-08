@@ -589,6 +589,13 @@
       </div>
       <h3>Risk Summary Dashboard</h3>
       <div id="riskSummary" class="risk-summary"></div>
+      <details id="compliancePanel" style="margin:12px 0;">
+        <summary style="cursor:pointer;font-weight:700;color:#1565c0;font-size:.95rem;padding:8px 0;">
+          📋 Compliance Coverage Status
+        </summary>
+        <div id="complianceChecklist" style="padding:10px 0;font-size:.85rem;display:grid;grid-template-columns:28px 1fr auto;gap:6px 10px;align-items:center;"></div>
+      </details>
+
       <h3>Hierarchy of Controls</h3>
       <div id="hocTable"></div>
       <h3>Assessment Details</h3>
@@ -660,6 +667,33 @@
           <div class="data-source-item"><span class="data-source-dot verified"></span> Competent Person Verified/Overridden Fields</div>
         </div>
       </div>
+      <details id="emergencySection" class="card" style="margin-top:16px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:1rem;color:#b71c1c;padding:12px;">
+          🚨 Emergency Preparedness — ISO 45001:2018 §8.2
+        </summary>
+        <div style="padding:12px;">
+          <p style="font-size:.83rem;color:#555;margin:0 0 12px;">Complete for each plausible emergency scenario identified from this assessment. Required under ISO 45001:2018 Clause 8.2 and ADOSH SF Emergency Response requirements.</p>
+          <div style="overflow-x:auto;">
+            <table id="emergencyTable" style="width:100%;border-collapse:collapse;font-size:12px;">
+              <thead>
+                <tr style="background:#b71c1c;color:#fff;">
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Scenario</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Trigger Condition</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Immediate Response Steps</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Responsible Role</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Assembly Point</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Drill Frequency</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Last Drill Date</th>
+                  <th style="padding:8px 6px;border:1px solid #c62828;">Next Drill Date</th>
+                </tr>
+              </thead>
+              <tbody id="emergencyTableBody"></tbody>
+            </table>
+          </div>
+          <button id="btnAddEmergency" class="btn btn-secondary" style="margin-top:10px;font-size:.85rem;">+ Add Scenario</button>
+        </div>
+      </details>
+
       <div class="action-buttons">
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
         <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
@@ -982,6 +1016,12 @@
       name: 'Ergonomic Issue', L: 3, S: 2,
       cocoClasses: ['laptop', 'keyboard', 'mouse', 'chair', 'couch', 'book'],
       recs: ['Adjust workstations to proper ergonomic height', 'Provide mechanical aids for lifting and handling', 'Implement job rotation to reduce repetitive strain', 'Train workers on proper lifting techniques', 'Conduct ergonomic assessments regularly']
+    },
+    heat: {
+      name: 'Heat Stress / Heat Stroke',
+      L: 4, S: 4,
+      cocoClasses: [],
+      recs: ['Reschedule outdoor work to cooler hours (before 10am / after 4pm) per UAE MOL Ministerial Resolution No. 32/2023', 'Provide shaded rest areas with cooling fans', 'Ensure chilled water stations at max 50m intervals', 'WBGT monitoring every 30 min; buddy system mandatory', 'Heat illness recognition training and acclimatisation programme for new workers']
     },
     other: {
       name: 'General Workplace Hazard', L: 2, S: 2,
@@ -3604,6 +3644,69 @@ function extractImageMetadata(file) {
   initContextPanel();
 
   initModel();
+})();
+</script>
+<script>
+(function(){
+  // Emergency section
+  function addEmergencyRow(scenario,trigger,steps,role,assembly,frequency,lastDate,nextDate){
+    scenario=scenario||'';trigger=trigger||'';steps=steps||'';role=role||'';
+    assembly=assembly||'';frequency=frequency||'';lastDate=lastDate||'';nextDate=nextDate||'';
+    var tbody=document.getElementById('emergencyTableBody');
+    if(!tbody)return;
+    var tr=document.createElement('tr');
+    var cell=function(val,placeholder,type){
+      type=type||'text';
+      return '<td style="border:1px solid #ddd;padding:3px;"><input type="'+type+'" value="'+val+'" placeholder="'+placeholder+'" style="width:100%;font-size:11px;border:1px solid #ccc;border-radius:3px;padding:3px;box-sizing:border-box;" /></td>';
+    };
+    tr.innerHTML=cell(scenario,'e.g. Fire')+cell(trigger,'e.g. Smoke alarm')+cell(steps,'e.g. Evacuate, call 999')+cell(role,'e.g. Site HSE Officer')+cell(assembly,'e.g. Main gate')+cell(frequency,'e.g. Quarterly')+cell(lastDate,',date')+cell(nextDate,',date');
+    tbody.appendChild(tr);
+  }
+  var addBtn=document.getElementById('btnAddEmergency');
+  if(addBtn){addBtn.addEventListener('click',function(){addEmergencyRow();});}
+  window.addEmergencyRow=addEmergencyRow;
+
+  // Pre-populate emergency table from highest hazard
+  window.populateEmergencyFromHighestHazard=function(hazards){
+    if(!hazards||!hazards.length)return;
+    var sorted=hazards.slice().sort(function(a,b){return(b.L*b.S)-(a.L*a.S);});
+    var h=sorted[0];
+    var map={height:'Fall from Height incident',chemical:'Chemical spill / release',
+      fire:'Fire outbreak',electrical:'Electrical incident',machinery:'Equipment entrapment',
+      confined:'Confined space rescue',struck:'Struck-by incident',ppe:'Emergency evacuation',
+      slip:'Slip/trip/fall emergency',heat:'Heat illness emergency',other:'General workplace emergency'};
+    addEmergencyRow(map[h.key]||'General emergency','Hazard materialised or alarm activated',
+      'Evacuate immediately; activate emergency response plan; call emergency services',
+      'Site HSE Officer','Designated assembly point','Quarterly','','');
+  };
+
+  // Compliance checklist
+  window.renderComplianceChecklist=function(hazards,overall,baselineHazards,assessmentTimestamp){
+    var el=document.getElementById('complianceChecklist');
+    if(!el)return;
+    var hseConfirmed=window.hseSignoffData&&window.hseSignoffData.confirmed;
+    var reviewerName=document.getElementById('reviewerName');
+    var hasReviewer=reviewerName&&reviewerName.value&&reviewerName.value.trim().length>0;
+    var emergencyRows=document.querySelectorAll('#emergencyTableBody tr').length;
+    var hocRows=document.querySelectorAll('#hocTable tbody tr').length;
+    var hasHeat=hazards&&hazards.some(function(h){return h.name&&/heat|thermal/i.test(h.name);});
+    var items=[
+      {label:'Hazard identification completed',ref:'ISO 45001 §6.1.2.1',ok:hazards&&hazards.length>0},
+      {label:'Risk scoring applied (L × S matrix)',ref:'ISO 45001 §6.1.2.2 / ADOSH-SF §4',ok:overall>0},
+      {label:'Hierarchy of Controls recorded',ref:'ISO 45001 §8.1.2',ok:hocRows>0},
+      {label:'Competent person sign-off',ref:'ADOSH OSH Law No. 8 of 1980',ok:!!hseConfirmed},
+      {label:'Emergency preparedness recorded',ref:'ISO 45001 §8.2',ok:emergencyRows>0},
+      {label:'HSE Officer review completed',ref:'HSE.GOV Five Steps §5',ok:!!hasReviewer},
+      {label:'Baseline hazards loaded',ref:'ISO 45001 §6.1.2.1',ok:baselineHazards&&baselineHazards.length>0},
+      {label:'Heat stress hazard assessed',ref:'ADOSH-SF / UAE MOL Heat Stress Reg.',ok:!!hasHeat}
+    ];
+    el.innerHTML=items.map(function(item){
+      var icon=item.ok?'✅':'❌';
+      return '<span style="font-size:16px;text-align:center;">'+icon+'</span>'
+        +'<span style="font-size:.83rem;color:#212121;">'+item.label+'</span>'
+        +'<span style="font-size:.75rem;color:#757575;font-style:italic;">'+item.ref+'</span>';
+    }).join('');
+  };
 })();
 </script>
 </body>
