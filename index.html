@@ -2152,11 +2152,21 @@ function extractImageMetadata(file) {
       <div class="disclaimer">This assessment is AI-generated and requires verification by a competent HSE professional before use in a formal risk register.</div>
     `;
     
-    // Render the HSE Officer Review table
+   // Render the HSE Officer Review table
     renderReviewTable();
     
     // Update PDF button state
     updatePDFButtonState();
+
+    // Auto-populate emergency table on first render only
+    var eTbody = document.getElementById('emergencyTableBody');
+    if (eTbody && eTbody.rows.length === 0 && allHazards.length > 0) {
+      window.populateEmergencyFromHighestHazard(allHazards);
+    }
+
+    // Refresh compliance checklist on every render
+    window.renderComplianceChecklist(allHazards, overall, baselineHazards, assessmentTimestamp);
+  
   }
 
 
