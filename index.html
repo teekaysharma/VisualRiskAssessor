@@ -636,7 +636,7 @@
           <h4>✅ Competent Person Sign-Off</h4>
           <div class="signoff-checkbox">
             <input type="checkbox" id="signoffCheckbox" />
-            <label for="signoffCheckbox">Assessment verified by competent person as defined under ADOSH OSH Law No. 8 of 1980. The undersigned confirms that all identified hazards have been reviewed, risk ratings have been validated or adjusted where necessary, and appropriate control measures have been confirmed.</label>
+            <label for="signoffCheckbox">Assessment verified by a competent person in accordance with ISO 45001:2018 and applicable UAE occupational health and safety legislation. The undersigned confirms that all identified hazards have been reviewed, risk ratings have been validated or adjusted where necessary, and appropriate control measures have been confirmed.</label>
           </div>
           <div class="signoff-fields">
             <div class="signoff-field">
@@ -1881,7 +1881,7 @@ function extractImageMetadata(file) {
       <div class="hse-signoff-checkbox">
         <input type="checkbox" id="hseConfirmationCheckbox" ${window.hseSignoffData?.confirmed ? 'checked' : ''}>
         <label for="hseConfirmationCheckbox">
-          I confirm this assessment has been reviewed and verified by a competent person as defined under ADOSH OSH Law No. 8 of 1980
+          I confirm this assessment has been reviewed and verified by a competent person in accordance with ISO 45001:2018 and applicable UAE occupational health and safety legislation
         </label>
       </div>
       <div class="hse-signoff-signature">
@@ -3306,7 +3306,7 @@ function extractImageMetadata(file) {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(66, 66, 66);
-          const signoffText = 'Assessment verified by competent person as defined under ADOSH OSH Law No. 8 of 1980.';
+          const signoffText = 'Assessment verified by a competent person in accordance with ISO 45001:2018 and applicable UAE occupational health and safety legislation.';
           doc.text(signoffText, margin + 4, y);
           y += 8;
           
