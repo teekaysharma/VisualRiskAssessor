@@ -1,0 +1,15 @@
+{
+  "name": "@riskapp/risk-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "build": "esbuild src/index.ts --bundle --format=iife --global-name=RiskCore --outfile=dist/risk-core.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9",
+    "esbuild": "^0.25.12"
+  }
+}
