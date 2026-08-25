@@ -21,7 +21,10 @@ const ALLOWED_ORIGIN = "https://teekaysharma.github.io";
 // Hard caps so a single request (or a runaway loop) can't exhaust the
 // free Groq quota or run up an unexpected bill if you later add a paid key.
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // ~4MB base64 image
-const GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+// meta-llama/llama-4-scout-17b-16e-instruct was deprecated by Groq;
+// qwen/qwen3.6-27b is the current documented default vision model
+// (console.groq.com/docs/vision, checked 2026-08).
+const GROQ_MODEL = "qwen/qwen3.6-27b";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 function corsHeaders(origin) {
@@ -103,6 +106,18 @@ export default {
       temperature: 0.4,
       top_p: 0.9,
       max_tokens: 2048,
+      // qwen/qwen3.6-27b is a reasoning model that otherwise wraps its
+      // answer in <think>...</think> before the JSON, breaking the
+      // client's JSON.parse. 'hidden' returns only the final answer.
+      // (console.groq.com/docs/reasoning)
+      reasoning_format: "hidden",
+      // Hidden reasoning still consumes max_tokens even though it's never
+      // shown — on a solid-color test image, qwen3.6-27b spent its entire
+      // 2048-token budget on reasoning and returned an EMPTY answer
+      // (finish_reason: 'length', reasoning_tokens: 2048). This task needs
+      // structured extraction, not chain-of-thought, so disable reasoning
+      // entirely rather than just raising max_tokens.
+      reasoning_effort: "none",
     };
 
     const groqResp = await fetch(GROQ_URL, {

@@ -701,7 +701,7 @@
   // Set by the site owner after deploying demo-proxy/worker.js — see
   // demo-proxy/README.md. Left blank, the "Try Demo" button shows a clear
   // "not configured yet" message instead of a failing network call.
-  const DEMO_PROXY_URL = ''; // e.g. 'https://visualriskassessor-demo.yoursubdomain.workers.dev'
+  const DEMO_PROXY_URL = 'https://visualriskassessor-demo.teekaysharma.workers.dev';
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let manualHazards = [];
@@ -1294,7 +1294,10 @@ If no hazards are visible, return an empty array [].
 Be thorough and observational. Do not limit yourself to obvious hazards. Examine the full image including background, floor, ceiling, equipment state, worker positioning, housekeeping condition, and signage. Report every hazard visible regardless of how minor it appears. Accuracy of observation is more important than brevity.`;
 
     const body = {
-      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      // meta-llama/llama-4-scout-17b-16e-instruct was deprecated by Groq;
+      // qwen/qwen3.6-27b is the current documented default vision model
+      // (console.groq.com/docs/vision, checked 2026-08).
+      model: 'qwen/qwen3.6-27b',
       messages: [
         {
           role: 'user',
@@ -1306,7 +1309,18 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       ],
       temperature: 0.4,
       top_p: 0.9,
-      max_tokens: 2048
+      max_tokens: 2048,
+      // qwen/qwen3.6-27b is a reasoning model that otherwise wraps its
+      // answer in <think>...</think> before the JSON, breaking JSON.parse.
+      // 'hidden' returns only the final answer. (console.groq.com/docs/reasoning)
+      reasoning_format: 'hidden',
+      // Hidden reasoning still consumes max_tokens even though it's never
+      // shown — on a solid-color test image, qwen3.6-27b spent its entire
+      // 2048-token budget on reasoning and returned an EMPTY answer
+      // (finish_reason: 'length', reasoning_tokens: 2048). This task needs
+      // structured extraction, not chain-of-thought, so disable reasoning
+      // entirely rather than just raising max_tokens.
+      reasoning_effort: 'none'
     };
 
     try {
@@ -1339,7 +1353,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
         const data = await resp.json();
         const text = data?.choices?.[0]?.message?.content || '[]';
-        const cleaned = text.replace(/```json|```/g, '').trim();
+        // Defensive strip: reasoning_format:'hidden' should already remove
+        // this, but a reasoning model that ignores it (or a future model
+        // swap) must not silently fail JSON.parse.
+        const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```json|```/g, '').trim();
         const raw = JSON.parse(cleaned);
 
         // RiskCore.validateHazards REJECTS a malformed candidate (missing or
