@@ -571,6 +571,19 @@
           <button type="button" class="btn" id="btnTryDemo" style="background:#4a148c;color:#fff;">🎬 Try Demo (no key needed)</button>
           <p style="margin:4px 0 0;font-size:.78rem;color:#6a1b9a;">Runs one AI analysis on a shared demo quota — for evaluation only, not for real assessments. <a href="demo-proxy/README.md" target="_blank" rel="noopener">Site owner setup →</a></p>
         </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #ce93d8;">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
+            <input type="checkbox" id="compressToggle" checked />
+            🗜️ Compress large photos before AI analysis
+          </label>
+          <p style="margin:4px 0 0;font-size:.78rem;color:#6a1b9a;">
+            Recommended — phone cameras (especially iPhone/Android at max resolution) can produce photos too
+            large for the demo quota, and every extra megabyte costs more tokens even with your own key.
+            Only kicks in above ~1.5MB; the full-resolution photo is always kept for the record, export and
+            PDF — only the copy sent to the AI is shrunk. Turn off if you specifically want full-resolution
+            analysis and are not using the demo quota.
+          </p>
+        </div>
       </div>
     </section>
 
@@ -695,13 +708,23 @@
     manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
     manualHazardType: $('manualHazardType'), manualLikelihood: $('manualLikelihood'),
     manualSeverity: $('manualSeverity'), manualDescription: $('manualDescription'),
-    btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo')
+    btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
   // demo-proxy/README.md. Left blank, the "Try Demo" button shows a clear
   // "not configured yet" message instead of a failing network call.
   const DEMO_PROXY_URL = 'https://visualriskassessor-demo.teekaysharma.workers.dev';
+
+  // Photos below this size are sent to the AI untouched — compression only
+  // kicks in for photos actually large enough to matter (over the demo
+  // proxy's 4MB cap risk, or meaningfully costing extra tokens on a real key).
+  const COMPRESS_THRESHOLD_BYTES = 1.5 * 1024 * 1024;
+  // Target size for the compressed copy sent to the AI — comfortably under
+  // the demo proxy's 4MB cap with margin, and small enough to meaningfully
+  // cut token cost on a real key too.
+  const COMPRESS_TARGET_BYTES = 2 * 1024 * 1024;
+  const COMPRESS_MAX_DIMENSION = 1920; // longest edge, px — ample for hazard detail
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let manualHazards = [];
@@ -1253,6 +1276,39 @@
       });
     });
     return { hazards: [...found.values()], labels };
+  }
+
+  /**
+   * Resizes and re-compresses an already-decoded <img> for the copy sent to
+   * the AI. Never touches the stored/exported photo — analyze() keeps the
+   * original `dataUrl` in `imageData` for display, export and the PDF;
+   * only the request to geminiHazards() uses this compressed copy.
+   * Downscales to COMPRESS_MAX_DIMENSION on the longest edge, then steps
+   * JPEG quality down (to a floor, so detail isn't destroyed chasing an
+   * unreachable target) until under COMPRESS_TARGET_BYTES or the floor.
+   */
+  function compressImageForAI(img) {
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (Math.max(width, height) > COMPRESS_MAX_DIMENSION) {
+      const scale = COMPRESS_MAX_DIMENSION / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+    let quality = 0.82;
+    let dataUrl = canvas.toDataURL('image/jpeg', quality);
+    let attempts = 0;
+    while (dataUrl.length > COMPRESS_TARGET_BYTES && quality > 0.5 && attempts < 4) {
+      quality = Math.max(0.5, quality - 0.12);
+      dataUrl = canvas.toDataURL('image/jpeg', quality);
+      attempts++;
+    }
+    return { dataUrl, width, height, quality };
   }
 
   async function geminiHazards(dataUrl) {
@@ -2730,8 +2786,21 @@ function extractImageMetadata(file) {
       const apiKey = els.apiKeyInput.value.trim();
       if (apiKey || useDemoMode) {
         try {
+          // Compress only the copy sent to the AI — imageData (display,
+          // export, PDF) above already holds the untouched original.
+          let aiDataUrl = dataUrl;
+          const compressionOn = els.compressToggle ? els.compressToggle.checked : true;
+          if (compressionOn && dataUrl.length > COMPRESS_THRESHOLD_BYTES) {
+            const before = dataUrl.length;
+            const compressed = compressImageForAI(img);
+            aiDataUrl = compressed.dataUrl;
+            const beforeMB = (before / 1024 / 1024).toFixed(1);
+            const afterMB = (aiDataUrl.length / 1024 / 1024).toFixed(1);
+            setLoading(true, `🗜️ Compressed photo for analysis: ${beforeMB}MB → ${afterMB}MB...`);
+            await new Promise(r => setTimeout(r, 400)); // let the user actually see this before it's replaced
+          }
           setLoading(true, useDemoMode ? '🎬 Running demo AI analysis...' : '🤖 Running AI Vision analysis...');
-          const aiResult = await geminiHazards(dataUrl);
+          const aiResult = await geminiHazards(aiDataUrl);
           if (aiResult && aiResult.length > 0) {
             hazards = aiResult;
             analysisMode = 'ai';
