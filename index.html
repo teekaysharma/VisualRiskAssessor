@@ -10,6 +10,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- Single source of truth for risk scoring/banding (ADOSH-SF Table 3).
+       Built from packages/risk-core (typed, unit tested). Do not edit the
+       matrix inline in this file — edit packages/risk-core/src/index.ts,
+       run its tests, rebuild, and copy dist/risk-core.js here. -->
+  <script src="risk-core.js"></script>
   <style>
     :root { --p:#ff6d00; --s:#1565c0; --ok:#4caf50; --mid:#ffc107; --hi:#f44336; --x:#b71c1c; }
     * { box-sizing:border-box; }
@@ -909,11 +914,7 @@
     const tagsEl = $('baselineTags');
     countEl.textContent = baselineHazards.length;
     tagsEl.innerHTML = baselineHazards.map(h => {
-      const score = h.risk;
-      let color = '#00695c';
-      if (score >= 17) color = '#c0392b';
-      else if (score >= 10) color = '#e67e22';
-      else if (score >= 5) color = '#b07d00';
+      const color = RiskCore.band(h.risk).bg;
       return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${h.name} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
     }).join('');
     infoEl.style.display = baselineHazards.length > 0 ? 'block' : 'none';
@@ -1017,19 +1018,20 @@
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
   function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
 
+  // Single source of truth for risk banding: packages/risk-core (ADOSH-SF
+  // Table 3). Do not reintroduce inline P*S thresholds here — that
+  // duplication is what caused this app, the Kotlin app and the Expo app to
+  // disagree on band boundaries.
+  const RISK_CSS_VAR = { low: 'var(--ok)', moderate: 'var(--mid)', high: 'var(--hi)', extreme: 'var(--x)' };
+  const RISK_CSS_CLASS = { low: 'risk-low', moderate: 'risk-medium', high: 'risk-high', extreme: 'risk-extreme' };
+
   function riskFor(score) {
-    if (score <= 4) return { label: 'Low Risk', cls: 'risk-low', color: 'var(--ok)', bg: '#27ae60', textColor: '#fff' };
-    if (score <= 9) return { label: 'Medium Risk', cls: 'risk-medium', color: 'var(--mid)', bg: '#f1c40f', textColor: '#212121' };
-    if (score <= 16) return { label: 'High Risk', cls: 'risk-high', color: 'var(--hi)', bg: '#e67e22', textColor: '#fff' };
-    if (score <= 25) return { label: 'Critical Risk', cls: 'risk-extreme', color: 'var(--x)', bg: '#c0392b', textColor: '#fff' };
-    return { label: 'Extreme Risk', cls: 'risk-extreme', color: 'var(--x)', bg: '#c0392b', textColor: '#fff' };
+    const b = RiskCore.band(score);
+    return { label: b.label, cls: RISK_CSS_CLASS[b.key], color: RISK_CSS_VAR[b.key], bg: b.bg, textColor: b.textColor };
   }
 
   function residualBorderColor(score) {
-    if (score <= 4) return '#27ae60';
-    if (score <= 9) return '#f1c40f';
-    if (score <= 16) return '#e67e22';
-    return '#c0392b';
+    return RiskCore.band(score).bg;
   }
 
   async function initModel() {
@@ -1315,22 +1317,31 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         const cleaned = text.replace(/```json|```/g, '').trim();
         const raw = JSON.parse(cleaned);
 
-        return raw.map(item => {
-          const h = hazardDB[item.key] || hazardDB.other;
-          const L = Math.min(5, Math.max(1, Math.round(item.likelihood)));
-          const S = Math.min(5, Math.max(1, Math.round(item.severity)));
+        // RiskCore.validateHazards REJECTS a malformed candidate (missing or
+        // out-of-range likelihood/severity) rather than coercing it into a
+        // plausible-looking score. It also refuses to default a missing
+        // confidence upward — omitted confidence means "unknown", flagged
+        // for mandatory human review, never silently treated as 0.8.
+        const { accepted, rejected } = RiskCore.validateHazards(raw);
+        if (rejected.length > 0) {
+          console.warn(`AI response: ${rejected.length} hazard candidate(s) rejected as malformed`, rejected);
+        }
+
+        return accepted.map(h => {
+          const dbEntry = hazardDB[h.key] || hazardDB.other;
           return {
-            name: item.name || h.name,
-            L, S, risk: L * S,
-            conf: Math.min(1, Math.max(0, item.confidence || 0.8)),
-            recs: h.recs,
+            name: h.name || dbEntry.name,
+            L: h.likelihood, S: h.severity, risk: h.score,
+            conf: h.confidence,
+            needsReview: h.needsReview,
+            recs: dbEntry.recs,
             source: 'ai',
-            details: item.details || '',
-            eliminate: item.eliminate || 'N/A',
-            substitute: item.substitute || 'N/A',
-            engineering: item.engineering || 'N/A',
-            administrative: item.administrative || 'N/A',
-            ppe: item.ppe || 'N/A'
+            details: h.details,
+            eliminate: h.eliminate,
+            substitute: h.substitute,
+            engineering: h.engineering,
+            administrative: h.administrative,
+            ppe: h.ppe
           };
         });
       } catch (e) {
@@ -1462,8 +1473,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       add(`L${l}`, 'head');
       for (let s = 1; s <= 5; s++) {
         const score = l * s;
-        let cls = 'low';
-        if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[RiskCore.band(score).key];
         add(String(score), cls, l, s);
       }
     });
@@ -1662,7 +1672,7 @@ function extractImageMetadata(file) {
           </td>
           <td id="tableA_risk_${i}" style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
           <td id="tableA_rating_${i}">${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
-          <td>${Math.round((h.conf || 0) * 100)}%</td>
+          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && RiskCore.needsReview(h.conf) ? ' <span title="Low or missing AI confidence — verify before sign-off" style="color:#c0392b;font-weight:700">⚠ Review</span>' : ''}</td>
           <td>
             <button class="edit-icon-btn" id="tableA_save_${i}" title="Save">💾</button>
             <button class="edit-icon-btn" id="tableA_cancel_${i}" title="Cancel">❌</button>
@@ -1678,7 +1688,7 @@ function extractImageMetadata(file) {
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
           <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
           <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
-          <td>${Math.round((h.conf || 0) * 100)}%</td>
+          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && RiskCore.needsReview(h.conf) ? ' <span title="Low or missing AI confidence — verify before sign-off" style="color:#c0392b;font-weight:700">⚠ Review</span>' : ''}</td>
           <td>
             <button class="edit-icon-btn" id="tableA_edit_${i}" title="Edit L/S" ${h.verified ? 'disabled' : ''}>✏️</button>
           </td>
@@ -1991,8 +2001,7 @@ function extractImageMetadata(file) {
       add(`L${l}`, 'head');
       for (let s = 1; s <= 5; s++) {
         const score = l * s;
-        let cls = 'low';
-        if (score >= 17) cls = 'ext'; else if (score >= 10) cls = 'high'; else if (score >= 5) cls = 'med';
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[RiskCore.band(score).key];
         add(String(score), cls, l, s);
       }
     });
@@ -2356,8 +2365,30 @@ function extractImageMetadata(file) {
   
   function handleSignoff() {
     const cb = $('signoffCheckbox');
+
+    if (cb.checked) {
+      // Confidence gate: a hazard the AI flagged as low-confidence (or gave
+      // no confidence for at all) must be individually reviewed — override
+      // checked in its row — before sign-off can proceed. This is the
+      // enforcement point; RiskCore.needsReview is the single source for
+      // what counts as "low confidence".
+      const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+      const unreviewed = allHazards
+        .map((h, i) => ({ h, i }))
+        .filter(({ h, i }) => h.source === 'ai' && RiskCore.needsReview(h.conf) && !reviewData[i]?.override);
+      if (unreviewed.length > 0) {
+        cb.checked = false;
+        const names = unreviewed.map(({ h }) => h.name).join(', ');
+        alert(
+          `Sign-off blocked: ${unreviewed.length} AI-identified hazard(s) have low or missing confidence and have not been reviewed: ${names}.\n\n` +
+          `Tick "Override" on each of these rows (adjusting the risk rating if needed) before signing off.`
+        );
+        return;
+      }
+    }
+
     signoffData.verified = cb.checked;
-    
+
     if (cb.checked) {
       // Auto-populate signoff fields from reviewer info
       const reviewerName = $('reviewerName')?.value || '';
@@ -2888,10 +2919,7 @@ function extractImageMetadata(file) {
       sectionTitle('Risk Register');
 
       function scoreColor(score) {
-        if (score >= 17) return [192, 57, 43];   // Extreme - red #c0392b
-        if (score >= 10) return [230, 126, 34];   // High - amber #e67e22
-        if (score >= 5)  return [241, 196, 15];  // Medium - yellow #f1c40f
-        return [39, 174, 96];                     // Low - green #27ae60
+        return RiskCore.band(score).rgb;
       }
 
       const rrHead = [['#', 'Hazard', 'Details', 'L', 'S', 'Score', 'Rating', 'Conf', 'Controls In Place', 'Res.L', 'Res.S', 'Res.Risk', 'Owner', 'Corrective Action', 'Target Date', 'Status']];
@@ -2954,14 +2982,14 @@ function extractImageMetadata(file) {
               const score = parseInt(data.cell.raw, 10);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = score > 4 && score <= 9 ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33,33,33] : [255,255,255];
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 11) {
               const score = parseInt(data.cell.raw, 10);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = score > 4 && score <= 9 ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33,33,33] : [255,255,255];
               data.cell.styles.fontStyle = 'bold';
             }
             // Highlight overridden L (column 3) and S (column 4) cells in blue
@@ -3048,10 +3076,7 @@ function extractImageMetadata(file) {
 
         // Color mapping for risk levels
         function matrixCellColor(score) {
-          if (score >= 17) return [192, 57, 43];   // Extreme - red #c0392b
-          if (score >= 10) return [230, 126, 34];   // High - amber #e67e22
-          if (score >= 5)  return [241, 196, 15];  // Medium - yellow #f1c40f
-          return [39, 174, 96];                     // Low - green #27ae60
+          return RiskCore.band(score).rgb;
         }
 
         // Draw the matrix table
@@ -3072,7 +3097,7 @@ function extractImageMetadata(file) {
               const score = l * s;
               const col = matrixCellColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = (score > 4 && score <= 9) ? [33, 33, 33] : [255, 255, 255];
+              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
               data.cell.styles.fontStyle = 'bold';
             }
           },
@@ -3090,8 +3115,8 @@ function extractImageMetadata(file) {
               const score = l * s;
               doc.setFontSize(9);
               doc.setFont('helvetica', 'bold');
-              // Use dark text on yellow, white on others
-              if (score > 4 && score <= 9) {
+              // Use dark text on yellow (moderate band), white on others
+              if (RiskCore.band(score).key === 'moderate') {
                 doc.setTextColor(33, 33, 33);
               } else {
                 doc.setTextColor(255, 255, 255);
