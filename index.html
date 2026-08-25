@@ -567,6 +567,10 @@
         <label for="apiKeyInput">🤖 Groq API Key (optional — enables deep AI analysis)</label>
         <input id="apiKeyInput" type="password" placeholder="Paste your Groq API key here..." autocomplete="off" />
         <p style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only. Enables scene-understanding beyond object labels. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a free key →</a></p>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #ce93d8;">
+          <button type="button" class="btn" id="btnTryDemo" style="background:#4a148c;color:#fff;">🎬 Try Demo (no key needed)</button>
+          <p style="margin:4px 0 0;font-size:.78rem;color:#6a1b9a;">Runs one AI analysis on a shared demo quota — for evaluation only, not for real assessments. <a href="demo-proxy/README.md" target="_blank" rel="noopener">Site owner setup →</a></p>
+        </div>
       </div>
     </section>
 
@@ -691,11 +695,17 @@
     manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
     manualHazardType: $('manualHazardType'), manualLikelihood: $('manualLikelihood'),
     manualSeverity: $('manualSeverity'), manualDescription: $('manualDescription'),
-    btnAddHazard: $('btnAddHazard')
+    btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo')
   };
+
+  // Set by the site owner after deploying demo-proxy/worker.js — see
+  // demo-proxy/README.md. Left blank, the "Try Demo" button shows a clear
+  // "not configured yet" message instead of a failing network call.
+  const DEMO_PROXY_URL = ''; // e.g. 'https://visualriskassessor-demo.yoursubdomain.workers.dev'
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let manualHazards = [];
+  let useDemoMode = false;
   let baselineHazards = [];
   let analysisMode = 'rule-based';
   let modelLoading = true;
@@ -1247,7 +1257,12 @@
 
   async function geminiHazards(dataUrl) {
     const apiKey = els.apiKeyInput.value.trim();
-    if (!apiKey) return null;
+    if (!apiKey && !useDemoMode) return null;
+    if (useDemoMode && !DEMO_PROXY_URL) {
+      // Fail clearly, before any network call — never pretend the demo
+      // works when the site owner hasn't deployed demo-proxy/worker.js yet.
+      throw new Error('Demo mode is not configured on this site yet (see demo-proxy/README.md)');
+    }
 
     const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
 Analyse this workplace image and identify all visible hazards.
@@ -1295,17 +1310,27 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     };
 
     try {
-      const resp = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify(body)
-        }
-      );
+      // Demo mode calls our own proxy (holds a shared Groq key server-side,
+      // see demo-proxy/worker.js) with a simplified body and no
+      // Authorization header. BYO-key mode is unchanged: calls Groq
+      // directly, key never leaves the browser except to Groq itself.
+      const resp = useDemoMode
+        ? await fetch(DEMO_PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, dataUrl })
+          })
+        : await fetch(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+              },
+              body: JSON.stringify(body)
+            }
+          );
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
@@ -2686,9 +2711,9 @@ function extractImageMetadata(file) {
       canvas.getContext('2d').drawImage(img, 0, 0);
 
       const apiKey = els.apiKeyInput.value.trim();
-      if (apiKey) {
+      if (apiKey || useDemoMode) {
         try {
-          setLoading(true, '🤖 Running AI Vision analysis...');
+          setLoading(true, useDemoMode ? '🎬 Running demo AI analysis...' : '🤖 Running AI Vision analysis...');
           const aiResult = await geminiHazards(dataUrl);
           if (aiResult && aiResult.length > 0) {
             hazards = aiResult;
@@ -3500,7 +3525,7 @@ function extractImageMetadata(file) {
   }
   function resetApp() {
     stopCamera();
-    hazards = []; manualHazards = []; baselineHazards = []; overall = 0; imageData = null; analysisMode = 'rule-based';
+    hazards = []; manualHazards = []; baselineHazards = []; overall = 0; imageData = null; analysisMode = 'rule-based'; useDemoMode = false;
     pendingAnalysis = null; assessmentTimestamp = null;
     manualModeActive = false;
     reviewData = {};
@@ -3534,6 +3559,20 @@ function extractImageMetadata(file) {
 
   els.btnCamera.addEventListener('click', startCamera);
   els.btnUpload.addEventListener('click', openFilePicker);
+  if (els.btnTryDemo) {
+    els.btnTryDemo.addEventListener('click', () => {
+      useDemoMode = true;
+      if (imageData) {
+        analyze(imageData); // re-run analysis on the already-captured/uploaded photo
+      } else {
+        alert('Capture or upload a photo first, then click "Try Demo" again.');
+      }
+    });
+  }
+  // Typing a real key takes priority over a previous demo click.
+  if (els.apiKeyInput) {
+    els.apiKeyInput.addEventListener('input', () => { useDemoMode = false; });
+  }
   els.btnCapture.addEventListener('click', captureFromCamera);
   els.btnStop.addEventListener('click', stopCamera);
   els.btnExport.addEventListener('click', exportReport);
