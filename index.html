@@ -460,6 +460,14 @@
 
     <section id="contextPanel" class="context-panel">
       <h2>🏗️ Assessment Context</h2>
+      <div class="context-group" style="margin-bottom:14px;">
+        <label for="siteLocationName">📍 What are we analyzing?</label>
+        <div style="display:flex; gap:8px; align-items:flex-start;">
+          <input id="siteLocationName" type="text" class="context-select" style="flex:1;" placeholder="e.g. Zone 3 Warehouse, Al Reem Logistics" autocomplete="off" />
+          <button type="button" class="btn btn-outline" id="btnDetectLocation" style="flex-shrink:0; white-space:nowrap;">📡 Use my location</button>
+        </div>
+        <div id="siteGPSDisplay" style="margin-top:6px; font-size:.82rem; color:#555;"></div>
+      </div>
       <div class="context-grid">
         <div class="context-group">
           <label for="ctxIndustry">Industry</label>
@@ -788,7 +796,8 @@
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
     btnProcessQueued: $('btnProcessQueued'),
-    aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp')
+    aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
+    siteLocationName: $('siteLocationName'), btnDetectLocation: $('btnDetectLocation'), siteGPSDisplay: $('siteGPSDisplay')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -813,6 +822,11 @@
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let lastAIProvider = null; // which provider actually produced `hazards` when analysisMode === 'ai' — for accurate report/PDF labeling even if the selector is changed afterward
+  // Coarse device GPS for "what site is this assessment at" — a convenience
+  // tag, not a precision instrument. A few metres off is fine; this is not
+  // the plan-plotting feature (that needs real calibration and is tracked
+  // separately). null until the assessor explicitly taps "Use my location".
+  let siteGPS = null;
   let manualHazards = [];
   let useDemoMode = false;
   let baselineHazards = [];
@@ -1224,6 +1238,49 @@
 
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
   function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
+
+  function renderSiteGPSDisplay() {
+    if (!els.siteGPSDisplay) return;
+    if (!siteGPS) { els.siteGPSDisplay.innerHTML = ''; return; }
+    const lat = siteGPS.lat.toFixed(6), lon = siteGPS.lon.toFixed(6);
+    const acc = Number.isFinite(siteGPS.accuracy) ? ` (±${Math.round(siteGPS.accuracy)}m)` : '';
+    els.siteGPSDisplay.innerHTML = `📍 ${lat}, ${lon}${acc} <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener" style="margin-left:6px;">View Map →</a>`;
+  }
+
+  /**
+   * Coarse, best-effort device location for tagging which site an
+   * assessment was done at — explicitly not the precision GPS-to-plan
+   * plotting feature (that needs real calibration and is a separate,
+   * deliberately deferred piece of work). A few metres of error is fine
+   * here; this is a convenience tag, not a survey instrument. Never
+   * fabricates a position — if the browser can't get one (denied,
+   * unsupported, desktop with no location hardware), it says so plainly
+   * rather than leaving a stale or fake reading in place.
+   */
+  function detectSiteLocation() {
+    if (!navigator.geolocation) {
+      showWarning('This browser does not support location detection. Enter the site name manually.');
+      return;
+    }
+    els.btnDetectLocation.disabled = true;
+    els.btnDetectLocation.textContent = '📡 Detecting…';
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        siteGPS = { lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        renderSiteGPSDisplay();
+        els.btnDetectLocation.disabled = false;
+        els.btnDetectLocation.textContent = '📡 Use my location';
+      },
+      err => {
+        siteGPS = null;
+        renderSiteGPSDisplay();
+        els.btnDetectLocation.disabled = false;
+        els.btnDetectLocation.textContent = '📡 Use my location';
+        showWarning(`Could not detect location: ${err.message}. Enter the site name manually.`);
+      },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    );
+  }
 
   // Single source of truth for risk banding: packages/risk-core (ADOSH-SF
   // Table 3). Do not reintroduce inline P*S thresholds here — that
@@ -2579,8 +2636,14 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         <span class="metadata-label">Baseline Hazards:</span>
         <span class="metadata-value">${baselineHazards.length} pre-loaded from ADOSH-SF risk profiles</span>
       </div>` : '';
+    const siteName = els.siteLocationName ? els.siteLocationName.value.trim() : '';
+    const siteRow = siteName || siteGPS ? `
+      <div class="metadata-row">
+        <span class="metadata-label">Site / Location:</span>
+        <span class="metadata-value">${siteName || 'Not named'}${siteGPS ? ` — <a href="https://www.google.com/maps?q=${siteGPS.lat.toFixed(6)},${siteGPS.lon.toFixed(6)}" target="_blank" rel="noopener">${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)} →</a>` : ''}</span>
+      </div>` : '';
     els.metadataFooter.innerHTML = `
-      <h4>Assessment Information</h4>
+      <h4>Assessment Information</h4>${siteRow}
       <div class="metadata-row">
         <span class="metadata-label">Assessment Date and Time:</span>
         <span class="metadata-value">${formattedDate}</span>
@@ -3298,7 +3361,11 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     const hasManual = manualHazards.length > 0;
     const fullModeLabel = hasManual ? (modeLabel + (hazards.length > 0 ? ' + Manual Entry' : '')) : modeLabel;
     const r = riskFor(overall).label;
-    let out = `HSE Risk Assessment Report\nDate: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
+    const siteName = els.siteLocationName ? els.siteLocationName.value.trim() : '';
+    const siteLine = (siteName || siteGPS)
+      ? `Site: ${siteName || 'Not named'}${siteGPS ? ` (${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)})` : ''}\n`
+      : '';
+    let out = `HSE Risk Assessment Report\n${siteLine}Date: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
     allHazardsForExport.forEach((h, i) => {
       const d = getRowResidualData(i);
       const sourceLabel = h.isBaseline ? 'Baseline' : (h.isManual ? 'Manual' : `AI (#${i + 1 - baselineHazards.length - manualHazards.length})`);
@@ -3376,7 +3443,12 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         ['Location Type', ctxL.options[ctxL.selectedIndex]?.text || ''],
         ['Baseline Hazards', `${baselineHazards.length} pre-loaded (ADOSH-SF)`]
       ] : [];
+      const pdfSiteName = els.siteLocationName ? els.siteLocationName.value.trim() : '';
+      const pdfSiteRows = (pdfSiteName || siteGPS) ? [
+        ['Site / Location', `${pdfSiteName || 'Not named'}${siteGPS ? ` (${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)})` : ''}`]
+      ] : [];
       const metaRows = [
+        ...pdfSiteRows,
         ['Date & Time', formattedDate],
         ['Analysis Method', modeLabel],
         ['Standard Reference', 'ISO 45001:2018 / ADOSH-SF'],
@@ -4051,6 +4123,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     $('ctxTask').value = '';
     $('ctxLocation').value = '';
     $('baselineInfo').style.display = 'none';
+    if (els.siteLocationName) els.siteLocationName.value = '';
+    siteGPS = null;
+    renderSiteGPSDisplay();
   }
 
   // ── Assessment History (local-only, IndexedDB) ─────────────────────────────
@@ -4062,6 +4137,8 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       industry: $('ctxIndustry').value,
       task: $('ctxTask').value,
       location: $('ctxLocation').value,
+      siteName: els.siteLocationName ? els.siteLocationName.value.trim() : '',
+      siteGPS: siteGPS ? { ...siteGPS } : null,
       analysisMode,
       overall,
       hazards, manualHazards, baselineHazards,
@@ -4184,6 +4261,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     $('ctxIndustry').value = record.industry || '';
     $('ctxTask').value = record.task || '';
     $('ctxLocation').value = record.location || '';
+    if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
+    siteGPS = record.siteGPS || null;
+    renderSiteGPSDisplay();
     els.historySection.classList.add('hidden');
     render();
     els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -4234,6 +4314,8 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       industry: $('ctxIndustry').value,
       task: $('ctxTask').value,
       location: $('ctxLocation').value,
+      siteName: els.siteLocationName ? els.siteLocationName.value.trim() : '',
+      siteGPS: siteGPS ? { ...siteGPS } : null,
       imageMeta: window.currentImageMeta || null,
       photoDataUrl: dataUrl
     };
@@ -4248,10 +4330,15 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       showWarning('Still offline — connect to the internet before processing queued assessments.');
       return;
     }
-    const prevCtx = { industry: $('ctxIndustry').value, task: $('ctxTask').value, location: $('ctxLocation').value };
+    const prevCtx = {
+      industry: $('ctxIndustry').value, task: $('ctxTask').value, location: $('ctxLocation').value,
+      siteName: els.siteLocationName ? els.siteLocationName.value : '', siteGPS
+    };
     $('ctxIndustry').value = record.industry || '';
     $('ctxTask').value = record.task || '';
     $('ctxLocation').value = record.location || '';
+    if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
+    siteGPS = record.siteGPS || null;
     window.currentImageMeta = record.imageMeta || null;
     try {
       await analyze(record.photoDataUrl);
@@ -4264,6 +4351,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       $('ctxIndustry').value = prevCtx.industry;
       $('ctxTask').value = prevCtx.task;
       $('ctxLocation').value = prevCtx.location;
+      if (els.siteLocationName) els.siteLocationName.value = prevCtx.siteName;
+      siteGPS = prevCtx.siteGPS;
+      renderSiteGPSDisplay();
       await renderHistoryList();
     }
   }
@@ -4432,6 +4522,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     e.target.value = '';
   });
   if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
+  if (els.btnDetectLocation) els.btnDetectLocation.addEventListener('click', detectSiteLocation);
   updateConnectivityBadge();
 
   // ── AI provider selection ───────────────────────────────────────────────
