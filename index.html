@@ -484,6 +484,7 @@
             <option value="manual">Manual Handling</option>
             <option value="chemical">Chemical Handling</option>
             <option value="maintenance">General Maintenance</option>
+            <option value="security_patrol">Security Patrol</option>
           </select>
         </div>
         <div class="context-group">
@@ -1103,6 +1104,77 @@
       name: 'General Workplace Hazard', L: 2, S: 2,
       cocoClasses: [],
       recs: ['Conduct a detailed risk assessment', 'Consult with safety professionals', 'Implement appropriate control measures', 'Train workers on identified risks', 'Monitor and review controls regularly']
+    },
+    // ── Security Patrol categories ──
+    // Additive only — a Security Patrol task still carries all hazards
+    // above (electrical, fire, slip, etc.); these four are on top of that,
+    // not a replacement mode.
+    wildlife: {
+      name: 'Wildlife Encounter', L: 3, S: 3,
+      // COCO-SSD's animal classes give the rule-based/offline fallback tier
+      // something to work with; it can't identify reptiles/scorpions the
+      // way the AI vision prompt can, but "an animal is present" is still
+      // useful even with zero connectivity.
+      cocoClasses: ['bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'],
+      recs: [
+        'Do not approach, corner, or attempt to handle the animal',
+        'Maintain a safe distance and allow it a clear path to move away on its own',
+        'Note the location and report it rather than intervening personally',
+        'Contact pest/wildlife control for removal if it poses an ongoing risk',
+        'Presence alone is not a threat that needs eliminating — do not harm or kill an animal that is simply there'
+      ],
+      eliminate: 'Not applicable — the animal is not a workplace condition to be removed; the encounter is managed, not the animal',
+      substitute: 'N/A',
+      engineering: 'Secure known entry points (gaps, drains, overgrown vegetation) that let wildlife onto the patrol route',
+      administrative: 'Log sightings so recurring encounter points are tracked over time; brief officers on which local species actually pose a risk versus which don\'t',
+      ppe: 'Standard patrol footwear/uniform — this hazard is managed by distance, not by equipping to approach it'
+    },
+    security: {
+      name: 'Security Concern', L: 3, S: 3,
+      cocoClasses: [],
+      recs: [
+        'Do not approach or confront alone',
+        'Report immediately to control room/supervisor per site security protocol',
+        'Note location, time, and description without moving closer than necessary',
+        'Preserve the scene — do not touch or move anything until directed',
+        'Follow the site\'s specific incident escalation procedure'
+      ],
+      eliminate: 'N/A', substitute: 'N/A',
+      engineering: 'Flag for review: lighting, camera coverage, or access-control gaps that let this go unnoticed until now',
+      administrative: 'Log and escalate per site security procedure; cross-check against access logs or prior incident reports',
+      ppe: 'N/A — this is a reporting and escalation hazard, not one addressed by protective equipment'
+    },
+    lighting: {
+      name: 'Inadequate Lighting / Visibility', L: 3, S: 2,
+      cocoClasses: [],
+      recs: [
+        'Report the specific location for a lighting fixture check',
+        'Use a torch/flashlight to supplement the route until repaired',
+        'Flag the area for a daylight re-check if anything else could not be clearly assessed here',
+        'Do not treat a single low-light photo as a final assessment of this area',
+        'Escalate a persistently dark patrol zone as its own finding, not just a footnote on another hazard'
+      ],
+      eliminate: 'Repair or replace the failed/inadequate light fixture', substitute: 'N/A',
+      engineering: 'Add fixed or motion-sensor lighting at the identified location',
+      administrative: 'Add the location to the lighting-fault log; adjust patrol route or timing until fixed',
+      ppe: 'Personal torch/flashlight as an interim measure'
+    },
+    // Deliberately never labeled "weapon" anywhere — the AI is not asked to
+    // identify what an ambiguous object IS, only to flag that it can't be
+    // identified from this photo. See the prompt section below for why.
+    unclear: {
+      name: 'Unidentified Object / Unclear Condition', L: 3, S: 3,
+      cocoClasses: [],
+      recs: [
+        'Do not approach or handle the object',
+        'Retake the photo from a safe distance, with better lighting, or from a different angle if it is safe to do so',
+        'Report for in-person verification by a supervisor or the appropriate specialist',
+        'Treat as potentially hazardous until someone has positively identified it',
+        'A low-confidence read is not the same as "probably nothing" — it means a human needs to look'
+      ],
+      eliminate: 'N/A', substitute: 'N/A', engineering: 'N/A',
+      administrative: 'Requires mandatory human verification before this can be closed out — never auto-clears regardless of the AI\'s stated confidence',
+      ppe: 'N/A until the object is identified'
     }
   };
 
@@ -1129,6 +1201,18 @@
   cocoToHazard['cell phone'] = ['electrical'];
   cocoToHazard['fire hydrant'] = ['fire'];
   cocoToHazard['suitcase'] = ['slip', 'ergonomic'];
+
+  /**
+   * Single source of truth for "does this hazard require mandatory human
+   * review before sign-off" — every enforcement point (the ⚠ Review badge,
+   * the actual sign-off gate) must call this, not RiskCore.needsReview(conf)
+   * directly, or a category like "unclear" that must always require review
+   * regardless of confidence silently stops being enforced anywhere the
+   * confidence-only check is used instead of this one.
+   */
+  function hazardNeedsReview(h) {
+    return h.key === 'unclear' || RiskCore.needsReview(h.conf);
+  }
 
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
   function setLoading(v, msg) { els.loading.classList.toggle('active', v); if (msg) els.loadingMsg.textContent = msg; }
@@ -1494,6 +1578,21 @@
       throw new Error('Demo mode is not configured on this site yet (see demo-proxy/README.md)');
     }
 
+    // Security Patrol is additive to the standard categories, not a
+    // separate mode — but wildlife/security/lighting checks only make
+    // sense to ask for when that's actually the assessment context,
+    // otherwise a routine electrical inspection gets flooded with
+    // "watch for wildlife" instructions it has no use for. "unclear"
+    // (never guess an ambiguous object's identity) stays available for
+    // every task — that's a general safety principle, not patrol-specific.
+    const isSecurityPatrol = $('ctxTask').value === 'security_patrol';
+    const securityPatrolSection = isSecurityPatrol ? `
+
+Security patrol — check for these as well (a Security Patrol assessment still checks everything above too; these are additional, not a replacement):
+- Wildlife: report only a broad category, never a specific species — "a reptile", "a four-legged animal", "a domestic animal", "an animal that looks wild" is the right level of detail; do not guess further (e.g. never name a species). This is a health/safety precaution, not a nature observation — frame the hazard around the encounter (distance, do-not-approach), not the animal itself. Do not cite any wildlife-protection law or regulation — general precaution only, no jurisdiction-specific citation.
+- Security concern: an unattended item, an unauthorized-looking person or access point, a breached or propped-open perimeter/gate, signs of forced entry. Only report what is visibly a concern in the photo — do not speculate about intent.
+- Lighting/visibility: report this as its own hazard (key "lighting") whenever the image itself is too dark, low-contrast, or otherwise hard to assess reliably — this is as important to report as the hazards you can see, because it tells the officer this area needs a re-check, not just that it happened to be dim.` : '';
+
     const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
 Analyse this workplace image and identify all visible hazards.
 
@@ -1528,7 +1627,10 @@ Fire safety — check specifically for each of these (report each one found as i
 - Flammable/combustible liquid stored on open shelving rather than an approved metal storage cabinet, or several such cabinets clustered together (Ch.15/16)
 - Combustible waste, dust, or packaging accumulated near an ignition source (electrical panel, hot work area, heater)
 
-Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, heat, other
+Unidentified object: if you can see something that might be concerning but you cannot clearly identify what it is (poor angle, distance, occlusion, low light) — report it with key "unclear" and explain in "details" why it couldn't be identified (e.g. "object partially obscured, camera angle" or "too dark to assess clearly"). Never guess or name what you think the object might be, and never assign this key a high confidence — this category exists specifically so uncertain findings still get reported and routed to a human, rather than the model either inventing an identity for it or silently omitting it because it isn't sure.
+${securityPatrolSection}
+
+Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, heat, unclear, other${isSecurityPatrol ? ', wildlife, security, lighting' : ''}
 Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
 Confidence must be 0.0-1.0.
 If no hazards are visible, return an empty array [].
@@ -1623,9 +1725,18 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           const dbEntry = hazardDB[h.key] || hazardDB.other;
           return {
             name: h.name || dbEntry.name,
+            key: h.key,
             L: h.likelihood, S: h.severity, risk: h.score,
             conf: h.confidence,
-            needsReview: h.needsReview,
+            // "unclear" (an object the AI can't identify) always requires a
+            // human to look, regardless of what confidence value the model
+            // reports for it — there is no confidence score high enough to
+            // let an admittedly-unidentified object auto-clear. The actual
+            // enforcement (⚠ badge, sign-off gate) reads this via `key`
+            // through hazardNeedsReview(), not through this field directly —
+            // this is kept in sync for RiskCore.hasUnreviewedHazards(), which
+            // does read it (used for History-panel review badges).
+            needsReview: h.key === 'unclear' ? true : h.needsReview,
             recs: dbEntry.recs,
             source: 'ai',
             details: h.details,
@@ -1925,7 +2036,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           </td>
           <td id="tableA_risk_${i}" style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
           <td id="tableA_rating_${i}">${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
-          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && RiskCore.needsReview(h.conf) ? ' <span title="Low or missing AI confidence — verify before sign-off" style="color:#c0392b;font-weight:700">⚠ Review</span>' : ''}</td>
+          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && hazardNeedsReview(h) ? ` <span title="${h.key === 'unclear' ? 'AI could not clearly identify this — requires human verification' : 'Low or missing AI confidence — verify before sign-off'}" style="color:#c0392b;font-weight:700">⚠ Review</span>` : ''}</td>
           <td>
             <button class="edit-icon-btn" id="tableA_save_${i}" title="Save">💾</button>
             <button class="edit-icon-btn" id="tableA_cancel_${i}" title="Cancel">❌</button>
@@ -1941,7 +2052,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
           <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
           <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
-          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && RiskCore.needsReview(h.conf) ? ' <span title="Low or missing AI confidence — verify before sign-off" style="color:#c0392b;font-weight:700">⚠ Review</span>' : ''}</td>
+          <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && hazardNeedsReview(h) ? ` <span title="${h.key === 'unclear' ? 'AI could not clearly identify this — requires human verification' : 'Low or missing AI confidence — verify before sign-off'}" style="color:#c0392b;font-weight:700">⚠ Review</span>` : ''}</td>
           <td>
             <button class="edit-icon-btn" id="tableA_edit_${i}" title="Edit L/S" ${h.verified ? 'disabled' : ''}>✏️</button>
           </td>
@@ -2630,19 +2741,21 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
     if (cb.checked) {
       // Confidence gate: a hazard the AI flagged as low-confidence (or gave
-      // no confidence for at all) must be individually reviewed — override
-      // checked in its row — before sign-off can proceed. This is the
-      // enforcement point; RiskCore.needsReview is the single source for
-      // what counts as "low confidence".
+      // no confidence for at all), or an "unclear" (unidentified object)
+      // hazard regardless of confidence, must be individually reviewed —
+      // override checked in its row — before sign-off can proceed. This is
+      // the enforcement point; hazardNeedsReview is the single source for
+      // what requires review.
       const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
       const unreviewed = allHazards
         .map((h, i) => ({ h, i }))
-        .filter(({ h, i }) => h.source === 'ai' && RiskCore.needsReview(h.conf) && !reviewData[i]?.override);
+        .filter(({ h, i }) => h.source === 'ai' && hazardNeedsReview(h) && !reviewData[i]?.override);
       if (unreviewed.length > 0) {
         cb.checked = false;
-        const names = unreviewed.map(({ h }) => h.name).join(', ');
+        const describe = ({ h }) => `${h.name}${h.key === 'unclear' ? ' (AI could not clearly identify this)' : ' (low or missing AI confidence)'}`;
+        const names = unreviewed.map(describe).join(', ');
         alert(
-          `Sign-off blocked: ${unreviewed.length} AI-identified hazard(s) have low or missing confidence and have not been reviewed: ${names}.\n\n` +
+          `Sign-off blocked: ${unreviewed.length} AI-identified hazard(s) have not been reviewed: ${names}.\n\n` +
           `Tick "Override" on each of these rows (adjusting the risk rating if needed) before signing off.`
         );
         return;
