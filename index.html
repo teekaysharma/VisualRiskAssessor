@@ -571,7 +571,7 @@
         <select id="aiProviderSelect" class="context-select">
           <option value="groq">Groq — qwen/qwen3.6-27b</option>
           <option value="anthropic">Anthropic Claude — claude-sonnet-4-5</option>
-          <option value="gemini">Google Gemini — gemini-2.5-flash</option>
+          <option value="gemini">Google Gemini — gemini-3.6-flash</option>
         </select>
         <label for="apiKeyInput" id="apiKeyLabel" style="margin-top:8px;">🤖 API Key (optional — enables deep AI analysis)</label>
         <input id="apiKeyInput" type="password" placeholder="Paste your API key here..." autocomplete="off" />
@@ -1523,7 +1523,13 @@
         ]}],
         temperature: 0.4,
         top_p: 0.9,
-        max_tokens: 2048,
+        // 2048 was too tight — a real multi-hazard scene (each hazard has 5
+        // hierarchy-of-controls fields) can legitimately need more, and a
+        // response cut off mid-JSON fails to parse and silently loses every
+        // hazard in it, not just the last one. Reproduced live: a 4-hazard
+        // test scene against Gemini truncated at 2048 with an "Unterminated
+        // string in JSON" parse error.
+        max_tokens: 4096,
         // qwen/qwen3.6-27b is a reasoning model that otherwise wraps its
         // answer in <think>...</think> before the JSON, breaking JSON.parse.
         // 'hidden' returns only the final answer. (console.groq.com/docs/reasoning)
@@ -1563,7 +1569,7 @@
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
-        max_tokens: 2048,
+        max_tokens: 4096, // see the note on Groq's max_tokens — same truncation risk on a multi-hazard scene
         messages: [{ role: 'user', content: [
           { type: 'text', text: prompt },
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
@@ -1582,7 +1588,7 @@
   async function callGemini(prompt, dataUrl, apiKey, signal) {
     const { mediaType, base64Data } = splitDataUrl(dataUrl);
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1591,7 +1597,7 @@
             { text: prompt },
             { inline_data: { mime_type: mediaType, data: base64Data } }
           ]}],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
+          generationConfig: { temperature: 0.4, maxOutputTokens: 4096 } // see the note on Groq's max_tokens — reproduced live: a 4-hazard test scene truncated mid-JSON at 2048
         }),
         signal
       }
@@ -1608,7 +1614,7 @@
   const AI_PROVIDERS = {
     groq: { label: 'Groq — qwen/qwen3.6-27b', call: callGroq, keyPlaceholder: 'Paste your Groq API key here...', keyUrl: 'https://console.groq.com/keys', keyUrlLabel: 'Get a free key →' },
     anthropic: { label: 'Anthropic Claude — claude-sonnet-4-5', call: callAnthropic, keyPlaceholder: 'Paste your Anthropic API key here...', keyUrl: 'https://console.anthropic.com/settings/keys', keyUrlLabel: 'Get an API key →' },
-    gemini: { label: 'Google Gemini — gemini-2.5-flash', call: callGemini, keyPlaceholder: 'Paste your Google AI API key here...', keyUrl: 'https://aistudio.google.com/apikey', keyUrlLabel: 'Get a free key →' }
+    gemini: { label: 'Google Gemini — gemini-3.6-flash', call: callGemini, keyPlaceholder: 'Paste your Google AI API key here...', keyUrl: 'https://aistudio.google.com/apikey', keyUrlLabel: 'Get a free key →' }
   };
 
   function selectedAIProvider() {
