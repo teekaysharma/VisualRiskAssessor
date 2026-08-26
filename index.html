@@ -1381,6 +1381,17 @@ For EACH hazard found, respond ONLY with a JSON array (no markdown, no prose) li
 ]
 
 For each hazard, provide specific actionable controls for all five hierarchy levels based on what is visible in the image. Controls must be specific to the hazard, not generic statements.
+
+Fire safety — check specifically for each of these (report each one found as its own separate hazard entry with key "fire", not merged into a single generic "fire risk"; only report what you can actually see, do not assume a condition is present or absent if the image does not show it clearly):
+- Extinguisher missing, obstructed, or not visible along an accessible path (UAE Fire and Life Safety Code Ch.4)
+- Exit or exit-access route passing through a storeroom, blocked, or narrower than normal (Ch.3)
+- Exit signage or emergency lighting absent along a visible egress route (Ch.5/Ch.6)
+- A fire door visibly wedged, chocked, or propped open (Ch.3, self-closing doors)
+- Stock or material stacked within about 500mm of a sprinkler head (Ch.9)
+- Hot work (welding/cutting/grinding) in progress with no visible fire extinguisher or fire watch nearby (Ch.12)
+- Flammable/combustible liquid stored on open shelving rather than an approved metal storage cabinet, or several such cabinets clustered together (Ch.15/16)
+- Combustible waste, dust, or packaging accumulated near an ignition source (electrical panel, hot work area, heater)
+
 Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, confined, ergonomic, heat, other
 Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
 Confidence must be 0.0-1.0.
