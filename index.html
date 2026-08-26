@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VisualRiskAssessor - HSE Risk Assessment</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -768,7 +767,6 @@
   let pendingAnalysis = null;
   let assessmentTimestamp = null;
   let manualModeActive = false;
-  let imageMetadata = null;
   let reviewData = {};  // Store override and verification data per hazard index
   let signoffData = { verified: false, name: '', designation: '', date: '' };
   
@@ -1640,48 +1638,6 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       }
     });
   }
-function extractImageMetadata(file) {
-  return new Promise((resolve) => {
-    const meta = {
-      filename: file.name,
-      filesize: (file.size / 1024).toFixed(1) + ' KB',
-      filetype: file.type,
-      captureDate: null,
-      gps: null,
-      device: null,
-      stale: false
-    };
-    EXIF.getData(file, function() {
-      const dt = EXIF.getTag(this, 'DateTimeOriginal');
-      const make = EXIF.getTag(this, 'Make');
-      const model = EXIF.getTag(this, 'Model');
-      const lat = EXIF.getTag(this, 'GPSLatitude');
-      const latRef = EXIF.getTag(this, 'GPSLatitudeRef');
-      const lon = EXIF.getTag(this, 'GPSLongitude');
-      const lonRef = EXIF.getTag(this, 'GPSLongitudeRef');
-      if (dt) {
-        meta.captureDate = dt;
-        const parsed = new Date(dt.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3'));
-        const daysDiff = (new Date() - parsed) / (1000 * 60 * 60 * 24);
-        meta.stale = daysDiff > 7;
-      }
-      if (make || model) meta.device = [make, model].filter(Boolean).join(' ');
-      if (lat && lon) {
-        const toDecimal = (arr, ref) => {
-          const d = arr[0] + arr[1]/60 + arr[2]/3600;
-          return (ref === 'S' || ref === 'W') ? -d : d;
-        };
-        meta.gps = {
-          lat: toDecimal(lat, latRef).toFixed(6),
-          lon: toDecimal(lon, lonRef).toFixed(6)
-        };
-      }
-      resolve(meta);
-    });
-  });
-}
-
-
   function render() {
     els.results.classList.remove('hidden');
     const isPlaceholderImage = imageData && imageData.startsWith('data:image/svg+xml');
@@ -2680,14 +2636,14 @@ function extractImageMetadata(file) {
         const littleEndian = view.getUint16(tiffOffset) === 0x4949;
         const ifdOffset = view.getUint32(tiffOffset + 4, littleEndian);
 
-        parseIFD(view, tiffOffset + ifdOffset, littleEndian, exif);
+        parseIFD(view, tiffOffset + ifdOffset, tiffOffset, littleEndian, exif);
 
         if (exif.ExifIFDPointer) {
-          parseIFD(view, tiffOffset + exif.ExifIFDPointer, littleEndian, exif);
+          parseIFD(view, tiffOffset + exif.ExifIFDPointer, tiffOffset, littleEndian, exif);
         }
 
         if (exif.GPSInfoIFDPointer) {
-          parseGPS(view, tiffOffset + exif.GPSInfoIFDPointer, littleEndian, exif);
+          parseGPS(view, tiffOffset + exif.GPSInfoIFDPointer, tiffOffset, littleEndian, exif);
         }
 
         break;
@@ -2710,14 +2666,34 @@ function extractImageMetadata(file) {
     }
   }
 
-  function parseIFD(view, offset, littleEndian, exif) {
+  // Byte size of one component for each TIFF type we handle (TIFF 6.0 sec. 2).
+  const EXIF_TYPE_BYTE_SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 9: 4, 10: 8 };
+
+  // A TIFF entry's 4-byte value field holds the value itself when it fits
+  // in 4 bytes, otherwise it holds an offset (relative to the TIFF header,
+  // i.e. `tiffOffset`) to where the value actually lives. This computes the
+  // correct absolute position to READ FROM in either case — it must not
+  // pre-decode the field as a number when inline, or `readEXIFValue` ends up
+  // dereferencing the decoded value itself as if it were a byte offset.
+  function exifValueOffset(view, entryOffset, type, count, tiffOffset, littleEndian) {
+    const byteSize = (EXIF_TYPE_BYTE_SIZE[type] || 1) * count;
+    if (byteSize <= 4) return entryOffset + 8;
+    return view.getUint32(entryOffset + 8, littleEndian) + tiffOffset;
+  }
+
+  // `offset` is this IFD's own absolute position (for reading its entries);
+  // `tiffOffset` is the TIFF header start, which is what any offset value
+  // stored *inside* an entry (when count doesn't fit inline) is relative to
+  // per the TIFF spec — the two are different once we're in a nested IFD
+  // (Exif/GPS sub-IFD), so both must be threaded through.
+  function parseIFD(view, offset, tiffOffset, littleEndian, exif) {
     const numEntries = view.getUint16(offset, littleEndian);
     for (let i = 0; i < numEntries; i++) {
       const entryOffset = offset + 2 + (i * 12);
       const tag = view.getUint16(entryOffset, littleEndian);
       const type = view.getUint16(entryOffset + 2, littleEndian);
       const count = view.getUint32(entryOffset + 4, littleEndian);
-      const valueOffset = view.getUint32(entryOffset + 8, littleEndian) + (count > 4 ? offset : 0);
+      const valueOffset = exifValueOffset(view, entryOffset, type, count, tiffOffset, littleEndian);
 
       const tagName = getEXIFTagName(tag);
       if (tagName) {
@@ -2726,14 +2702,14 @@ function extractImageMetadata(file) {
     }
   }
 
-  function parseGPS(view, offset, littleEndian, exif) {
+  function parseGPS(view, offset, tiffOffset, littleEndian, exif) {
     const numEntries = view.getUint16(offset, littleEndian);
     for (let i = 0; i < numEntries; i++) {
       const entryOffset = offset + 2 + (i * 12);
       const tag = view.getUint16(entryOffset, littleEndian);
       const type = view.getUint16(entryOffset + 2, littleEndian);
       const count = view.getUint32(entryOffset + 4, littleEndian);
-      const valueOffset = view.getUint32(entryOffset + 8, littleEndian) + (count > 4 ? offset : 0);
+      const valueOffset = exifValueOffset(view, entryOffset, type, count, tiffOffset, littleEndian);
 
       if (tag === 1) exif.GPSLatitudeRef = readEXIFValue(view, valueOffset, type, count, littleEndian);
       else if (tag === 2) exif.GPSLatitude = readEXIFValue(view, valueOffset, type, count, littleEndian);
@@ -2763,8 +2739,9 @@ function extractImageMetadata(file) {
       case 2: return readEXIFString(view, offset, count);
       case 3: return view.getUint16(offset, littleEndian);
       case 4: return view.getUint32(offset, littleEndian);
-      case 5: return view.getUint32(offset, littleEndian) / view.getUint32(offset + 4, littleEndian);
-      case 7: return readEXIFRationalArray(view, offset, count, littleEndian);
+      // RATIONAL — GPSLatitude/GPSLongitude store 3 of these (deg, min, sec),
+      // so this must return the full array, not just the first fraction.
+      case 5: return readEXIFRationalArray(view, offset, count, littleEndian);
       case 9: return view.getInt32(offset, littleEndian);
       case 10: return view.getInt32(offset, littleEndian) / view.getInt32(offset + 4, littleEndian);
       default: return null;
@@ -3613,8 +3590,19 @@ function extractImageMetadata(file) {
   function renderImageMetadata(metadata, assessmentDate) {
     let html = '<h4 style="margin-top:16px;">Image Metadata</h4>';
 
+    const exif = metadata.exif || {};
+    const captureDate = exif.DateTimeOriginal || null;
+    const device = [exif.Make, exif.Model].filter(Boolean).join(' ') || null;
+    const gps = exif.GPS || null;
+    const filesize = typeof metadata.size === 'number' ? (metadata.size / 1024).toFixed(1) + ' KB' : null;
+    let stale = false;
+    if (captureDate instanceof Date && !isNaN(captureDate)) {
+      const daysDiff = (new Date() - captureDate) / (1000 * 60 * 60 * 24);
+      stale = daysDiff > 7;
+    }
+
     // Check if we have EXIF data at all
-    const hasExifData = metadata.captureDate || metadata.device || metadata.gps;
+    const hasExifData = captureDate || device || gps;
 
     html += `
       <div class="metadata-row">
@@ -3623,23 +3611,25 @@ function extractImageMetadata(file) {
       </div>
       <div class="metadata-row">
         <span class="metadata-label">File size:</span>
-        <span class="metadata-value">${metadata.filesize || 'Not available'}</span>
+        <span class="metadata-value">${filesize || 'Not available'}</span>
       </div>
       <div class="metadata-row">
         <span class="metadata-label">Capture date:</span>
-        <span class="metadata-value">${metadata.captureDate || 'Not available'}</span>
+        <span class="metadata-value">${captureDate instanceof Date && !isNaN(captureDate) ? captureDate.toLocaleString() : 'Not available'}</span>
       </div>
       <div class="metadata-row">
         <span class="metadata-label">Device:</span>
-        <span class="metadata-value">${metadata.device || 'Not available'}</span>
+        <span class="metadata-value">${device || 'Not available'}</span>
       </div>`;
 
-    if (metadata.gps) {
+    if (gps) {
+      const lat = gps.latitude.toFixed(6);
+      const lon = gps.longitude.toFixed(6);
       html += `
       <div class="metadata-row">
         <span class="metadata-label">GPS coordinates:</span>
-        <span class="metadata-value">${metadata.gps.lat}, ${metadata.gps.lon}</span>
-        <a href="https://www.google.com/maps?q=${metadata.gps.lat},${metadata.gps.lon}" target="_blank" rel="noopener" style="margin-left:8px;color:#1565c0;text-decoration:none;font-size:11px;">📍 View Map</a>
+        <span class="metadata-value">${lat}, ${lon}</span>
+        <a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" rel="noopener" style="margin-left:8px;color:#1565c0;text-decoration:none;font-size:11px;">📍 View Map</a>
       </div>`;
     } else {
       html += `
@@ -3650,7 +3640,7 @@ function extractImageMetadata(file) {
     }
 
     // Stale warning
-    if (metadata.stale) {
+    if (stale) {
       html += `
       <div class="warning" style="margin-top:8px;">
         ⚠️ Image captured more than 7 days ago — may not reflect current site conditions. Verify before submitting to ADOSH.
@@ -3726,10 +3716,7 @@ function extractImageMetadata(file) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value = ''; return; }
-    imageMetadata = await extractImageMetadata(f);
-    extractImageMetadata(f).then(meta => {
-      window.currentImageMeta = meta;
-    });
+    window.currentImageMeta = await extractImageMetadata(f);
     // Get image dimensions for quality check
     const img = new Image();
     const imgLoadPromise = new Promise((resolve) => {
