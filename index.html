@@ -447,6 +447,7 @@
   <header class="header">
     <h1 style="margin:0">VisualRiskAssessor</h1>
     <p style="margin:8px 0 0">HSE visual risk assessment — AI powered</p>
+    <button type="button" class="btn btn-outline" id="btnHistoryToggle" style="margin-top:10px;background:#fff;">📋 History</button>
   </header>
 
   <main class="container">
@@ -716,8 +717,35 @@
       <div class="action-buttons">
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
         <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
+        <button class="btn" id="btnSaveHistory" style="background:#2e7d32;color:#fff;">💾 Save to History</button>
         <button class="btn btn-outline" id="btnReset">New Assessment</button>
       </div>
+    </section>
+
+    <section id="historySection" class="card hidden">
+      <h2 style="margin-top:0">📋 Assessment History</h2>
+      <p style="margin:0 0 12px;font-size:.85rem;color:#555;">
+        Saved on this device only — never uploaded or synced to any cloud. Clearing browser data,
+        or opening this app on a different device, will not show these records.
+      </p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #ddd;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;">
+          <input type="radio" name="exportPhotoMode" value="data-only" checked /> Data only (no photos)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;">
+          <input type="radio" name="exportPhotoMode" value="with-photos" /> Include photos
+        </label>
+        <button type="button" class="btn btn-secondary" id="btnExportHistory">⬇ Export History File</button>
+        <label class="btn btn-outline" style="cursor:pointer;margin:0;">
+          ⬆ Import History File
+          <input type="file" id="importHistoryInput" accept="application/json" style="display:none;" />
+        </label>
+        <button type="button" class="btn btn-outline" id="btnClearHistory" style="margin-left:auto;color:#c62828;border-color:#c62828;">🗑 Clear All</button>
+        <button type="button" class="btn btn-outline" id="btnHistoryClose">Close</button>
+      </div>
+
+      <div id="historyList"></div>
     </section>
   </main>
 
@@ -739,7 +767,10 @@
     manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
     manualHazardType: $('manualHazardType'), manualLikelihood: $('manualLikelihood'),
     manualSeverity: $('manualSeverity'), manualDescription: $('manualDescription'),
-    btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle')
+    btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle'),
+    btnHistoryToggle: $('btnHistoryToggle'), btnHistoryClose: $('btnHistoryClose'), historySection: $('historySection'),
+    historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
+    importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -1346,6 +1377,98 @@
     }
     return { dataUrl, width, height, quality };
   }
+
+  const HISTORY_THUMB_MAX_DIMENSION = 320;
+
+  /** Small, low-quality copy of the result image for the history list — never the full photo. */
+  function makeHistoryThumbnail(img) {
+    let width = img.naturalWidth || img.width;
+    let height = img.naturalHeight || img.height;
+    if (!width || !height) return null;
+    if (Math.max(width, height) > HISTORY_THUMB_MAX_DIMENSION) {
+      const scale = HISTORY_THUMB_MAX_DIMENSION / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', 0.6);
+  }
+
+  /**
+   * Local-only assessment history, backed by IndexedDB in this browser.
+   * Nothing here ever makes a network request — every record (including any
+   * embedded photo thumbnail) stays on this device. Never store the API key.
+   */
+  const historyStore = (() => {
+    const DB_NAME = 'vra-history';
+    const STORE = 'assessments';
+    let dbPromise = null;
+
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise((resolve, reject) => {
+        if (!window.indexedDB) { reject(new Error('IndexedDB is not available in this browser.')); return; }
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) {
+            db.createObjectStore(STORE, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('Failed to open history database.'));
+      });
+      return dbPromise;
+    }
+
+    async function runRequest(mode, fn) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, mode);
+        const req = fn(tx.objectStore(STORE));
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error('History database operation failed.'));
+      });
+    }
+
+    async function save(record) {
+      return runRequest('readwrite', store => store.put(record));
+    }
+
+    async function list() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const store = tx.objectStore(STORE);
+        const req = store.getAll();
+        req.onsuccess = () => resolve((req.result || []).sort((a, b) => b.timestamp - a.timestamp));
+        req.onerror = () => reject(req.error || new Error('Failed to list history.'));
+      });
+    }
+
+    async function get(id) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).get(id);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error('Failed to load history record.'));
+      });
+    }
+
+    async function remove(id) {
+      return runRequest('readwrite', store => store.delete(id));
+    }
+
+    async function clearAll() {
+      return runRequest('readwrite', store => store.clear());
+    }
+
+    return { save, list, get, remove, clearAll };
+  })();
 
   async function geminiHazards(dataUrl) {
     const apiKey = els.apiKeyInput.value.trim();
@@ -3678,6 +3801,170 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     $('baselineInfo').style.display = 'none';
   }
 
+  // ── Assessment History (local-only, IndexedDB) ─────────────────────────────
+
+  function collectCurrentAssessment() {
+    return {
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now() + Math.random().toString(16).slice(2)),
+      timestamp: (assessmentTimestamp instanceof Date ? assessmentTimestamp : new Date()).getTime(),
+      industry: $('ctxIndustry').value,
+      task: $('ctxTask').value,
+      location: $('ctxLocation').value,
+      analysisMode,
+      overall,
+      hazards, manualHazards, baselineHazards,
+      signoffData: window.hseSignoffData ? { ...window.hseSignoffData } : null,
+      imageMeta: window.currentImageMeta || null,
+      thumbnail: els.resultImg && els.resultImg.src && !els.resultImg.src.startsWith('data:image/svg+xml')
+        ? (makeHistoryThumbnail(els.resultImg) || null)
+        : null
+    };
+  }
+
+  async function saveCurrentToHistory() {
+    if (els.results.classList.contains('hidden')) {
+      showWarning('Run an assessment before saving to history.');
+      return;
+    }
+    try {
+      const record = collectCurrentAssessment();
+      await historyStore.save(record);
+      await renderHistoryList();
+      els.historySection.classList.remove('hidden');
+      els.historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showWarning(`Could not save to history: ${err.message}`);
+    }
+  }
+
+  function historyAllHazards(record) {
+    return [...(record.baselineHazards || []), ...(record.hazards || []), ...(record.manualHazards || [])];
+  }
+
+  async function renderHistoryList() {
+    let records;
+    try {
+      records = await historyStore.list();
+    } catch (err) {
+      els.historyList.innerHTML = `<p class="warning">Could not load history: ${err.message}</p>`;
+      return;
+    }
+    if (!records.length) {
+      els.historyList.innerHTML = '<p style="color:#666;">No saved assessments yet.</p>';
+      return;
+    }
+    els.historyList.innerHTML = '';
+    records.forEach(record => {
+      const allHazards = historyAllHazards(record);
+      const r = riskFor(record.overall || 0);
+      const unreviewed = RiskCore.hasUnreviewedHazards(allHazards);
+      const signedOff = !!(record.signoffData && record.signoffData.confirmed);
+
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:8px;';
+      row.innerHTML = `
+        ${record.thumbnail ? `<img src="${record.thumbnail}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : '<div style="width:64px;height:64px;background:#eee;border-radius:6px;flex-shrink:0;"></div>'}
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${new Date(record.timestamp).toLocaleString()}
+            <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:.72rem;margin-left:6px;background:${r.bg};color:${r.textColor};">${r.label}</span>
+            ${signedOff ? '<span style="font-size:.72rem;color:#2e7d32;margin-left:6px;">✓ Signed off</span>' : (unreviewed ? '<span style="font-size:.72rem;color:#c62828;margin-left:6px;">⚠ Needs review</span>' : '')}
+          </div>
+          <div style="font-size:.82rem;color:#666;">${[record.industry, record.task, record.location].filter(Boolean).join(' · ') || 'No context set'} — ${allHazards.length} hazard(s)</div>
+        </div>
+        <button type="button" class="btn btn-secondary" data-action="open" style="flex-shrink:0;">Open</button>
+        <button type="button" class="btn btn-outline" data-action="delete" style="flex-shrink:0;color:#c62828;border-color:#c62828;">Delete</button>
+      `;
+      row.querySelector('[data-action="open"]').addEventListener('click', () => openHistoryRecord(record));
+      row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteHistoryRecord(record.id));
+      els.historyList.appendChild(row);
+    });
+  }
+
+  function openHistoryRecord(record) {
+    hazards = record.hazards || [];
+    manualHazards = record.manualHazards || [];
+    baselineHazards = record.baselineHazards || [];
+    analysisMode = record.analysisMode || 'rule-based';
+    assessmentTimestamp = new Date(record.timestamp);
+    window.hseSignoffData = record.signoffData ? { ...record.signoffData } : { name: '', designation: '', organisation: '', date: '', confirmed: false };
+    window.currentImageMeta = record.imageMeta || null;
+    imageData = record.thumbnail || null; // only the thumbnail was ever saved — full photo isn't persisted
+    $('ctxIndustry').value = record.industry || '';
+    $('ctxTask').value = record.task || '';
+    $('ctxLocation').value = record.location || '';
+    els.historySection.classList.add('hidden');
+    render();
+    els.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function deleteHistoryRecord(id) {
+    if (!confirm('Delete this saved assessment? This cannot be undone.')) return;
+    try {
+      await historyStore.remove(id);
+      await renderHistoryList();
+    } catch (err) {
+      showWarning(`Could not delete record: ${err.message}`);
+    }
+  }
+
+  function downloadJSON(filename, dataObj) {
+    const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportHistory(includePhotos) {
+    let records;
+    try {
+      records = await historyStore.list();
+    } catch (err) {
+      showWarning(`Could not export history: ${err.message}`);
+      return;
+    }
+    if (!records.length) {
+      showWarning('No saved assessments to export.');
+      return;
+    }
+    const exportRecords = includePhotos ? records : records.map(({ thumbnail, ...rest }) => rest);
+    downloadJSON(`vra-history-${new Date().toISOString().slice(0, 10)}.json`, {
+      exportedAt: new Date().toISOString(),
+      includesPhotos: !!includePhotos,
+      records: exportRecords
+    });
+  }
+
+  async function importHistoryFile(file) {
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch (err) {
+      showWarning('That file is not valid history JSON.');
+      return;
+    }
+    const records = Array.isArray(parsed.records) ? parsed.records : (Array.isArray(parsed) ? parsed : null);
+    if (!records) {
+      showWarning('That file does not look like a VisualRiskAssessor history export.');
+      return;
+    }
+    let imported = 0, skipped = 0;
+    for (const record of records) {
+      if (!record || typeof record.id !== 'string') { skipped++; continue; }
+      const existing = await historyStore.get(record.id).catch(() => null);
+      if (existing) { skipped++; continue; }
+      await historyStore.save(record);
+      imported++;
+    }
+    await renderHistoryList();
+    showWarning(`Imported ${imported} record(s)${skipped ? `, skipped ${skipped} duplicate/invalid` : ''}.`);
+  }
+
   function captureFromCamera() {
     if (!els.videoPreview.videoWidth || !els.videoPreview.videoHeight) {
       showWarning('No camera frame available yet. Stop camera and use Upload Image.');
@@ -3712,6 +3999,35 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   els.btnExport.addEventListener('click', exportReport);
   els.btnPDF.addEventListener('click', exportPDF);
   els.btnReset.addEventListener('click', resetApp);
+  els.btnSaveHistory.addEventListener('click', saveCurrentToHistory);
+  els.btnHistoryToggle.addEventListener('click', async () => {
+    const opening = els.historySection.classList.contains('hidden');
+    els.historySection.classList.toggle('hidden');
+    if (opening) {
+      await renderHistoryList();
+      els.historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+  els.btnHistoryClose.addEventListener('click', () => els.historySection.classList.add('hidden'));
+  els.btnExportHistory.addEventListener('click', () => {
+    const mode = document.querySelector('input[name="exportPhotoMode"]:checked')?.value || 'data-only';
+    exportHistory(mode === 'with-photos');
+  });
+  els.btnClearHistory.addEventListener('click', async () => {
+    if (!confirm('Delete ALL saved assessment history on this device? This cannot be undone.')) return;
+    try {
+      await historyStore.clearAll();
+      await renderHistoryList();
+    } catch (err) {
+      showWarning(`Could not clear history: ${err.message}`);
+    }
+  });
+  els.importHistoryInput.addEventListener('change', async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await importHistoryFile(file);
+    e.target.value = '';
+  });
   els.fileInput.addEventListener('change', async e => {
     const f = e.target.files?.[0];
     if (!f) return;
