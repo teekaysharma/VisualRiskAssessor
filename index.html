@@ -567,12 +567,18 @@
       </div>
 
       <div id="apiKeySection">
-        <label for="apiKeyInput">🤖 Groq API Key (optional — enables deep AI analysis)</label>
-        <input id="apiKeyInput" type="password" placeholder="Paste your Groq API key here..." autocomplete="off" />
-        <p style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only. Enables scene-understanding beyond object labels. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a free key →</a></p>
+        <label for="aiProviderSelect">🔀 AI Provider</label>
+        <select id="aiProviderSelect" class="context-select">
+          <option value="groq">Groq — qwen/qwen3.6-27b</option>
+          <option value="anthropic">Anthropic Claude — claude-sonnet-4-5</option>
+          <option value="gemini">Google Gemini — gemini-3.6-flash</option>
+        </select>
+        <label for="apiKeyInput" id="apiKeyLabel" style="margin-top:8px;">🤖 API Key (optional — enables deep AI analysis)</label>
+        <input id="apiKeyInput" type="password" placeholder="Paste your API key here..." autocomplete="off" />
+        <p id="apiKeyHelp" style="margin:6px 0 0;font-size:.82rem;color:#6a1b9a;">Key stays in your browser only — sent directly to the selected provider, nowhere else. Enables scene-understanding beyond object labels.</p>
         <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #ce93d8;">
           <button type="button" class="btn" id="btnTryDemo" style="background:#4a148c;color:#fff;">🎬 Try Demo (no key needed)</button>
-          <p style="margin:4px 0 0;font-size:.78rem;color:#6a1b9a;">Runs one AI analysis on a shared demo quota — for evaluation only, not for real assessments. <a href="demo-proxy/README.md" target="_blank" rel="noopener">Site owner setup →</a></p>
+          <p style="margin:4px 0 0;font-size:.78rem;color:#6a1b9a;">Runs one AI analysis on a shared demo quota (always Groq, regardless of the provider selected above) — for evaluation only, not for real assessments. <a href="demo-proxy/README.md" target="_blank" rel="noopener">Site owner setup →</a></p>
         </div>
         <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #ce93d8;">
           <label style="display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;">
@@ -780,7 +786,8 @@
     historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
-    btnProcessQueued: $('btnProcessQueued')
+    btnProcessQueued: $('btnProcessQueued'),
+    aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -804,6 +811,7 @@
   const AI_REQUEST_TIMEOUT_MS = 30000;
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
+  let lastAIProvider = null; // which provider actually produced `hazards` when analysisMode === 'ai' — for accurate report/PDF labeling even if the selector is changed afterward
   let manualHazards = [];
   let useDemoMode = false;
   let baselineHazards = [];
@@ -1485,6 +1493,141 @@
     return { save, list, get, remove, clearAll };
   })();
 
+  // ── AI provider adapters ────────────────────────────────────────────────
+  //
+  // Each provider has a different request/response shape for a vision call.
+  // Every adapter takes the same (prompt, dataUrl, apiKey, signal) and
+  // returns the model's raw text response — everything downstream (JSON
+  // cleanup, RiskCore.validateHazards) is provider-agnostic and untouched.
+  // Demo mode never reaches these — it always calls the shared Groq-backed
+  // proxy Worker directly (see geminiHazards below).
+
+  function splitDataUrl(dataUrl) {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl);
+    if (!match) throw new Error('Could not read image data for this AI provider.');
+    return { mediaType: match[1], base64Data: match[2] };
+  }
+
+  async function callGroq(prompt, dataUrl, apiKey, signal) {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        // meta-llama/llama-4-scout-17b-16e-instruct was deprecated by Groq;
+        // qwen/qwen3.6-27b is the current documented default vision model
+        // (console.groq.com/docs/vision, checked 2026-08).
+        model: 'qwen/qwen3.6-27b',
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image_url', image_url: { url: dataUrl } }
+        ]}],
+        temperature: 0.4,
+        top_p: 0.9,
+        // 2048 was too tight — a real multi-hazard scene (each hazard has 5
+        // hierarchy-of-controls fields) can legitimately need more, and a
+        // response cut off mid-JSON fails to parse and silently loses every
+        // hazard in it, not just the last one. Reproduced live: a 4-hazard
+        // test scene against Gemini truncated at 2048 with an "Unterminated
+        // string in JSON" parse error.
+        max_tokens: 4096,
+        // qwen/qwen3.6-27b is a reasoning model that otherwise wraps its
+        // answer in <think>...</think> before the JSON, breaking JSON.parse.
+        // 'hidden' returns only the final answer. (console.groq.com/docs/reasoning)
+        reasoning_format: 'hidden',
+        // Hidden reasoning still consumes max_tokens even though it's never
+        // shown — on a solid-color test image, qwen3.6-27b spent its entire
+        // 2048-token budget on reasoning and returned an EMPTY answer
+        // (finish_reason: 'length', reasoning_tokens: 2048). This task needs
+        // structured extraction, not chain-of-thought, so disable reasoning
+        // entirely rather than just raising max_tokens.
+        reasoning_effort: 'none'
+      }),
+      signal
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
+    }
+    const data = await resp.json();
+    return data?.choices?.[0]?.message?.content || '[]';
+  }
+
+  async function callAnthropic(prompt, dataUrl, apiKey, signal) {
+    const { mediaType, base64Data } = splitDataUrl(dataUrl);
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        // Anthropic's API blocks cross-origin browser requests by default;
+        // this header is Anthropic's own documented opt-in for calling the
+        // API directly from a page like this one. Same trust model as the
+        // Groq/Gemini "paste your key" flow — the key lives in this
+        // browser tab and is sent straight to the provider, nowhere else.
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 4096, // see the note on Groq's max_tokens — same truncation risk on a multi-hazard scene
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: prompt },
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } }
+        ]}]
+      }),
+      signal
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Anthropic API error ${resp.status}`);
+    }
+    const data = await resp.json();
+    return (data?.content || []).map(block => block.text || '').join('') || '[]';
+  }
+
+  async function callGemini(prompt, dataUrl, apiKey, signal) {
+    const { mediaType, base64Data } = splitDataUrl(dataUrl);
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mediaType, data: base64Data } }
+          ]}],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 4096 } // see the note on Groq's max_tokens — reproduced live: a 4-hazard test scene truncated mid-JSON at 2048
+        }),
+        signal
+      }
+    );
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `Gemini API error ${resp.status}`);
+    }
+    const data = await resp.json();
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    return parts.map(p => p.text || '').join('') || '[]';
+  }
+
+  const AI_PROVIDERS = {
+    groq: { label: 'Groq — qwen/qwen3.6-27b', call: callGroq, keyPlaceholder: 'Paste your Groq API key here...', keyUrl: 'https://console.groq.com/keys', keyUrlLabel: 'Get a free key →' },
+    anthropic: { label: 'Anthropic Claude — claude-sonnet-4-5', call: callAnthropic, keyPlaceholder: 'Paste your Anthropic API key here...', keyUrl: 'https://console.anthropic.com/settings/keys', keyUrlLabel: 'Get an API key →' },
+    gemini: { label: 'Google Gemini — gemini-3.6-flash', call: callGemini, keyPlaceholder: 'Paste your Google AI API key here...', keyUrl: 'https://aistudio.google.com/apikey', keyUrlLabel: 'Get a free key →' }
+  };
+
+  function selectedAIProvider() {
+    const key = els.aiProviderSelect ? els.aiProviderSelect.value : 'groq';
+    return AI_PROVIDERS[key] ? key : 'groq';
+  }
+
+  /** Reflects the provider that actually produced the current hazards, not just whatever's selected now. */
+  function aiVisionModeLabel() {
+    const provider = AI_PROVIDERS[lastAIProvider || 'groq'];
+    return `AI Vision — ${provider.label}`;
+  }
+
   async function geminiHazards(dataUrl) {
     const apiKey = els.apiKeyInput.value.trim();
     if (!apiKey && !useDemoMode) return null;
@@ -1534,78 +1677,42 @@ Confidence must be 0.0-1.0.
 If no hazards are visible, return an empty array [].
 Be thorough and observational. Do not limit yourself to obvious hazards. Examine the full image including background, floor, ceiling, equipment state, worker positioning, housekeeping condition, and signage. Report every hazard visible regardless of how minor it appears. Accuracy of observation is more important than brevity.`;
 
-    const body = {
-      // meta-llama/llama-4-scout-17b-16e-instruct was deprecated by Groq;
-      // qwen/qwen3.6-27b is the current documented default vision model
-      // (console.groq.com/docs/vision, checked 2026-08).
-      model: 'qwen/qwen3.6-27b',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl } }
-          ]
-        }
-      ],
-      temperature: 0.4,
-      top_p: 0.9,
-      max_tokens: 2048,
-      // qwen/qwen3.6-27b is a reasoning model that otherwise wraps its
-      // answer in <think>...</think> before the JSON, breaking JSON.parse.
-      // 'hidden' returns only the final answer. (console.groq.com/docs/reasoning)
-      reasoning_format: 'hidden',
-      // Hidden reasoning still consumes max_tokens even though it's never
-      // shown — on a solid-color test image, qwen3.6-27b spent its entire
-      // 2048-token budget on reasoning and returned an EMPTY answer
-      // (finish_reason: 'length', reasoning_tokens: 2048). This task needs
-      // structured extraction, not chain-of-thought, so disable reasoning
-      // entirely rather than just raising max_tokens.
-      reasoning_effort: 'none'
-    };
-
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
-      let resp;
+      let text;
       try {
-        // Demo mode calls our own proxy (holds a shared Groq key server-side,
-        // see demo-proxy/worker.js) with a simplified body and no
-        // Authorization header. BYO-key mode is unchanged: calls Groq
-        // directly, key never leaves the browser except to Groq itself.
-        resp = useDemoMode
-          ? await fetch(DEMO_PROXY_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt, dataUrl }),
-              signal: controller.signal
-            })
-          : await fetch(
-              'https://api.groq.com/openai/v1/chat/completions',
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify(body),
-                signal: controller.signal
-              }
-            );
+        if (useDemoMode) {
+          lastAIProvider = 'groq';
+          // Demo mode always calls our own proxy (holds a shared Groq key
+          // server-side, see demo-proxy/worker.js), regardless of which
+          // provider is selected above — keeping the shared-quota path
+          // simple and on the one provider it was built and rate-limited for.
+          const resp = await fetch(DEMO_PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt, dataUrl }),
+            signal: controller.signal
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
+          }
+          const data = await resp.json();
+          text = data?.choices?.[0]?.message?.content || '[]';
+        } else {
+          // BYO-key mode: routed to whichever provider is selected. Key
+          // never leaves the browser except straight to that provider.
+          lastAIProvider = selectedAIProvider();
+          text = await AI_PROVIDERS[lastAIProvider].call(prompt, dataUrl, apiKey, controller.signal);
+        }
       } finally {
         clearTimeout(timeoutId);
       }
 
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err?.error?.message || `Groq API error ${resp.status}`);
-        }
-
-        const data = await resp.json();
-        const text = data?.choices?.[0]?.message?.content || '[]';
-        // Defensive strip: reasoning_format:'hidden' should already remove
-        // this, but a reasoning model that ignores it (or a future model
-        // swap) must not silently fail JSON.parse.
+        // Defensive strip: some providers/models (e.g. Groq's reasoning
+        // models) can wrap the answer in <think>...</think> even with
+        // reasoning suppressed — must not silently fail JSON.parse.
         const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```json|```/g, '').trim();
         const raw = JSON.parse(cleaned);
 
@@ -1640,7 +1747,12 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         if (e.name === 'AbortError') {
           throw new Error(`AI request timed out after ${AI_REQUEST_TIMEOUT_MS / 1000}s — check your connection and try again`);
         }
-        throw new Error(`Gemini API error: ${e.message}`);
+        // Attribute the error to whichever provider actually made the call —
+        // previously this always said "Gemini API error" regardless of
+        // provider (a leftover from before multi-provider support existed),
+        // which misidentified the source of a Groq or Anthropic failure.
+        const providerLabel = useDemoMode ? 'Groq (demo)' : AI_PROVIDERS[selectedAIProvider()].label;
+        throw new Error(`${providerLabel} error: ${e.message}`);
       }
   }
 
@@ -2364,7 +2476,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       </div>${contextRow}
       <div class="metadata-row">
         <span class="metadata-label">Assessment Method:</span>
-        <span class="metadata-value">AI Visual Analysis — Qwen 3.6 27B via Groq API</span>
+        <span class="metadata-value">AI Visual Analysis — ${AI_PROVIDERS[lastAIProvider || 'groq'].label}</span>
       </div>
       <div class="metadata-row">
         <span class="metadata-label">Standard Reference:</span>
@@ -3069,7 +3181,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
 
   function exportReport() {
     const allHazardsForExport = [...baselineHazards, ...hazards, ...manualHazards];
-    const modeLabel = { ai: 'AI Vision (Groq)', coco: 'Object Detection (COCO-SSD)', 'rule-based': 'Rule-Based (keyword matching)', manual: 'Manual Entry' }[analysisMode] || analysisMode;
+    const modeLabel = { ai: aiVisionModeLabel(), coco: 'Object Detection (COCO-SSD)', 'rule-based': 'Rule-Based (keyword matching)', manual: 'Manual Entry' }[analysisMode] || analysisMode;
     const hasManual = manualHazards.length > 0;
     const fullModeLabel = hasManual ? (modeLabel + (hazards.length > 0 ? ' + Manual Entry' : '')) : modeLabel;
     const r = riskFor(overall).label;
@@ -3143,7 +3255,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       sectionTitle('Assessment Metadata');
       const ts = assessmentTimestamp || new Date();
       const formattedDate = ts.toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      const modeLabel = { ai: 'AI Vision — Qwen 3.6 27B (Groq)', coco: 'Object Detection (COCO-SSD)', 'rule-based': 'Rule-Based (keyword matching)' }[analysisMode] || analysisMode;
+      const modeLabel = { ai: aiVisionModeLabel(), coco: 'Object Detection (COCO-SSD)', 'rule-based': 'Rule-Based (keyword matching)' }[analysisMode] || analysisMode;
       const ctxI = $('ctxIndustry'); const ctxT = $('ctxTask'); const ctxL = $('ctxLocation');
       const pdfCtxRows = (ctxI.value && ctxT.value && ctxL.value) ? [
         ['Industry', ctxI.options[ctxI.selectedIndex]?.text || ''],
@@ -4208,6 +4320,31 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   });
   if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
   updateConnectivityBadge();
+
+  // ── AI provider selection ───────────────────────────────────────────────
+  // Only the provider CHOICE is remembered (localStorage) — never the key
+  // itself, which stays in the input field only, same as it always has.
+  const AI_PROVIDER_STORAGE_KEY = 'vra_ai_provider';
+
+  function updateAIProviderUI() {
+    const providerKey = selectedAIProvider();
+    const provider = AI_PROVIDERS[providerKey];
+    if (els.apiKeyLabel) els.apiKeyLabel.textContent = `🤖 ${provider.label} API Key (optional — enables deep AI analysis)`;
+    if (els.apiKeyInput) els.apiKeyInput.placeholder = provider.keyPlaceholder;
+    if (els.apiKeyHelp) {
+      els.apiKeyHelp.innerHTML = `Key stays in your browser only — sent directly to ${provider.label.split(' — ')[0]}, nowhere else. Enables scene-understanding beyond object labels. <a href="${provider.keyUrl}" target="_blank" rel="noopener">${provider.keyUrlLabel}</a>`;
+    }
+  }
+
+  if (els.aiProviderSelect) {
+    const savedProvider = localStorage.getItem(AI_PROVIDER_STORAGE_KEY);
+    if (savedProvider && AI_PROVIDERS[savedProvider]) els.aiProviderSelect.value = savedProvider;
+    els.aiProviderSelect.addEventListener('change', () => {
+      localStorage.setItem(AI_PROVIDER_STORAGE_KEY, els.aiProviderSelect.value);
+      updateAIProviderUI();
+    });
+    updateAIProviderUI();
+  }
   function readFileAsDataURL(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
