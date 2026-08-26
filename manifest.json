@@ -1,0 +1,13 @@
+{
+  "name": "VisualRiskAssessor",
+  "short_name": "VRA",
+  "description": "HSE visual risk assessment — AI powered",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff6d00",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
