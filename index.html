@@ -797,6 +797,11 @@
   // cut token cost on a real key too.
   const COMPRESS_TARGET_BYTES = 2 * 1024 * 1024;
   const COMPRESS_MAX_DIMENSION = 1920; // longest edge, px — ample for hazard detail
+  // fetch() has no built-in timeout — a stalled connection (e.g. weak signal
+  // right after reconnecting, which the offline queue makes more likely to
+  // occur right before an AI call) would otherwise hang analyze() forever
+  // with no feedback. 30s is generous for a vision-model call but bounded.
+  const AI_REQUEST_TIMEOUT_MS = 30000;
 
   let cocoModel = null, stream = null, imageData = null, hazards = [], overall = 0;
   let manualHazards = [];
@@ -1560,27 +1565,36 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     };
 
     try {
-      // Demo mode calls our own proxy (holds a shared Groq key server-side,
-      // see demo-proxy/worker.js) with a simplified body and no
-      // Authorization header. BYO-key mode is unchanged: calls Groq
-      // directly, key never leaves the browser except to Groq itself.
-      const resp = useDemoMode
-        ? await fetch(DEMO_PROXY_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt, dataUrl })
-          })
-        : await fetch(
-            'https://api.groq.com/openai/v1/chat/completions',
-            {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
+      let resp;
+      try {
+        // Demo mode calls our own proxy (holds a shared Groq key server-side,
+        // see demo-proxy/worker.js) with a simplified body and no
+        // Authorization header. BYO-key mode is unchanged: calls Groq
+        // directly, key never leaves the browser except to Groq itself.
+        resp = useDemoMode
+          ? await fetch(DEMO_PROXY_URL, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-              },
-              body: JSON.stringify(body)
-            }
-          );
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt, dataUrl }),
+              signal: controller.signal
+            })
+          : await fetch(
+              'https://api.groq.com/openai/v1/chat/completions',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(body),
+                signal: controller.signal
+              }
+            );
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({}));
@@ -1623,6 +1637,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           };
         });
       } catch (e) {
+        if (e.name === 'AbortError') {
+          throw new Error(`AI request timed out after ${AI_REQUEST_TIMEOUT_MS / 1000}s — check your connection and try again`);
+        }
         throw new Error(`Gemini API error: ${e.message}`);
       }
   }
