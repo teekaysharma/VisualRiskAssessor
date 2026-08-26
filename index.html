@@ -506,8 +506,8 @@
       <h2 style="margin-top:0">Image Input</h2>
       <button class="btn btn-primary" id="btnCamera">📷 Open Camera</button>
       <button class="btn btn-secondary" id="btnUpload">🖼 Upload Image</button>
-      <input id="fileInput" type="file" accept="image/*" class="hidden" />
-      <div id="uploadArea" tabindex="0" role="button" aria-label="Upload an image">Click or press Enter/Space to upload an image.</div>
+      <input id="fileInput" type="file" accept="image/*" multiple class="hidden" />
+      <div id="uploadArea" tabindex="0" role="button" aria-label="Upload one or more images">Click or press Enter/Space to upload one or more images. Selecting several photos processes them as a batch, saving each to history.</div>
 
       <div id="cameraSection" class="hidden">
         <video id="videoPreview" autoplay playsinline muted></video><br/><br/>
@@ -4028,28 +4028,77 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     await importHistoryFile(file);
     e.target.value = '';
   });
-  els.fileInput.addEventListener('change', async e => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (!f.type.startsWith('image/')) { showWarning('Please upload a valid image file.'); e.target.value = ''; return; }
-    window.currentImageMeta = await extractImageMetadata(f);
-    // Get image dimensions for quality check
-    const img = new Image();
-    const imgLoadPromise = new Promise((resolve) => {
-      img.onload = () => {
-        window.currentImageDimensions = { width: img.width, height: img.height };
-        resolve();
-      };
-      img.onerror = resolve;
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('Failed to read selected image.'));
+      reader.readAsDataURL(file);
     });
-    const reader = new FileReader();
-    reader.onload = async ev => {
-      img.src = ev.target.result;
-      await imgLoadPromise;
-      analyze(ev.target.result);
-    };
-    reader.onerror = () => showWarning('Failed to read selected image.');
-    reader.readAsDataURL(f);
+  }
+
+  /** Runs one file through the existing single-photo pipeline (EXIF, dimensions, analyze). */
+  async function processSingleFile(file) {
+    window.currentImageMeta = await extractImageMetadata(file);
+    const dataUrl = await readFileAsDataURL(file);
+    const dims = await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.width, height: img.height });
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+    if (dims) window.currentImageDimensions = dims;
+    await analyze(dataUrl); // awaits through to render(); live state reflects this photo when it resolves
+  }
+
+  /**
+   * Processes several photos sequentially (not in parallel — a shared demo
+   * quota or a single API key can't take concurrent AI calls without extra
+   * rate-limit handling this doesn't have). Each completed photo is
+   * auto-saved to history immediately, same shape as a manual "Save to
+   * History" click — nothing here bypasses RiskCore validation or the
+   * needs-review gating, it's just the existing single-photo flow run N times.
+   */
+  async function processBatch(files) {
+    const results = [];
+    for (let i = 0; i < files.length; i++) {
+      setLoading(true, `📦 Batch: photo ${i + 1} of ${files.length} — ${files[i].name}`);
+      try {
+        await processSingleFile(files[i]);
+        const record = collectCurrentAssessment();
+        await historyStore.save(record);
+        results.push({ filename: files[i].name, ok: true, overall, needsReview: RiskCore.hasUnreviewedHazards(historyAllHazards(record)) });
+      } catch (err) {
+        results.push({ filename: files[i].name, ok: false, error: err.message });
+      }
+    }
+    setLoading(false);
+    const failed = results.filter(r => !r.ok);
+    const needsReviewCount = results.filter(r => r.ok && r.needsReview).length;
+    showWarning(
+      `Batch complete: ${results.length - failed.length} of ${results.length} photo(s) processed and saved to history` +
+      (needsReviewCount ? `, ${needsReviewCount} need review` : '') +
+      (failed.length ? `. ${failed.length} failed: ${failed.map(f => f.filename).join(', ')}` : '.')
+    );
+    await renderHistoryList();
+    els.historySection.classList.remove('hidden');
+    els.historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  els.fileInput.addEventListener('change', async e => {
+    const allFiles = Array.from(e.target.files || []);
+    if (!allFiles.length) return;
+    const images = allFiles.filter(f => f.type.startsWith('image/'));
+    const skipped = allFiles.length - images.length;
+    if (skipped > 0) showWarning(`Skipped ${skipped} non-image file(s).`);
+    if (!images.length) { e.target.value = ''; return; }
+
+    if (images.length === 1) {
+      await processSingleFile(images[0]);
+    } else {
+      await processBatch(images);
+    }
+    e.target.value = '';
   });
   els.uploadArea.addEventListener('click', openFilePicker);
   els.uploadArea.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFilePicker(); } });
