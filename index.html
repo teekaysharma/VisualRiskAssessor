@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VisualRiskAssessor - HSE Risk Assessment</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -448,6 +450,7 @@
     <h1 style="margin:0">VisualRiskAssessor</h1>
     <p style="margin:8px 0 0">HSE visual risk assessment — AI powered</p>
     <button type="button" class="btn btn-outline" id="btnHistoryToggle" style="margin-top:10px;background:#fff;">📋 History</button>
+    <span id="connectivityBadge" style="display:inline-block;margin-top:10px;margin-left:8px;padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;"></span>
   </header>
 
   <main class="container">
@@ -729,6 +732,11 @@
         or opening this app on a different device, will not show these records.
       </p>
 
+      <div id="queuedBanner" class="hidden" style="background:#fff3cd;color:#694f00;border-radius:8px;padding:10px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span id="queuedBannerText"></span>
+        <button type="button" class="btn" id="btnProcessQueued" style="background:#694f00;color:#fff;margin-left:auto;">▶ Process Queued Now</button>
+      </div>
+
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #ddd;">
         <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;">
           <input type="radio" name="exportPhotoMode" value="data-only" checked /> Data only (no photos)
@@ -770,7 +778,9 @@
     btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle'),
     btnHistoryToggle: $('btnHistoryToggle'), btnHistoryClose: $('btnHistoryClose'), historySection: $('historySection'),
     historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
-    importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory')
+    importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
+    connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
+    btnProcessQueued: $('btnProcessQueued')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -3855,6 +3865,10 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     }
     els.historyList.innerHTML = '';
     records.forEach(record => {
+      if (record.status === 'queued') {
+        els.historyList.appendChild(buildQueuedRow(record));
+        return;
+      }
       const allHazards = historyAllHazards(record);
       const r = riskFor(record.overall || 0);
       const unreviewed = RiskCore.hasUnreviewedHazards(allHazards);
@@ -3879,6 +3893,41 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteHistoryRecord(record.id));
       els.historyList.appendChild(row);
     });
+    updateQueuedBanner(records.filter(r => r.status === 'queued').length);
+  }
+
+  /** A queued record has a photo but was never analyzed — never rendered as if it were a real result. */
+  function buildQueuedRow(record) {
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:10px;border:1px dashed #b08900;border-radius:8px;margin-bottom:8px;background:#fffdf5;';
+    row.innerHTML = `
+      ${record.photoDataUrl ? `<img src="${record.photoDataUrl}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : '<div style="width:64px;height:64px;background:#eee;border-radius:6px;flex-shrink:0;"></div>'}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;">${new Date(record.timestamp).toLocaleString()}
+          <span style="font-size:.72rem;color:#b08900;margin-left:6px;">⏳ Queued — not yet analyzed (captured offline)</span>
+        </div>
+        <div style="font-size:.82rem;color:#666;">${[record.industry, record.task, record.location].filter(Boolean).join(' · ') || 'No context set'}</div>
+      </div>
+      <button type="button" class="btn" data-action="process" style="flex-shrink:0;background:#694f00;color:#fff;">▶ Process</button>
+      <button type="button" class="btn btn-outline" data-action="delete" style="flex-shrink:0;color:#c62828;border-color:#c62828;">Delete</button>
+    `;
+    row.querySelector('[data-action="process"]').addEventListener('click', () => processQueuedRecord(record));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteHistoryRecord(record.id));
+    return row;
+  }
+
+  function updateQueuedBanner(count) {
+    if (!els.queuedBanner) return;
+    if (count > 0) {
+      els.queuedBanner.classList.remove('hidden');
+      els.queuedBannerText.textContent = `${count} photo(s) captured offline are waiting to be analyzed.` +
+        (navigator.onLine ? '' : ' Connect to the internet to process them.');
+      els.btnProcessQueued.disabled = !navigator.onLine;
+      els.btnProcessQueued.style.opacity = navigator.onLine ? '1' : '.5';
+    } else {
+      els.queuedBanner.classList.add('hidden');
+    }
   }
 
   function openHistoryRecord(record) {
@@ -3907,6 +3956,118 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       showWarning(`Could not delete record: ${err.message}`);
     }
   }
+
+  // ── Offline assessment queue ────────────────────────────────────────────
+  //
+  // If the assessor intends to use AI analysis (a key is entered, or demo
+  // mode is on) but there's no connectivity right now, calling analyze()
+  // would just fail on the network request and silently fall back to a
+  // weaker rule-based/COCO result — presented as if it were the real
+  // analysis, which is exactly the kind of false result this app is built
+  // to avoid. Instead, queue the photo as-is (full image, not a thumbnail —
+  // it hasn't been analyzed yet, so there's nothing to shrink from) and let
+  // the assessor process it for real once they're back online. Rule-based/
+  // COCO-only assessment already works fully offline today and is left
+  // untouched — queueing only applies to the case that would otherwise fail.
+
+  function wantsAINow() {
+    return !!((els.apiKeyInput && els.apiKeyInput.value.trim()) || useDemoMode);
+  }
+
+  /** Runs analyze() normally when possible; queues the raw photo instead if offline and AI was intended. */
+  async function analyzeOrQueue(dataUrl) {
+    if (!navigator.onLine && wantsAINow()) {
+      await queueDraft(dataUrl);
+      return { queued: true };
+    }
+    await analyze(dataUrl);
+    return { queued: false };
+  }
+
+  async function queueDraft(dataUrl) {
+    const record = {
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'q' + Date.now() + Math.random().toString(16).slice(2)),
+      status: 'queued',
+      timestamp: Date.now(),
+      industry: $('ctxIndustry').value,
+      task: $('ctxTask').value,
+      location: $('ctxLocation').value,
+      imageMeta: window.currentImageMeta || null,
+      photoDataUrl: dataUrl
+    };
+    await historyStore.save(record);
+    showWarning('No connection — this photo was saved to History as "Queued" and will be analyzed once you\'re back online.');
+    await renderHistoryList();
+  }
+
+  /** Runs the real analysis on a previously-queued photo, then replaces the queued record with a completed one. */
+  async function processQueuedRecord(record) {
+    if (!navigator.onLine) {
+      showWarning('Still offline — connect to the internet before processing queued assessments.');
+      return;
+    }
+    const prevCtx = { industry: $('ctxIndustry').value, task: $('ctxTask').value, location: $('ctxLocation').value };
+    $('ctxIndustry').value = record.industry || '';
+    $('ctxTask').value = record.task || '';
+    $('ctxLocation').value = record.location || '';
+    window.currentImageMeta = record.imageMeta || null;
+    try {
+      await analyze(record.photoDataUrl);
+      const completed = collectCurrentAssessment();
+      await historyStore.remove(record.id);
+      await historyStore.save(completed);
+    } catch (err) {
+      showWarning(`Could not process queued photo: ${err.message}`);
+    } finally {
+      $('ctxIndustry').value = prevCtx.industry;
+      $('ctxTask').value = prevCtx.task;
+      $('ctxLocation').value = prevCtx.location;
+      await renderHistoryList();
+    }
+  }
+
+  async function processAllQueued() {
+    if (!navigator.onLine) {
+      showWarning('Still offline — connect to the internet before processing queued assessments.');
+      return;
+    }
+    let records;
+    try {
+      records = (await historyStore.list()).filter(r => r.status === 'queued');
+    } catch (err) {
+      showWarning(`Could not load queued assessments: ${err.message}`);
+      return;
+    }
+    for (let i = 0; i < records.length; i++) {
+      setLoading(true, `▶ Processing queued photo ${i + 1} of ${records.length}...`);
+      await processQueuedRecord(records[i]);
+    }
+    setLoading(false);
+    els.historySection.classList.remove('hidden');
+  }
+
+  function updateConnectivityBadge() {
+    if (!els.connectivityBadge) return;
+    const online = navigator.onLine;
+    els.connectivityBadge.textContent = online ? '🟢 Online' : '🔴 Offline';
+    els.connectivityBadge.style.background = online ? '#e8f5e9' : '#ffebee';
+    els.connectivityBadge.style.color = online ? '#2e7d32' : '#c62828';
+    // The Process Queued button's enabled state must track connectivity
+    // directly — it can't depend on the History panel being open, or
+    // reconnecting while the panel is closed leaves it stuck disabled.
+    if (els.btnProcessQueued) {
+      els.btnProcessQueued.disabled = !online;
+      els.btnProcessQueued.style.opacity = online ? '1' : '.5';
+    }
+    if (els.queuedBannerText && els.queuedBanner && !els.queuedBanner.classList.contains('hidden')) {
+      els.queuedBannerText.textContent = els.queuedBannerText.textContent.replace(/ Connect to the internet to process them\.$/, '') +
+        (online ? '' : ' Connect to the internet to process them.');
+    }
+    // Full list re-render (queued badges, row content) only matters while visible.
+    if (els.historySection && !els.historySection.classList.contains('hidden')) renderHistoryList();
+  }
+  window.addEventListener('online', updateConnectivityBadge);
+  window.addEventListener('offline', updateConnectivityBadge);
 
   function downloadJSON(filename, dataObj) {
     const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: 'application/json' });
@@ -3975,7 +4136,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     c.height = els.videoPreview.videoHeight;
     c.getContext('2d').drawImage(els.videoPreview, 0, 0);
     stopCamera();
-    analyze(c.toDataURL('image/jpeg', 0.9));
+    analyzeOrQueue(c.toDataURL('image/jpeg', 0.9));
   }
 
   els.btnCamera.addEventListener('click', startCamera);
@@ -4028,6 +4189,8 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     await importHistoryFile(file);
     e.target.value = '';
   });
+  if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
+  updateConnectivityBadge();
   function readFileAsDataURL(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -4048,7 +4211,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
       img.src = dataUrl;
     });
     if (dims) window.currentImageDimensions = dims;
-    await analyze(dataUrl); // awaits through to render(); live state reflects this photo when it resolves
+    // Awaits through to render() (or to the offline queue) before resolving;
+    // live state reflects this photo when it resolves, unless it was queued.
+    return await analyzeOrQueue(dataUrl);
   }
 
   /**
@@ -4064,19 +4229,26 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     for (let i = 0; i < files.length; i++) {
       setLoading(true, `📦 Batch: photo ${i + 1} of ${files.length} — ${files[i].name}`);
       try {
-        await processSingleFile(files[i]);
-        const record = collectCurrentAssessment();
-        await historyStore.save(record);
-        results.push({ filename: files[i].name, ok: true, overall, needsReview: RiskCore.hasUnreviewedHazards(historyAllHazards(record)) });
+        const outcome = await processSingleFile(files[i]);
+        if (outcome.queued) {
+          // queueDraft() already saved its own record — nothing further to save here.
+          results.push({ filename: files[i].name, ok: true, queued: true });
+        } else {
+          const record = collectCurrentAssessment();
+          await historyStore.save(record);
+          results.push({ filename: files[i].name, ok: true, overall, needsReview: RiskCore.hasUnreviewedHazards(historyAllHazards(record)) });
+        }
       } catch (err) {
         results.push({ filename: files[i].name, ok: false, error: err.message });
       }
     }
     setLoading(false);
     const failed = results.filter(r => !r.ok);
-    const needsReviewCount = results.filter(r => r.ok && r.needsReview).length;
+    const queuedCount = results.filter(r => r.ok && r.queued).length;
+    const needsReviewCount = results.filter(r => r.ok && !r.queued && r.needsReview).length;
     showWarning(
       `Batch complete: ${results.length - failed.length} of ${results.length} photo(s) processed and saved to history` +
+      (queuedCount ? `, ${queuedCount} queued (offline — analyze once online)` : '') +
       (needsReviewCount ? `, ${needsReviewCount} need review` : '') +
       (failed.length ? `. ${failed.length} failed: ${failed.map(f => f.filename).join(', ')}` : '.')
     );
@@ -4231,6 +4403,19 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     }).join('');
   };
 })();
+</script>
+<script>
+  // Registered outside the app's main closure — it doesn't need any of that
+  // state, just needs to run once per page load. Lets the app shell (this
+  // page, risk-core.js) keep loading with no connectivity, which is what
+  // makes the offline assessment queue usable across a closed/reopened tab.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => {
+        console.warn('Service worker registration failed:', err.message);
+      });
+    });
+  }
 </script>
 </body>
 </html>
