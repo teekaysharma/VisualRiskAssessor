@@ -57,6 +57,10 @@
     .risk-hero-score { font-size:2.6rem; font-weight:600; color:#16233b; line-height:1; margin-top:2px; }
     .risk-hero-divider { width:1px; align-self:stretch; background:#dde1e8; min-height:44px; }
     .risk-hero-status { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .results-tab-strip { display:flex; gap:20px; border-bottom:1px solid #e6e8ec; margin:14px 0 4px; overflow-x:auto; }
+    .results-tab-btn { border:none; background:transparent; cursor:pointer; font-family:inherit; padding:10px 2px; font-size:.92rem; font-weight:600; color:#8a94a6; white-space:nowrap; border-bottom:2.5px solid transparent; }
+    .results-tab-btn.active { color:#16233b; font-weight:700; border-bottom-color:#ff6d00; }
+    .results-tab-panel.hidden { display:none !important; }
     .hazard-item { border-left:5px solid var(--mid); background:#fafafa; padding:10px; border-radius:8px; margin-bottom:8px; }
     .risk-low { border-left-color:var(--ok); }
     .risk-medium { border-left-color:var(--mid); }
@@ -640,35 +644,82 @@
           <span id="modeBadge" class="mode-badge"></span>
         </div>
       </div>
-      <h3>Detected Hazards &amp; Risk Register</h3>
-      <div id="hazardsList"></div>
-      <h3>Risk Matrix</h3>
-      <div class="matrix-wrap">
-        <div id="riskMatrix" class="matrix"></div>
-        <div class="matrix-legend">
-          <div class="matrix-legend-item">
-            <span style="display:inline-block;width:16px;height:16px;background:#fff;border-radius:50%;border:2px solid #212121;flex-shrink:0;"></span>
-            <span>Initial Risk</span>
-          </div>
-          <div class="matrix-legend-item">
-            <span style="display:inline-block;width:16px;height:16px;background:transparent;border-radius:50%;border:3px solid #212121;flex-shrink:0;"></span>
-            <span>Residual Risk</span>
+
+      <div class="results-tab-strip" role="tablist">
+        <button type="button" class="results-tab-btn active" data-tab="hazards" role="tab">Hazard Register</button>
+        <button type="button" class="results-tab-btn" data-tab="matrix" role="tab">Risk Matrix</button>
+        <button type="button" class="results-tab-btn" data-tab="compliance" role="tab">Compliance</button>
+        <button type="button" class="results-tab-btn" data-tab="emergency" role="tab">Emergency Plan</button>
+        <button type="button" class="results-tab-btn" data-tab="review" role="tab">HSE Review</button>
+      </div>
+
+      <div class="results-tab-panel" data-tab-panel="hazards">
+        <h3>Detected Hazards &amp; Risk Register</h3>
+        <div id="hazardsList"></div>
+      </div>
+
+      <div class="results-tab-panel hidden" data-tab-panel="matrix">
+        <h3>Risk Matrix</h3>
+        <div class="matrix-wrap">
+          <div id="riskMatrix" class="matrix"></div>
+          <div class="matrix-legend">
+            <div class="matrix-legend-item">
+              <span style="display:inline-block;width:16px;height:16px;background:#fff;border-radius:50%;border:2px solid #212121;flex-shrink:0;"></span>
+              <span>Initial Risk</span>
+            </div>
+            <div class="matrix-legend-item">
+              <span style="display:inline-block;width:16px;height:16px;background:transparent;border-radius:50%;border:3px solid #212121;flex-shrink:0;"></span>
+              <span>Residual Risk</span>
+            </div>
           </div>
         </div>
+        <h3>Risk Summary Dashboard</h3>
+        <div id="riskSummary" class="risk-summary"></div>
       </div>
-      <h3>Risk Summary Dashboard</h3>
-      <div id="riskSummary" class="risk-summary"></div>
-      <details id="compliancePanel" style="margin:12px 0;">
-        <summary style="cursor:pointer;font-weight:700;color:#1565c0;font-size:.95rem;padding:8px 0;">
-          📋 Compliance Coverage Status
-        </summary>
-        <div id="complianceChecklist" style="padding:10px 0;font-size:.85rem;display:grid;grid-template-columns:28px 1fr auto;gap:6px 10px;align-items:center;"></div>
-      </details>
-      <h3>Hierarchy of Controls</h3>
-      <div id="hocTable"></div>
-      <h3>Assessment Details</h3>
-      <div id="metadataFooter" class="metadata-footer"></div>
 
+      <div class="results-tab-panel hidden" data-tab-panel="compliance">
+        <details id="compliancePanel" open style="margin:12px 0;">
+          <summary style="cursor:pointer;font-weight:700;color:#1565c0;font-size:.95rem;padding:8px 0;">
+            📋 Compliance Coverage Status
+          </summary>
+          <div id="complianceChecklist" style="padding:10px 0;font-size:.85rem;display:grid;grid-template-columns:28px 1fr auto;gap:6px 10px;align-items:center;"></div>
+        </details>
+        <h3>Hierarchy of Controls</h3>
+        <div id="hocTable"></div>
+        <h3>Assessment Details</h3>
+        <div id="metadataFooter" class="metadata-footer"></div>
+      </div>
+
+      <div class="results-tab-panel hidden" data-tab-panel="emergency">
+        <details id="emergencySection" class="card" open style="margin-top:0;">
+          <summary style="cursor:pointer;font-weight:700;font-size:1rem;color:#b71c1c;padding:12px;">
+            🚨 Emergency Preparedness — ISO 45001:2018 §8.2
+          </summary>
+          <div style="padding:12px;">
+            <p style="font-size:.83rem;color:#555;margin:0 0 12px;">Complete for each plausible emergency scenario identified from this assessment. Required under ISO 45001:2018 Clause 8.2 and ADOSH-SF Emergency Response requirements.</p>
+            <div style="overflow-x:auto;">
+              <table id="emergencyTable" style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead>
+                  <tr style="background:#b71c1c;color:#fff;">
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Scenario</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Trigger Condition</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Immediate Response Steps</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Responsible Role</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Assembly Point</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Drill Frequency</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Last Drill Date</th>
+                    <th style="padding:8px 6px;border:1px solid #c62828;">Next Drill Date</th>
+                  </tr>
+                </thead>
+                <tbody id="emergencyTableBody"></tbody>
+              </table>
+            </div>
+            <button id="btnAddEmergency" class="btn btn-secondary" style="margin-top:10px;font-size:.85rem;">+ Add Scenario</button>
+          </div>
+        </details>
+      </div>
+
+      <div class="results-tab-panel hidden" data-tab-panel="review">
       <div id="hseReviewSection" class="hse-review-section hidden">
         <h3>📋 HSE Officer Review</h3>
         <div class="reviewer-info-grid">
@@ -735,32 +786,7 @@
           <div class="data-source-item"><span class="data-source-dot verified"></span> Competent Person Verified/Overridden Fields</div>
         </div>
       </div>
-      <details id="emergencySection" class="card" style="margin-top:16px;">
-        <summary style="cursor:pointer;font-weight:700;font-size:1rem;color:#b71c1c;padding:12px;">
-          🚨 Emergency Preparedness — ISO 45001:2018 §8.2
-        </summary>
-        <div style="padding:12px;">
-          <p style="font-size:.83rem;color:#555;margin:0 0 12px;">Complete for each plausible emergency scenario identified from this assessment. Required under ISO 45001:2018 Clause 8.2 and ADOSH-SF Emergency Response requirements.</p>
-          <div style="overflow-x:auto;">
-            <table id="emergencyTable" style="width:100%;border-collapse:collapse;font-size:12px;">
-              <thead>
-                <tr style="background:#b71c1c;color:#fff;">
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Scenario</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Trigger Condition</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Immediate Response Steps</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Responsible Role</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Assembly Point</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Drill Frequency</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Last Drill Date</th>
-                  <th style="padding:8px 6px;border:1px solid #c62828;">Next Drill Date</th>
-                </tr>
-              </thead>
-              <tbody id="emergencyTableBody"></tbody>
-            </table>
-          </div>
-          <button id="btnAddEmergency" class="btn btn-secondary" style="margin-top:10px;font-size:.85rem;">+ Add Scenario</button>
-        </div>
-      </details>
+      </div>
       <div class="action-buttons">
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
         <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
@@ -1263,6 +1289,22 @@
    */
   function hazardNeedsReview(h) {
     return h.key === 'unclear' || RiskCore.needsReview(h.conf);
+  }
+
+  /**
+   * Switches which Results tab panel is visible. Purely a visibility
+   * toggle on wrapper divs added around content that already existed —
+   * hazardsList/riskMatrix/complianceChecklist/etc. are still the exact
+   * same elements render() always wrote to; this never re-renders them,
+   * so switching tabs never loses or resets anything mid-assessment.
+   */
+  function switchResultsTab(tab) {
+    document.querySelectorAll('.results-tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    document.querySelectorAll('.results-tab-panel').forEach(panel => {
+      panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab);
+    });
   }
 
   function showWarning(msg) { els.envWarning.textContent = msg; els.envWarning.classList.remove('hidden'); }
@@ -4155,6 +4197,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     if (els.siteLocationName) els.siteLocationName.value = '';
     siteGPS = null;
     renderSiteGPSDisplay();
+    switchResultsTab('hazards');
   }
 
   // ── Assessment History (local-only, IndexedDB) ─────────────────────────────
@@ -4552,6 +4595,9 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   });
   if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
   if (els.btnDetectLocation) els.btnDetectLocation.addEventListener('click', detectSiteLocation);
+  document.querySelectorAll('.results-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchResultsTab(btn.dataset.tab));
+  });
   updateConnectivityBadge();
 
   // ── AI provider selection ───────────────────────────────────────────────
