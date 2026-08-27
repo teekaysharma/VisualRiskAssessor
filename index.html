@@ -57,7 +57,53 @@
          both; the connectivity badge stays, it's live status, not navigation. */
       #btnHistoryToggle, #btnSettingsJump { display:none; }
     }
+    .app-shell { display:block; }
+    .desktop-sidebar { display:none; }
     .container { max-width:980px; margin:0 auto; padding:16px; }
+    /* Large-screen (>=900px) enhancement layered ON TOP of the two states
+       above — everything from 0 to 899px (mobile bottom-nav, and the
+       681-899px header-nav zone) is completely untouched by this block, so
+       nothing already verified there can regress from it. Below 900px
+       .app-shell/.desktop-sidebar simply never switch on. Placed AFTER the
+       base .container rule above so this media query's max-width/display
+       actually win the cascade at >=900px instead of being overridden by
+       the later, equal-specificity base rule. */
+    @media (min-width:900px) {
+      .app-shell { display:flex; align-items:stretch; min-height:100vh; }
+      .app-shell-main { flex:1; min-width:0; }
+      .desktop-sidebar {
+        display:flex; flex-direction:column; align-items:center; gap:8px;
+        width:76px; flex-shrink:0; background:#16233b; padding:20px 0;
+      }
+      .sidebar-logo {
+        width:40px; height:40px; border-radius:11px; background:var(--p);
+        display:flex; align-items:center; justify-content:center; margin-bottom:16px;
+      }
+      .sidebar-item {
+        width:56px; padding:9px 0; border-radius:13px; border:none; cursor:pointer;
+        background:transparent; color:#7d8ba8; font-family:inherit;
+        display:flex; flex-direction:column; align-items:center; gap:5px; font-size:10.5px; font-weight:600;
+      }
+      .sidebar-item.active { background:#233a5c; color:#fff; }
+      /* The sidebar is the one canonical desktop nav location above 900px —
+         avoid the header duplicating it. Connectivity badge stays visible,
+         same reasoning as the mobile breakpoint above. */
+      #btnHistoryToggle, #btnSettingsJump { display:none; }
+      .header { text-align:left; padding:18px 28px; }
+      .header-nav { justify-content:flex-start; margin-top:8px; }
+      /* Two-column layout: capture/context on the left, Results beside it
+         instead of below it. Pure grid placement on the EXISTING sections —
+         none of them moved in the DOM, so nothing inside #contextPanel,
+         #inputSec or #results changed at all. #results is display:none
+         until an assessment exists, so before that the grid is just a
+         single populated column with an empty second one — no dead space
+         drawn, since an empty grid track with no forced height takes none. */
+      .container { max-width:1400px; display:grid; grid-template-columns:400px 1fr; gap:22px; align-items:start; }
+      #contextPanel { grid-column:1; grid-row:1; }
+      #inputSec { grid-column:1; grid-row:2; }
+      #results { grid-column:2; grid-row:1 / 3; }
+      #historySection { grid-column:1 / 3; grid-row:3; }
+    }
     .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04); border:1px solid #edeff2; }
     .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:700; font-family:inherit; cursor:pointer; transition:filter .15s; }
     .btn:hover { filter:brightness(0.96); }
@@ -492,6 +538,31 @@
 </style>
 </head>
 <body>
+  <!-- app-shell/desktop-sidebar only activate at min-width:900px (see CSS) —
+       a no-op block wrapper below that, so mobile (already verified on a
+       real phone) and the existing ~681-899px header-nav layout (Stage 3,
+       already verified) are both untouched pixel-for-pixel. This is an
+       ADDITIVE enhancement layered on top of what's already proven, not a
+       replacement of it. -->
+  <div class="app-shell">
+    <nav class="desktop-sidebar" aria-label="Main navigation">
+      <div class="sidebar-logo" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 6v6c0 5 3.8 8.7 9 10 5.2-1.3 9-5 9-10V6l-9-4Z"/><path d="M12 8v5"/><circle cx="12" cy="16.2" r=".4" fill="#fff"/></svg>
+      </div>
+      <button type="button" class="sidebar-item active" id="navAssessDesktop">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+        <span>Assess</span>
+      </button>
+      <button type="button" class="sidebar-item" id="navHistoryDesktop">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+        <span>History</span>
+      </button>
+      <button type="button" class="sidebar-item" id="navSettingsDesktop">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+    <div class="app-shell-main">
   <header class="header">
     <h1 style="margin:0">VisualRiskAssessor</h1>
     <p style="margin:8px 0 0">HSE visual risk assessment — AI powered</p>
@@ -871,6 +942,8 @@
       <div id="historyList"></div>
     </section>
   </main>
+    </div>
+  </div>
 
   <div id="loading" aria-live="assertive"><div id="loadingMsg">Analyzing image...</div></div>
 
@@ -898,7 +971,8 @@
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
     siteLocationName: $('siteLocationName'), btnDetectLocation: $('btnDetectLocation'), siteGPSDisplay: $('siteGPSDisplay'),
-    btnSettingsJump: $('btnSettingsJump'), navAssessMobile: $('navAssessMobile'), navHistoryMobile: $('navHistoryMobile'), navSettingsMobile: $('navSettingsMobile')
+    btnSettingsJump: $('btnSettingsJump'), navAssessMobile: $('navAssessMobile'), navHistoryMobile: $('navHistoryMobile'), navSettingsMobile: $('navSettingsMobile'),
+    navAssessDesktop: $('navAssessDesktop'), navHistoryDesktop: $('navHistoryDesktop'), navSettingsDesktop: $('navSettingsDesktop')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -4642,26 +4716,27 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
   if (els.btnDetectLocation) els.btnDetectLocation.addEventListener('click', detectSiteLocation);
 
-  function setBottomNavActive(id) {
-    document.querySelectorAll('.bottom-nav-item').forEach(btn => btn.classList.toggle('active', btn.id === id));
+  // One active-state helper for both nav sets (mobile bottom bar,
+  // desktop sidebar) — they never show at the same time (mutually
+  // exclusive breakpoints), but sharing the function means there's one
+  // place to get "only one item highlighted at a time" right, not two.
+  function setNavActive(id) {
+    document.querySelectorAll('.bottom-nav-item, .sidebar-item').forEach(btn => btn.classList.toggle('active', btn.id === id));
   }
   function scrollToSettings() {
     const target = document.getElementById('apiKeySection');
     if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  if (els.btnSettingsJump) els.btnSettingsJump.addEventListener('click', scrollToSettings);
-  if (els.navAssessMobile) els.navAssessMobile.addEventListener('click', () => {
-    setBottomNavActive('navAssessMobile');
+  function scrollToAssess() {
     document.getElementById('contextPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-  if (els.navHistoryMobile) els.navHistoryMobile.addEventListener('click', () => {
-    setBottomNavActive('navHistoryMobile');
-    els.btnHistoryToggle.click();
-  });
-  if (els.navSettingsMobile) els.navSettingsMobile.addEventListener('click', () => {
-    setBottomNavActive('navSettingsMobile');
-    scrollToSettings();
-  });
+  }
+  if (els.btnSettingsJump) els.btnSettingsJump.addEventListener('click', scrollToSettings);
+  if (els.navAssessMobile) els.navAssessMobile.addEventListener('click', () => { setNavActive('navAssessMobile'); scrollToAssess(); });
+  if (els.navHistoryMobile) els.navHistoryMobile.addEventListener('click', () => { setNavActive('navHistoryMobile'); els.btnHistoryToggle.click(); });
+  if (els.navSettingsMobile) els.navSettingsMobile.addEventListener('click', () => { setNavActive('navSettingsMobile'); scrollToSettings(); });
+  if (els.navAssessDesktop) els.navAssessDesktop.addEventListener('click', () => { setNavActive('navAssessDesktop'); scrollToAssess(); });
+  if (els.navHistoryDesktop) els.navHistoryDesktop.addEventListener('click', () => { setNavActive('navHistoryDesktop'); els.btnHistoryToggle.click(); });
+  if (els.navSettingsDesktop) els.navSettingsDesktop.addEventListener('click', () => { setNavActive('navSettingsDesktop'); scrollToSettings(); });
   document.querySelectorAll('.results-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchResultsTab(btn.dataset.tab));
   });
