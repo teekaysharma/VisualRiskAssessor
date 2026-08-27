@@ -16,14 +16,28 @@
        matrix inline in this file — edit packages/risk-core/src/index.ts,
        run its tests, rebuild, and copy dist/risk-core.js here. -->
   <script src="risk-core.js"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
   <style>
-    :root { --p:#ff6d00; --s:#1565c0; --ok:#4caf50; --mid:#ffc107; --hi:#f44336; --x:#b71c1c; }
+    /* --ok/--mid/--hi/--x are kept in sync with RiskCore's RISK_BANDS bg
+       colors (low/moderate/high/extreme) by hand — they were drifting
+       (e.g. --ok was #4caf50 vs RiskCore's #27ae60), which meant the one
+       most-visible risk indicator on the page (the Overall Risk Level
+       chip, styled via these vars) showed a different shade of "High" or
+       "Extreme" than every hazard-row cell, the risk matrix, and the PDF
+       export, all of which read RiskCore.band(...).bg directly. Exactly
+       the kind of disagreement the RiskCore consolidation was meant to
+       prevent — it just didn't reach this one CSS-var path. */
+    :root { --p:#ff6d00; --s:#1565c0; --ok:#27ae60; --mid:#f1c40f; --hi:#e67e22; --x:#c0392b; }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:Segoe UI,Roboto,Arial,sans-serif; background:#f5f5f5; color:#212121; }
-    .header { background:linear-gradient(120deg,#ff6d00,#e65100); color:#fff; text-align:center; padding:20px 12px; }
+    body { margin:0; font-family:'Public Sans',Segoe UI,Roboto,Arial,sans-serif; background:#f4f5f7; color:#16233b; }
+    .mono { font-family:'IBM Plex Mono','Courier New',monospace; }
+    .header { background:linear-gradient(120deg,#ff6d00,#e65100); color:#fff; text-align:center; padding:22px 12px; }
+    .header h1 { font-weight:800; letter-spacing:-.01em; font-size:1.7rem; }
+    .header p { font-weight:500; opacity:.92; }
     .container { max-width:980px; margin:0 auto; padding:16px; }
-    .card { background:#fff; border-radius:14px; padding:18px; margin-bottom:16px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
-    .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:600; cursor:pointer; }
+    .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04); border:1px solid #edeff2; }
+    .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:700; font-family:inherit; cursor:pointer; transition:filter .15s; }
+    .btn:hover { filter:brightness(0.96); }
     .btn + .btn { margin-left:8px; }
     .btn-primary { background:var(--p); color:#fff; }
     .btn-secondary { background:var(--s); color:#fff; }
@@ -37,7 +51,12 @@
     #videoPreview,#resultImg { width:100%; max-width:620px; border-radius:10px; background:#000; }
     .warning { background:#fff3cd; color:#694f00; border-radius:8px; padding:10px; margin-bottom:10px; }
     .info { background:#e3f2fd; color:#0d47a1; border-radius:8px; padding:10px; margin-bottom:10px; }
-    .result-chip { display:inline-block; padding:6px 10px; border-radius:999px; color:#fff; font-weight:700; }
+    .result-chip { display:inline-block; padding:8px 14px; border-radius:999px; color:#fff; font-weight:800; font-size:1.02rem; }
+    .risk-hero { display:flex; align-items:center; gap:18px; background:#f4f5f7; border-radius:14px; padding:16px 20px; margin:12px 0 18px; flex-wrap:wrap; }
+    .risk-hero-label { font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9aa3b2; }
+    .risk-hero-score { font-size:2.6rem; font-weight:600; color:#16233b; line-height:1; margin-top:2px; }
+    .risk-hero-divider { width:1px; align-self:stretch; background:#dde1e8; min-height:44px; }
+    .risk-hero-status { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .results-tab-strip { display:flex; gap:20px; border-bottom:1px solid #e6e8ec; margin:14px 0 4px; overflow-x:auto; }
     .results-tab-btn { border:none; background:transparent; cursor:pointer; font-family:inherit; padding:10px 2px; font-size:.92rem; font-weight:600; color:#8a94a6; white-space:nowrap; border-bottom:2.5px solid transparent; }
     .results-tab-btn.active { color:#16233b; font-weight:700; border-bottom-color:#ff6d00; }
@@ -614,7 +633,18 @@
       <div id="fallbackWarning" class="warning hidden">⚠️ ML model unavailable. Showing rule-based keyword matching.</div>
       <div id="aiInfo" class="info hidden">🤖 AI Vision analysis used for enhanced hazard identification.</div>
       <img id="resultImg" alt="Analyzed image" />
-      <p><strong>Overall Risk Score:</strong> <span id="overallScore">0</span> &nbsp;<strong>Risk Level:</strong> <span id="overallLevel" class="result-chip">Assessing...</span> <span id="modeBadge" class="mode-badge"></span></p>
+      <div class="risk-hero">
+        <div class="risk-hero-score-block">
+          <div class="risk-hero-label">Risk Score</div>
+          <div class="risk-hero-score mono" id="overallScore">0</div>
+        </div>
+        <div class="risk-hero-divider"></div>
+        <div class="risk-hero-status">
+          <span id="overallLevel" class="result-chip">Assessing...</span>
+          <span id="modeBadge" class="mode-badge"></span>
+        </div>
+      </div>
+
       <div class="results-tab-strip" role="tablist">
         <button type="button" class="results-tab-btn active" data-tab="hazards" role="tab">Hazard Register</button>
         <button type="button" class="results-tab-btn" data-tab="matrix" role="tab">Risk Matrix</button>
