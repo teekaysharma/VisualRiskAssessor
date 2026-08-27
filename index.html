@@ -34,6 +34,29 @@
     .header { background:linear-gradient(120deg,#ff6d00,#e65100); color:#fff; text-align:center; padding:22px 12px; }
     .header h1 { font-weight:800; letter-spacing:-.01em; font-size:1.7rem; }
     .header p { font-weight:500; opacity:.92; }
+    .header-nav { display:flex; align-items:center; justify-content:center; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    /* Mobile-only fixed bottom nav — shown/hidden purely by viewport width
+       (matching this file's existing 680px breakpoint), never a manual
+       toggle. Desktop keeps using the header's History/Settings buttons. */
+    .bottom-nav { display:none; }
+    @media (max-width:680px) {
+      body { padding-bottom:74px; }
+      .bottom-nav {
+        display:flex; position:fixed; left:0; right:0; bottom:0; z-index:50;
+        background:#fff; border-top:1px solid #e6e8ec; height:64px;
+        align-items:center; justify-content:space-around;
+        box-shadow:0 -2px 10px rgba(0,0,0,.06);
+      }
+      .bottom-nav-item {
+        border:none; background:transparent; cursor:pointer; font-family:inherit;
+        display:flex; flex-direction:column; align-items:center; gap:3px;
+        color:#9aa3b2; font-size:.68rem; font-weight:600; padding:6px 14px;
+      }
+      .bottom-nav-item.active { color:var(--p); }
+      /* The bottom nav covers History/Settings on mobile — avoid showing
+         both; the connectivity badge stays, it's live status, not navigation. */
+      #btnHistoryToggle, #btnSettingsJump { display:none; }
+    }
     .container { max-width:980px; margin:0 auto; padding:16px; }
     .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04); border:1px solid #edeff2; }
     .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:700; font-family:inherit; cursor:pointer; transition:filter .15s; }
@@ -472,9 +495,31 @@
   <header class="header">
     <h1 style="margin:0">VisualRiskAssessor</h1>
     <p style="margin:8px 0 0">HSE visual risk assessment — AI powered</p>
-    <button type="button" class="btn btn-outline" id="btnHistoryToggle" style="margin-top:10px;background:#fff;">📋 History</button>
-    <span id="connectivityBadge" style="display:inline-block;margin-top:10px;margin-left:8px;padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;"></span>
+    <div class="header-nav">
+      <button type="button" class="btn btn-outline" id="btnHistoryToggle" style="background:#fff;">📋 History</button>
+      <button type="button" class="btn btn-outline" id="btnSettingsJump" style="background:#fff;">⚙️ Settings</button>
+      <span id="connectivityBadge" style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:.78rem;font-weight:600;"></span>
+    </div>
   </header>
+
+  <!-- Mobile-only persistent bottom nav — automatic by viewport width (see
+       the max-width:680px media query), never a manual mode switch. Reuses
+       btnHistoryToggle's own click handler for History rather than
+       duplicating that logic; Assess/Settings are new scroll-to shortcuts. -->
+  <nav class="bottom-nav" aria-label="Main navigation">
+    <button type="button" class="bottom-nav-item active" id="navAssessMobile">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+      <span>Assess</span>
+    </button>
+    <button type="button" class="bottom-nav-item" id="navHistoryMobile">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+      <span>History</span>
+    </button>
+    <button type="button" class="bottom-nav-item" id="navSettingsMobile">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
 
   <main class="container">
     <div id="envWarning" class="warning hidden" role="alert"></div>
@@ -852,7 +897,8 @@
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
-    siteLocationName: $('siteLocationName'), btnDetectLocation: $('btnDetectLocation'), siteGPSDisplay: $('siteGPSDisplay')
+    siteLocationName: $('siteLocationName'), btnDetectLocation: $('btnDetectLocation'), siteGPSDisplay: $('siteGPSDisplay'),
+    btnSettingsJump: $('btnSettingsJump'), navAssessMobile: $('navAssessMobile'), navHistoryMobile: $('navHistoryMobile'), navSettingsMobile: $('navSettingsMobile')
   };
 
   // Set by the site owner after deploying demo-proxy/worker.js — see
@@ -4595,6 +4641,27 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
   });
   if (els.btnProcessQueued) els.btnProcessQueued.addEventListener('click', processAllQueued);
   if (els.btnDetectLocation) els.btnDetectLocation.addEventListener('click', detectSiteLocation);
+
+  function setBottomNavActive(id) {
+    document.querySelectorAll('.bottom-nav-item').forEach(btn => btn.classList.toggle('active', btn.id === id));
+  }
+  function scrollToSettings() {
+    const target = document.getElementById('apiKeySection');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (els.btnSettingsJump) els.btnSettingsJump.addEventListener('click', scrollToSettings);
+  if (els.navAssessMobile) els.navAssessMobile.addEventListener('click', () => {
+    setBottomNavActive('navAssessMobile');
+    document.getElementById('contextPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  if (els.navHistoryMobile) els.navHistoryMobile.addEventListener('click', () => {
+    setBottomNavActive('navHistoryMobile');
+    els.btnHistoryToggle.click();
+  });
+  if (els.navSettingsMobile) els.navSettingsMobile.addEventListener('click', () => {
+    setBottomNavActive('navSettingsMobile');
+    scrollToSettings();
+  });
   document.querySelectorAll('.results-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchResultsTab(btn.dataset.tab));
   });
