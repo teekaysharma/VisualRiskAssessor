@@ -119,6 +119,7 @@
     #cameraSection { text-align:center; margin-top:12px; }
     #videoPreview,#resultImg { width:100%; max-width:620px; border-radius:10px; background:#000; }
     .warning { background:#fff3cd; color:#694f00; border-radius:8px; padding:10px; margin-bottom:10px; }
+    #fallbackWarning { font-weight:700; border:2px solid #e0a800; }
     .info { background:#e3f2fd; color:#0d47a1; border-radius:8px; padding:10px; margin-bottom:10px; }
     .result-chip { display:inline-block; padding:8px 14px; border-radius:999px; color:#fff; font-weight:800; font-size:1.02rem; }
     .risk-hero { display:flex; align-items:center; gap:18px; background:#f4f5f7; border-radius:14px; padding:16px 20px; margin:12px 0 18px; flex-wrap:wrap; }
@@ -2035,6 +2036,34 @@ Fire safety — check specifically for each of these (report each one found as i
 - Flammable/combustible liquid stored on open shelving rather than an approved metal storage cabinet, or several such cabinets clustered together (Ch.15/16)
 - Combustible waste, dust, or packaging accumulated near an ignition source (electrical panel, hot work area, heater)
 
+Working at height — check specifically for each of these (report each one found as its own separate hazard entry with key "height", not merged into a single generic entry; only report what you can actually see):
+- Open/unprotected edge on a platform, roof, scaffold level, or floor opening with no guardrail visible
+- Guardrail present but missing a mid-rail or toe-board
+- Ladder in use that is not tied off, not footed, or standing at an unsafe angle
+- Person working at height with no visible harness/lanyard where the task appears to require one
+- Elevated work platform (MEWP/scissor lift) with gate open or guardrail down while occupied
+- Fragile roof material (e.g. skylights, corrugated sheeting) with no visible walkway boards or warning signage
+
+Excavation — check specifically for each of these (report each one found as its own separate hazard entry with key "other", not merged; only report what you can actually see):
+- Open trench or excavation with no visible shoring, battering, or trench box
+- Spoil (excavated material) or stored materials piled at or near the excavation edge
+- No visible barrier, fencing, or edge protection around the excavation
+- No visible ladder or safe access/egress point into a deep excavation
+- Standing water in the excavation with no visible pumping/drainage
+
+Workplace transport — check specifically for each of these (report each one found as its own separate hazard entry with key "struck", not merged; only report what you can actually see):
+- Vehicle or mobile plant operating in the same space as pedestrians with no visible segregation (barriers, marked routes, crossing points)
+- Vehicle reversing or manoeuvring with no visible banksman/spotter and no visible pedestrians clear of the path
+- No visible speed-limit or traffic signage in an area with vehicle movement
+- Pedestrian walking through an active vehicle/plant route
+- Vehicle parked or positioned in a way that blocks a walkway, exit, or sightline
+
+Struck-by / machinery guarding — check specifically for each of these (report each one found as its own separate hazard entry with key "machinery" or "struck" as appropriate, not merged; only report what you can actually see):
+- Moving machinery part (belt, gear, blade, rotating shaft) with no visible guard
+- Person or walkway positioned under a suspended or swinging load (crane, hoist, forklift-raised load)
+- Stacked or stored materials that appear unstable, overloaded, or unsecured against falling/toppling
+- Tools or materials left in a position where they could fall onto a person below
+
 Unidentified object: if you can see something that might be concerning but you cannot clearly identify what it is (poor angle, distance, occlusion, low light) — report it with key "unclear" and explain in "details" why it couldn't be identified (e.g. "object partially obscured, camera angle" or "too dark to assess clearly"). Never guess or name what you think the object might be, and never assign this key a high confidence — this category exists specifically so uncertain findings still get reported and routed to a human, rather than the model either inventing an identity for it or silently omitting it because it isn't sure.
 ${securityPatrolSection}
 
@@ -2042,7 +2071,9 @@ Valid keys: electrical, fire, machinery, slip, height, chemical, ppe, struck, co
 Likelihood and severity must be integers 1-5 (1=rare/negligible, 5=certain/catastrophic).
 Confidence must be 0.0-1.0.
 If no hazards are visible, return an empty array [].
-Be thorough and observational. Do not limit yourself to obvious hazards. Examine the full image including background, floor, ceiling, equipment state, worker positioning, housekeeping condition, and signage. Report every hazard visible regardless of how minor it appears. Accuracy of observation is more important than brevity.`;
+Be thorough and observational. Do not limit yourself to obvious hazards. Examine the full image including background, floor, ceiling, equipment state, worker positioning, housekeeping condition, and signage. Report every hazard visible regardless of how minor it appears. Accuracy of observation is more important than brevity.
+
+Before finalising your answer, re-examine the image one more time specifically for: (1) anything in the corners or edges of the frame you have not already reported, (2) anything in the background behind the main subject, (3) anything on the floor or ground that is easy to overlook, (4) anything partially out of frame or partially obscured. Add any additional hazards you find on this second pass to your JSON array. Do not remove or change hazards you already identified.`;
 
     try {
       const controller = new AbortController();
@@ -2282,8 +2313,25 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
     els.resultImg.src = isPlaceholderImage ? '' : (imageData || '');
     els.resultImg.style.display = isPlaceholderImage || !imageData ? 'none' : 'block';
 
-    els.fallbackWarning.classList.toggle('hidden', !(analysisMode === 'rule-based' && modelLoadError));
-    els.aiInfo.classList.toggle('hidden', analysisMode !== 'ai');
+    // Always-visible indicator of which detection mode actually produced
+    // these results — never a quiet internal flag. A coco/rule-based
+    // result must never be mistakable for a real AI hazard assessment.
+    const fallbackTexts = {
+      coco: '⚠️ Generic object detection only — AI vision unavailable. Results are NOT a full hazard assessment.',
+      'rule-based': '⚠️ Keyword-based fallback only — no visual analysis performed.'
+    };
+    if (fallbackTexts[analysisMode]) {
+      els.fallbackWarning.textContent = fallbackTexts[analysisMode];
+      els.fallbackWarning.classList.remove('hidden');
+    } else {
+      els.fallbackWarning.classList.add('hidden');
+    }
+    if (analysisMode === 'ai') {
+      els.aiInfo.textContent = `🤖 AI Vision Analysis (Provider: ${AI_PROVIDERS[lastAIProvider || 'groq'].label})`;
+      els.aiInfo.classList.remove('hidden');
+    } else {
+      els.aiInfo.classList.add('hidden');
+    }
 
     const modeLabels = { ai: ['AI Vision', 'mode-ai'], coco: ['Object Detection', 'mode-ml'], 'rule-based': ['Rule-Based', 'mode-rule'], manual: ['Manual Entry', 'mode-manual'], baseline: ['Baseline Context', 'mode-baseline'] };
     const activeMode = baselineHazards.length > 0 && hazards.length === 0 && manualHazards.length === 0 ? 'baseline' : (manualHazards.length > 0 && hazards.length === 0 && baselineHazards.length === 0 ? 'manual' : (analysisMode || 'rule-based'));
@@ -3482,10 +3530,14 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
           }
           setLoading(true, useDemoMode ? '🎬 Running demo AI analysis...' : '🤖 Running AI Vision analysis...');
           const aiResult = await geminiHazards(aiDataUrl);
-          if (aiResult && aiResult.length > 0) {
+          if (aiResult !== null) {
+            // A real AI response is a valid result even when the array is
+            // empty — that means the AI looked and found nothing, which is
+            // different from the AI call failing. Never fall through to the
+            // weaker COCO/rule-based detectors just because the count is 0.
             hazards = aiResult;
             analysisMode = 'ai';
-          } else if (aiResult !== null) {
+          } else {
             setLoading(true, 'Running object detection...');
             const cocoResult = await cocoHazards(img);
             if (cocoResult.hazards.length > 0) {
@@ -3520,7 +3572,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         }
       }
 
-      if (hazards.length === 0 && cocoModel) {
+      if (hazards.length === 0 && cocoModel && analysisMode !== 'ai') {
         setLoading(true, 'Running object detection...');
         const cocoResult = await cocoHazards(img);
         if (cocoResult.hazards.length > 0) {
@@ -3548,7 +3600,7 @@ Be thorough and observational. Do not limit yourself to obvious hazards. Examine
         }
       }
 
-      if (hazards.length === 0) {
+      if (hazards.length === 0 && analysisMode !== 'ai') {
         hazards = [{ name: 'General Workplace Hazard', L: 2, S: 2, risk: 4, conf: 0.5, recs: hazardDB.other.recs, source: 'rule-based', details: 'No specific hazards detected — general workplace risk profile applied.', eliminate: hazardDB.other.eliminate || 'N/A', substitute: hazardDB.other.substitute || 'N/A', engineering: hazardDB.other.engineering || 'N/A', administrative: hazardDB.other.administrative || 'N/A', ppe: hazardDB.other.ppe || 'N/A' }];
         analysisMode = 'rule-based';
       }
