@@ -1,294 +1,71 @@
 # Development Guide
 
-## Getting Started
+## Getting started
 
-### Prerequisites
-- Android Studio Arctic Fox or later
-- JDK 17
-- Android SDK with API level 24-34
-- Git
+No build step for the app itself — `index.html` is plain HTML/CSS/JS.
 
-### Initial Setup
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/teekaysharma/VisualRiskAssessor.git
 cd VisualRiskAssessor
+python3 -m http.server 8000
 ```
 
-2. Open the project in Android Studio
+Open `http://localhost:8000`. Camera access and the service worker both
+require `localhost` or `https://` — they won't work over `file://`.
 
-3. Sync Gradle files:
-   - Android Studio will automatically prompt for Gradle sync
-   - Or manually trigger: File → Sync Project with Gradle Files
+Every code change should be verified live in a browser before it's
+considered done, not just read back. When testing AI-provider behavior,
+clear the service worker and caches first (`navigator.serviceWorker
+.getRegistrations()` → unregister, `caches.keys()` → delete) — otherwise
+stale cached JS gets served silently and edits appear not to take effect.
 
-4. Build the project:
-```bash
-./gradlew build
-```
+## Project layout
 
-## Project Architecture
+- `index.html` — the entire app. Single file by design; there's no bundler
+  or module system to fight with.
+- `packages/risk-core/` — the one place risk scoring/banding logic lives
+  (TypeScript, with tests). Build it and copy the output to the repo root:
+  ```bash
+  cd packages/risk-core
+  npm install
+  npm run build
+  cp dist/risk-core.js ../../risk-core.js
+  ```
+  `index.html` loads the root-level `risk-core.js`, not the `dist/` copy —
+  don't forget the copy step after a change.
+- `demo-proxy/worker.js` — Cloudflare Worker for the no-key demo mode. Holds
+  a shared, rate-limited Groq key server-side. Deploying/rotating this is
+  outside the scope of the client app.
+- `sw.js` — service worker (cache-first with background revalidation).
+- `disclaimer.html` — standalone legal page, no shared JS with the app.
 
-### MVVM Pattern
-The app follows the Model-View-ViewModel architectural pattern:
+## AI hazard detection
 
-- **Model**: Data models representing hazards, risk assessments, etc.
-- **View**: Activities and XML layouts
-- **ViewModel**: Business logic and data preparation (to be expanded)
+`geminiHazards()` in `index.html` builds one prompt and routes it to
+whichever provider is selected (`AI_PROVIDERS` config: Groq, Anthropic,
+Gemini). The prompt uses explicit per-category checklists (fire, height,
+excavation, transport, machinery, electrical, confined space, manual
+handling) rather than a single generic instruction — checklists measurably
+outperform generic instructions for VLM attention. If you're adding a new
+hazard category, follow that pattern rather than adding another line to the
+generic instruction, and cite a real source (NEBOSH, ADOSH-SF, ISO 45001)
+for the checklist content rather than inventing it.
 
-### Package Structure
-
-```
-com.hse.visualriskassessor/
-├── analysis/           # Image analysis and ML processing
-├── model/              # Data models
-├── ui/                 # User interface components
-│   ├── camera/         # Camera functionality
-│   ├── history/        # Assessment history
-│   ├── results/        # Results display
-│   └── widget/         # Custom UI widgets
-└── utils/              # Utility classes
-```
-
-## Key Components
-
-### Image Analysis Pipeline
-
-1. **Image Capture/Selection**
-   - CameraX for camera capture
-   - Photo Picker API for library selection
-
-2. **Image Preprocessing**
-   - Resize to optimal dimensions
-   - Orientation correction
-   - Quality optimization
-
-3. **Hazard Detection**
-   - ML Kit image labeling
-   - Object detection
-   - Custom hazard mapping
-
-4. **Risk Assessment**
-   - Likelihood and severity calculation
-   - Risk matrix evaluation
-   - Overall risk level determination
-
-### Custom Views
-
-#### RiskMatrixView
-A custom view that renders the 5×5 risk matrix with:
-- Color-coded risk levels
-- Hazard position markers
-- Interactive display
-
-Usage:
-```kotlin
-val riskMatrixView = findViewById<RiskMatrixView>(R.id.riskMatrixView)
-riskMatrixView.setHazards(listOf(hazard1, hazard2))
-```
-
-## Adding New Features
-
-### Adding a New Hazard Type
-
-1. Update `HazardType.kt`:
-```kotlin
-NEW_HAZARD(
-    "New Hazard Name",
-    "Description of the hazard"
-)
-```
-
-2. Update mapping in `HazardDetector.kt`:
-```kotlin
-lowerLabel.contains("keyword") -> HazardType.NEW_HAZARD
-```
-
-3. Add recommendations in `Hazard.kt`:
-```kotlin
-HazardType.NEW_HAZARD -> listOf(
-    "Recommendation 1",
-    "Recommendation 2"
-)
-```
-
-### Adding New UI Screens
-
-1. Create layout XML in `res/layout/`
-2. Create Activity/Fragment class in appropriate package
-3. Register in `AndroidManifest.xml`
-4. Add navigation logic
+A response with zero hazards found is a *valid* AI result, not a failure —
+don't reintroduce logic that falls back to COCO/rule-based detection just
+because the count is 0. See `analyze()`'s handling of `aiResult !== null`.
 
 ## Testing
 
-### Running Unit Tests
+There's no test suite for `index.html` itself yet — verify changes live in
+a browser (see above). `packages/risk-core` has its own test suite:
+
 ```bash
-./gradlew test
+cd packages/risk-core
+npm test
 ```
 
-### Running Instrumentation Tests
-```bash
-./gradlew connectedAndroidTest
-```
+## Commit messages
 
-### Manual Testing Checklist
-- [ ] Camera capture works on physical device
-- [ ] Photo selection works from gallery
-- [ ] Permissions are requested properly
-- [ ] Image analysis completes successfully
-- [ ] Risk matrix displays correctly
-- [ ] Results can be shared
-- [ ] App works on different screen sizes
-- [ ] App works on different Android versions (24-34)
-
-## Code Style
-
-### Kotlin Style Guide
-Follow the [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html):
-
-- Use camelCase for variables and functions
-- Use PascalCase for classes
-- Use UPPER_SNAKE_CASE for constants
-- Prefer val over var
-- Use meaningful variable names
-
-### Example:
-```kotlin
-class RiskAssessmentEngine(private val context: Context) {
-    
-    companion object {
-        private const val MAX_IMAGE_SIZE = 1024
-    }
-    
-    suspend fun assessImage(uri: Uri): AssessmentResult {
-        // Implementation
-    }
-}
-```
-
-## Performance Optimization
-
-### Image Processing
-- Resize images before processing
-- Use appropriate bitmap compression
-- Release resources after use
-
-### Memory Management
-- Avoid memory leaks with proper lifecycle management
-- Use weak references where appropriate
-- Clean up ML Kit detectors when done
-
-### Background Processing
-- Use coroutines for heavy operations
-- Show loading indicators during processing
-- Handle errors gracefully
-
-## Debugging
-
-### Common Issues
-
-#### ML Kit not detecting hazards
-- Check image quality and size
-- Verify ML Kit dependencies are included
-- Test with various sample images
-
-#### Camera not starting
-- Verify camera permission is granted
-- Check device has camera hardware
-- Test on physical device (emulator camera may be limited)
-
-#### Build errors
-- Clean and rebuild: `./gradlew clean build`
-- Invalidate caches in Android Studio
-- Check Gradle and SDK versions
-
-### Logging
-Use Android's Log class for debugging:
-
-```kotlin
-import android.util.Log
-
-private const val TAG = "MyClass"
-
-Log.d(TAG, "Debug message")
-Log.e(TAG, "Error message", exception)
-```
-
-## Dependencies Management
-
-### Updating Dependencies
-1. Check for updates in `app/build.gradle.kts`
-2. Update version numbers
-3. Sync Gradle
-4. Test thoroughly
-
-### Adding New Dependencies
-1. Add to `dependencies` block in `app/build.gradle.kts`
-2. Sync Gradle
-3. Update ProGuard rules if needed
-4. Document in README
-
-## Release Process
-
-### Creating a Release Build
-
-1. Update version in `app/build.gradle.kts`:
-```kotlin
-versionCode = 2
-versionName = "1.1.0"
-```
-
-2. Build release APK:
-```bash
-./gradlew assembleRelease
-```
-
-3. Sign the APK (requires keystore)
-4. Test release build thoroughly
-5. Create release notes
-
-### ProGuard Configuration
-ProGuard rules are in `app/proguard-rules.pro`. Add rules for:
-- Keep model classes
-- Keep ML Kit classes
-- Keep third-party library requirements
-
-## Contributing
-
-### Pull Request Process
-1. Create a feature branch
-2. Make your changes
-3. Write/update tests
-4. Update documentation
-5. Submit PR with clear description
-
-### Commit Message Format
-```
-feat: Add new hazard type for confined spaces
-fix: Camera crash on Android 11 devices
-docs: Update installation instructions
-refactor: Improve risk calculation algorithm
-```
-
-## Resources
-
-### Documentation
-- [Android Developer Guide](https://developer.android.com)
-- [Kotlin Documentation](https://kotlinlang.org/docs/)
-- [CameraX Documentation](https://developer.android.com/training/camerax)
-- [ML Kit Documentation](https://developers.google.com/ml-kit)
-
-### HSE Resources
-- [HSE Risk Assessment Guide](https://www.hse.gov.uk/simple-health-safety/risk/)
-- [ISO 31000 Risk Management](https://www.iso.org/iso-31000-risk-management.html)
-
-## Support
-
-For questions or issues:
-- Check existing GitHub issues
-- Create new issue with detailed description
-- Include device info, Android version, and logs
-
----
-
-**Happy Coding!** 🚀
+Conventional commits (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`) —
+see git log for the established style.
