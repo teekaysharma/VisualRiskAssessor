@@ -15,28 +15,27 @@ Before creating bug reports, please check existing issues to avoid duplicates. W
 - **Clear title and description**
 - **Steps to reproduce** the issue
 - **Expected behavior** vs actual behavior
-- **Device information** (model, Android version)
-- **App version**
-- **Screenshots or logs** if applicable
+- **Browser and OS** (e.g. Chrome 128 / Android, Safari / iOS)
+- **AI provider in use**, if relevant (Groq / Anthropic / Gemini / demo mode)
+- **Screenshots, console errors, or exported report** if applicable
 
 Example:
 ```
-Title: App crashes when selecting large images from gallery
+Title: PDF export omits the risk matrix on Safari
 
-Description: When selecting images larger than 10MB from the photo library on Android 12,
-the app crashes with OutOfMemoryError.
+Description: Exporting a completed assessment to PDF on Safari/iOS produces
+a report with the hazard register and HOC table, but the risk matrix page
+is blank.
 
 Steps to Reproduce:
-1. Open the app
-2. Tap "Choose from Library"
-3. Select an image larger than 10MB
-4. App crashes
+1. Complete an assessment with at least one hazard
+2. Tap "Export PDF"
+3. Open the generated PDF
 
-Expected: Image should be processed successfully
-Actual: App crashes
+Expected: Risk matrix renders with hazard markers
+Actual: Risk matrix section is blank
 
-Device: Samsung Galaxy S21, Android 12
-App Version: 1.0.0
+Browser: Safari 17, iOS 17.4
 ```
 
 ### Suggesting Enhancements
@@ -77,11 +76,13 @@ Enhancement suggestions are welcome! Please include:
 
 ### Code Style
 
-- Follow [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html)
+- Plain vanilla JS/HTML/CSS in `index.html` — no framework, no build step
+  for the app itself; keep it that way unless discussed first
 - Use meaningful variable and function names
-- Add comments for complex logic
+- Add comments only where the *why* isn't obvious from the code — not for
+  what the code does
 - Keep functions small and focused
-- Use proper indentation (4 spaces)
+- 2-space indentation, matching the existing file
 
 ### Commit Messages
 
@@ -106,17 +107,18 @@ test: add unit tests for HazardDetector
 
 ### Testing Requirements
 
-- Add unit tests for new business logic
-- Add instrumentation tests for UI changes
-- Ensure all tests pass before submitting PR
-- Aim for reasonable test coverage
+- `packages/risk-core` has a real test suite (`npm test`) — add tests there
+  for any scoring/banding change
+- `index.html` has no automated test suite yet — verify changes live in a
+  browser (see [DEVELOPMENT.md](DEVELOPMENT.md)) and describe what you
+  tested in the PR
+- Ensure `npm test` passes before submitting a PR that touches `risk-core`
 
 ### Documentation
 
 - Update README.md for user-facing changes
 - Update DEVELOPMENT.md for developer-facing changes
-- Add inline comments for complex code
-- Update API documentation if applicable
+- Add inline comments only where the *why* isn't obvious from the code
 
 ## Pull Request Checklist
 
@@ -135,24 +137,21 @@ Before submitting your PR, ensure:
 We especially welcome contributions in these areas:
 
 ### High Priority
-- Improved ML model accuracy
-- Enhanced hazard detection algorithms
-- Performance optimizations
+- Additional sourced hazard-category checklists in the AI prompt (see
+  [DEVELOPMENT.md](DEVELOPMENT.md) for the pattern and citation expectations)
+- Automated tests for `index.html` (currently manual/live-browser only)
 - Accessibility improvements
 - Bug fixes
 
 ### Medium Priority
-- New hazard types
+- New hazard types in `hazardDB`
 - UI/UX enhancements
-- Additional report formats (PDF, Excel)
-- Multi-language support
-- Dark theme support
+- CSV/Excel export of History
+- Multi-language support (Arabic, given the primary UAE audience)
 
 ### Nice to Have
-- Historical trend analysis
-- Cloud storage integration
+- Historical trend analysis across repeat assessments of the same site
 - Team collaboration features
-- Augmented reality features
 - Custom training data support
 
 ## Questions?
