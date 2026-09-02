@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  index-syntax:
+    name: index.html inline script syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-index-syntax.mjs index.html
+
+  json-valid:
+    name: manifest.json is valid JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest.json
+        run: node -e "JSON.parse(require('fs').readFileSync('manifest.json', 'utf8')); console.log('manifest.json is valid JSON')"
+
+  risk-core:
+    name: risk-core build + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/risk-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/risk-core/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify root risk-core.js is up to date with the build output
+        working-directory: .
+        run: |
+          if ! diff -q --strip-trailing-cr packages/risk-core/dist/risk-core.js risk-core.js > /dev/null; then
+            echo "::error::risk-core.js at the repo root does not match packages/risk-core/dist/risk-core.js."
+            echo "Run 'npm run build' in packages/risk-core and copy dist/risk-core.js to the repo root."
+            diff --strip-trailing-cr packages/risk-core/dist/risk-core.js risk-core.js || true
+            exit 1
+          fi
+          echo "risk-core.js is up to date."
