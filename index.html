@@ -981,6 +981,13 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  // AI-model output (hazard name/details/HOC fields) is untrusted and gets
+  // interpolated into innerHTML template literals throughout this file —
+  // escape it first so a crafted response can't inject markup.
+  const escapeHtml = str => String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+  window.escapeHtml = escapeHtml;
   const els = {
     envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
     cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
@@ -1253,7 +1260,7 @@
     countEl.textContent = baselineHazards.length;
     tagsEl.innerHTML = baselineHazards.map(h => {
       const color = RiskCore.band(h.risk).bg;
-      return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${h.name} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
+      return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${escapeHtml(h.name)} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
     }).join('');
     infoEl.style.display = baselineHazards.length > 0 ? 'block' : 'none';
     if (baselineHazards.length > 0) {
@@ -2485,8 +2492,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         // Edit mode: show dropdowns for L and S
         trA.innerHTML = `
           <td>${numberCellContent}</td>
-          <td><strong>${h.name}</strong></td>
-          <td>${h.details || '-'}</td>
+          <td><strong>${escapeHtml(h.name)}</strong></td>
+          <td>${escapeHtml(h.details) || '-'}</td>
           <td class="${isOverridden && h.L !== h.originalL ? 'overridden-cell' : ''}" id="tableA_L_cell_${i}">
             <select id="tableA_L_${i}" style="width:100%">
               <option value="1" ${h.L === 1 ? 'selected' : ''}>1</option>
@@ -2517,8 +2524,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         // View mode: show static values
         trA.innerHTML = `
           <td>${numberCellContent}</td>
-          <td><strong>${h.name}</strong></td>
-          <td>${h.details || '-'}</td>
+          <td><strong>${escapeHtml(h.name)}</strong></td>
+          <td>${escapeHtml(h.details) || '-'}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_L_display_${i}">${h.L}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
           <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
@@ -2609,7 +2616,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       trB.appendChild(tdNumB);
 
       const tdNameB = document.createElement('td');
-      tdNameB.innerHTML = `<strong>${h.name}</strong>`;
+      tdNameB.innerHTML = `<strong>${escapeHtml(h.name)}</strong>`;
       trB.appendChild(tdNameB);
 
       const tdControls = document.createElement('td');
@@ -2896,12 +2903,12 @@ Before finalising your answer, re-examine the image one more time specifically f
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${i + 1}</td>
-        <td><strong>${h.name}</strong></td>
-        <td>${h.eliminate || 'N/A'}</td>
-        <td>${h.substitute || 'N/A'}</td>
-        <td>${h.engineering || 'N/A'}</td>
-        <td>${h.administrative || 'N/A'}</td>
-        <td>${h.ppe || 'N/A'}</td>
+        <td><strong>${escapeHtml(h.name)}</strong></td>
+        <td>${escapeHtml(h.eliminate) || 'N/A'}</td>
+        <td>${escapeHtml(h.substitute) || 'N/A'}</td>
+        <td>${escapeHtml(h.engineering) || 'N/A'}</td>
+        <td>${escapeHtml(h.administrative) || 'N/A'}</td>
+        <td>${escapeHtml(h.ppe) || 'N/A'}</td>
       `;
       hocTbody.appendChild(tr);
     });
@@ -3019,7 +3026,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       
       // Hazard name cell
       const tdName = document.createElement('td');
-      tdName.innerHTML = `<strong>${h.name}</strong>`;
+      tdName.innerHTML = `<strong>${escapeHtml(h.name)}</strong>`;
       tr.appendChild(tdName);
       
       // AI L cell
@@ -5176,8 +5183,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         matches.forEach(function(h) {
           html += '<div style="display:flex;gap:6px;align-items:flex-start;padding:2px 0;">'
             + '<span style="flex-shrink:0;">⚠️</span>'
-            + '<span style="font-size:.8rem;color:#b71c1c;">Non-conformity observed — <strong>' + (h.name || '') + '</strong>'
-            + (h.details ? ': ' + h.details : '') + '</span>'
+            + '<span style="font-size:.8rem;color:#b71c1c;">Non-conformity observed — <strong>' + window.escapeHtml(h.name || '') + '</strong>'
+            + (h.details ? ': ' + window.escapeHtml(h.details) : '') + '</span>'
             + '</div>';
         });
       } else {
