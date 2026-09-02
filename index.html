@@ -809,6 +809,19 @@
           </summary>
           <div id="complianceChecklist" style="padding:10px 0;font-size:.85rem;display:grid;grid-template-columns:28px 1fr auto;gap:6px 10px;align-items:center;"></div>
         </details>
+        <details id="is14489Panel" open style="margin:12px 0;">
+          <summary style="cursor:pointer;font-weight:700;color:#1565c0;font-size:.95rem;padding:8px 0;">
+            🗂️ Photo-Assessable Gap Analysis
+          </summary>
+          <p style="font-size:.78rem;color:#757575;margin:0 0 8px;">
+            Covers only the clauses of IS 14489:2018 Annex C that a photograph can actually speak to
+            (Work at Height, Confined Space, Physical Hazard, Chemical Storage, Fire &amp; Explosion).
+            The rest of IS 14489's audit scope — management systems, training records, budgets, PHA
+            methodology, and similar — requires the standard's full document/interview audit method and
+            is not something any photo-based tool can assess; nothing below implies that ground is covered.
+          </p>
+          <div id="is14489Checklist" style="padding:4px 0;font-size:.85rem;"></div>
+        </details>
         <h3>Hierarchy of Controls</h3>
         <div id="hocTable"></div>
         <h3>Assessment Details</h3>
@@ -968,6 +981,13 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  // AI-model output (hazard name/details/HOC fields) is untrusted and gets
+  // interpolated into innerHTML template literals throughout this file —
+  // escape it first so a crafted response can't inject markup.
+  const escapeHtml = str => String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+  window.escapeHtml = escapeHtml;
   const els = {
     envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
     cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
@@ -1240,7 +1260,7 @@
     countEl.textContent = baselineHazards.length;
     tagsEl.innerHTML = baselineHazards.map(h => {
       const color = RiskCore.band(h.risk).bg;
-      return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${h.name} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
+      return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${escapeHtml(h.name)} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
     }).join('');
     infoEl.style.display = baselineHazards.length > 0 ? 'block' : 'none';
     if (baselineHazards.length > 0) {
@@ -2084,6 +2104,19 @@ Manual handling — check specifically for each of these (report each one found 
 - Person lifting a load from below knee height or above shoulder height
 - Person manually carrying a load that appears bulky, awkward, or heavy with no visible lifting aid (trolley, hoist, second person) in use
 
+Housekeeping — check specifically for each of these (report each one found as its own separate hazard entry with key "slip", not merged; only report what you can actually see):
+- Passage, floor, walkway, or stairway obstructed by stored material, tools, or debris
+- Waste/refuse bin overflowing or not suitably located
+- Walkway or emergency route not clearly marked and free from obstruction
+- Floor visibly wet, oily, or otherwise left in a slippery condition with no warning sign or corrective action visible
+
+Chemical / hazardous materials storage — check specifically for each of these (report each one found as its own separate hazard entry with key "chemical", not merged; only report what you can actually see):
+- Chemical containers, drums, or gas cylinders with no visible label identifying contents or hazard class
+- Incompatible chemicals (e.g. flammables next to oxidisers) stored together with no visible segregation
+- Gas cylinders stored upright but not visibly chained/secured, or without valve caps fitted
+- Chemical storage area with no visible secondary containment (bunding) around drums or tanks
+- Flammable/combustible liquid stored on open shelving rather than an approved metal storage cabinet (also valid as a "fire" entry if fire risk is the more relevant framing — report under whichever key better fits what is visible, not both)
+
 Unidentified object: if you can see something that might be concerning but you cannot clearly identify what it is (poor angle, distance, occlusion, low light) — report it with key "unclear" and explain in "details" why it couldn't be identified (e.g. "object partially obscured, camera angle" or "too dark to assess clearly"). Never guess or name what you think the object might be, and never assign this key a high confidence — this category exists specifically so uncertain findings still get reported and routed to a human, rather than the model either inventing an identity for it or silently omitting it because it isn't sure.
 ${securityPatrolSection}
 
@@ -2459,8 +2492,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         // Edit mode: show dropdowns for L and S
         trA.innerHTML = `
           <td>${numberCellContent}</td>
-          <td><strong>${h.name}</strong></td>
-          <td>${h.details || '-'}</td>
+          <td><strong>${escapeHtml(h.name)}</strong></td>
+          <td>${escapeHtml(h.details) || '-'}</td>
           <td class="${isOverridden && h.L !== h.originalL ? 'overridden-cell' : ''}" id="tableA_L_cell_${i}">
             <select id="tableA_L_${i}" style="width:100%">
               <option value="1" ${h.L === 1 ? 'selected' : ''}>1</option>
@@ -2491,8 +2524,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         // View mode: show static values
         trA.innerHTML = `
           <td>${numberCellContent}</td>
-          <td><strong>${h.name}</strong></td>
-          <td>${h.details || '-'}</td>
+          <td><strong>${escapeHtml(h.name)}</strong></td>
+          <td>${escapeHtml(h.details) || '-'}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_L_display_${i}">${h.L}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
           <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
@@ -2583,7 +2616,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       trB.appendChild(tdNumB);
 
       const tdNameB = document.createElement('td');
-      tdNameB.innerHTML = `<strong>${h.name}</strong>`;
+      tdNameB.innerHTML = `<strong>${escapeHtml(h.name)}</strong>`;
       trB.appendChild(tdNameB);
 
       const tdControls = document.createElement('td');
@@ -2870,12 +2903,12 @@ Before finalising your answer, re-examine the image one more time specifically f
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${i + 1}</td>
-        <td><strong>${h.name}</strong></td>
-        <td>${h.eliminate || 'N/A'}</td>
-        <td>${h.substitute || 'N/A'}</td>
-        <td>${h.engineering || 'N/A'}</td>
-        <td>${h.administrative || 'N/A'}</td>
-        <td>${h.ppe || 'N/A'}</td>
+        <td><strong>${escapeHtml(h.name)}</strong></td>
+        <td>${escapeHtml(h.eliminate) || 'N/A'}</td>
+        <td>${escapeHtml(h.substitute) || 'N/A'}</td>
+        <td>${escapeHtml(h.engineering) || 'N/A'}</td>
+        <td>${escapeHtml(h.administrative) || 'N/A'}</td>
+        <td>${escapeHtml(h.ppe) || 'N/A'}</td>
       `;
       hocTbody.appendChild(tr);
     });
@@ -2950,6 +2983,7 @@ Before finalising your answer, re-examine the image one more time specifically f
 
     // Refresh compliance checklist on every render
     window.renderComplianceChecklist(allHazards, overall, baselineHazards, assessmentTimestamp);
+    if (window.renderIS14489GapAnalysis) window.renderIS14489GapAnalysis(allHazards);
   }
 
 
@@ -2992,7 +3026,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       
       // Hazard name cell
       const tdName = document.createElement('td');
-      tdName.innerHTML = `<strong>${h.name}</strong>`;
+      tdName.innerHTML = `<strong>${escapeHtml(h.name)}</strong>`;
       tr.appendChild(tdName);
       
       // AI L cell
@@ -5065,6 +5099,103 @@ Before finalising your answer, re-examine the image one more time specifically f
         +'<span style="font-size:.83rem;color:#212121;">'+item.label+'</span>'
         +'<span style="font-size:.75rem;color:#757575;font-style:italic;">'+item.ref+'</span>';
     }).join('');
+  };
+
+  // IS 14489:2018 gap analysis — deliberately covers ONLY the Annex C
+  // sub-clauses that a single photograph can actually speak to. Most of
+  // Annex C (budgets, PHA revalidation schedule, training records, permit
+  // registers, committee minutes) requires the standard's own document/
+  // interview audit method (see IS 14489 Clause 5) and has no photo-based
+  // equivalent — those clauses are intentionally absent below, not marked
+  // "not assessable", because a checklist item that can never be answered
+  // from a photo is dead weight, not a finding.
+  //
+  // Each hazard key maps to the specific clauses it evidences a
+  // non-conformity against. A hazard of that key found in this assessment
+  // is direct photographic evidence of the non-conformity (cited with the
+  // hazard's own name as proof). No hazard of that key found means only
+  // "no issue observed in this photo" — never "compliant": one photo of
+  // one area cannot confirm site-wide compliance.
+  var IS14489_CLAUSE_MAP = {
+    height: { section: 'C-6.1 Control Measures for Work at Height', items: [
+      'Ladders securely clamped or lashed in place',
+      'Scaffold walkways/platforms free of debris and unnecessary obstruction',
+      'Weak spots, skylights, or deteriorated roof sections identified and fitted with safety net',
+      'Crawling boards, lifelines, safety belts and edge protection provided on sloping roofs'
+    ]},
+    confined: { section: 'C-6.2 Work in Confined Space', items: [
+      'Work permit system followed for confined space entry',
+      'Atmosphere inside the confined space monitored (gas monitor present)',
+      'Person entering the confined space uses suitable PPE',
+      'Rescue team / retrieval equipment available in case of emergency'
+    ]},
+    machinery: { section: 'C-19.2 Machine and General Area Guarding', items: [
+      'All moving parts and points of operation adequately guarded',
+      'Fixed guards securely bolted in position and in good condition',
+      'Emergency stop buttons effective and clearly labelled',
+      'Openings with a free-fall hazard covered or fenced securely'
+    ]},
+    slip: { section: 'C-19.1 Housekeeping', items: [
+      'Passages, floors and stairways in good condition',
+      'Waste/refuse bins not overflowing and suitably located',
+      'Walkways clearly marked and free from obstruction',
+      'Floors not left in a slippery condition without corrective action'
+    ]},
+    electrical: { section: 'C-19.4 Electrical Safeguarding', items: [
+      'Connections made using appropriate plugs/receptacles/enclosures, fuses provided',
+      'No make-shift connections, bare wires, or damaged cables',
+      'Proper PPE used when working on a live line'
+    ]},
+    ergonomic: { section: 'C-19.3 Material Handling', items: [
+      'Safe storage/stacking procedures followed for materials',
+      'Safe working load (SWL) clearly marked on lifting equipment in use'
+    ]},
+    chemical: { section: 'C-19.5 / C-20 Storage of Hazardous Substances', items: [
+      'Chemicals stored per hazardous properties, including incompatibility segregation',
+      'Containers, drums and vessels clearly and indelibly labelled',
+      'Gas cylinders chained/secured with valve caps fitted',
+      'Storage tanks/containers labelled for content and capacity'
+    ]},
+    fire: { section: 'C-21 Fire and Explosion Hazard', items: [
+      'Fire extinguishers at a conspicuous, accessible position, fully charged and tagged',
+      'No defective or unchecked extinguishers present',
+      'Emergency exits provided and unobstructed',
+      'Fire detection equipment / smoke alarms in good operating condition'
+    ]}
+  };
+
+  window.renderIS14489GapAnalysis = function(hazards) {
+    var el = document.getElementById('is14489Checklist');
+    if (!el) return;
+    var byKey = {};
+    (hazards || []).forEach(function(h) {
+      if (!h.key) return;
+      (byKey[h.key] = byKey[h.key] || []).push(h);
+    });
+    var html = '';
+    Object.keys(IS14489_CLAUSE_MAP).forEach(function(key) {
+      var section = IS14489_CLAUSE_MAP[key];
+      var matches = byKey[key] || [];
+      var hasFinding = matches.length > 0;
+      html += '<div style="margin-bottom:10px;">'
+        + '<div style="font-weight:700;color:#37474f;font-size:.82rem;margin-bottom:3px;">' + section.section + '</div>';
+      if (hasFinding) {
+        matches.forEach(function(h) {
+          html += '<div style="display:flex;gap:6px;align-items:flex-start;padding:2px 0;">'
+            + '<span style="flex-shrink:0;">⚠️</span>'
+            + '<span style="font-size:.8rem;color:#b71c1c;">Non-conformity observed — <strong>' + window.escapeHtml(h.name || '') + '</strong>'
+            + (h.details ? ': ' + window.escapeHtml(h.details) : '') + '</span>'
+            + '</div>';
+        });
+      } else {
+        html += '<div style="display:flex;gap:6px;align-items:flex-start;padding:2px 0;">'
+          + '<span style="flex-shrink:0;color:#9e9e9e;">—</span>'
+          + '<span style="font-size:.8rem;color:#757575;">No issue observed in this photo (not a site-wide compliance guarantee)</span>'
+          + '</div>';
+      }
+      html += '</div>';
+    });
+    el.innerHTML = html;
   };
 })();
 </script>
