@@ -984,11 +984,13 @@
           <input type="file" id="importHistoryInput" accept="application/json" style="display:none;" />
         </label>
         <button type="button" class="btn btn-outline" id="btnSiteTrends">📈 Site Trends</button>
+        <button type="button" class="btn btn-outline" id="btnTrustSignals">🎯 AI Trust Signals</button>
         <button type="button" class="btn btn-outline" id="btnClearHistory" style="margin-left:auto;color:#c62828;border-color:#c62828;">🗑 Clear All</button>
         <button type="button" class="btn btn-outline" id="btnHistoryClose">Close</button>
       </div>
 
       <div id="siteTrendsPanel" class="hidden" style="background:#f4f5f7;border-radius:10px;padding:14px;margin-bottom:14px;"></div>
+      <div id="trustSignalsPanel" class="hidden" style="background:#f4f5f7;border-radius:10px;padding:14px;margin-bottom:14px;"></div>
 
       <div id="historyList"></div>
     </section>
@@ -1037,6 +1039,7 @@
     historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
     btnSiteTrends: $('btnSiteTrends'), siteTrendsPanel: $('siteTrendsPanel'),
+    btnTrustSignals: $('btnTrustSignals'), trustSignalsPanel: $('trustSignalsPanel'),
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
@@ -4732,6 +4735,38 @@ Before finalising your answer, re-examine the image one more time specifically f
 
   // ── Assessment History (local-only, IndexedDB) ─────────────────────────────
 
+  /**
+   * Per-hazard-category tally of how the AI's findings held up against
+   * human review at save time: how many "ai"-sourced findings in each
+   * category got their risk rating overridden, were flagged for mandatory
+   * review (hazardNeedsReview — low/no confidence, or "unclear"), or were
+   * missed entirely and had to be added by hand ("manual"-sourced). Stored
+   * alongside the record so the AI Trust Signals view (History section) can
+   * aggregate across every saved assessment and surface which checklist
+   * categories are least reliable — feeding future prompt-checklist work,
+   * not a scoring or sign-off input itself. "baseline" (pre-loaded fixture)
+   * and rule-based/COCO fallback hazards carry no AI signal and are
+   * excluded on purpose.
+   */
+  function computeTrustSignals() {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const byKey = {};
+    const bucket = key => byKey[key || 'other'] || (byKey[key || 'other'] = {
+      aiFindings: 0, aiOverridden: 0, aiFlaggedForReview: 0, humanAdded: 0
+    });
+    allHazards.forEach((h, i) => {
+      if (h.source === 'ai') {
+        const b = bucket(h.key);
+        b.aiFindings++;
+        if (hazardNeedsReview(h)) b.aiFlaggedForReview++;
+        if (reviewData[i] && reviewData[i].override) b.aiOverridden++;
+      } else if (h.source === 'manual') {
+        bucket(h.key).humanAdded++;
+      }
+    });
+    return byKey;
+  }
+
   function collectCurrentAssessment() {
     return {
       id: (crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now() + Math.random().toString(16).slice(2)),
@@ -4744,6 +4779,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       analysisMode,
       overall,
       hazards, manualHazards, baselineHazards,
+      trustSignals: computeTrustSignals(),
       signoffData: window.hseSignoffData ? { ...window.hseSignoffData } : null,
       imageMeta: window.currentImageMeta || null,
       thumbnail: els.resultImg && els.resultImg.src && !els.resultImg.src.startsWith('data:image/svg+xml')
@@ -4847,6 +4883,68 @@ Before finalising your answer, re-examine the image one more time specifically f
         ${recurring.length ? `<div style="margin-top:10px;font-size:.8rem;color:#b71c1c;"><strong>Recurring across visits:</strong> ${recurring.map(([k, c]) => `${escapeHtml((hazardDB[k] && hazardDB[k].name) || k)} (${c}/${recs.length})`).join(', ')}</div>` : ''}
       </details>`;
     });
+    panel.innerHTML = html;
+  }
+
+  /**
+   * Aggregates every saved assessment's trustSignals (see
+   * computeTrustSignals) into one per-category view: how much correction
+   * the AI's findings needed, across the whole saved history, not just the
+   * current assessment. Older records saved before this feature existed
+   * simply have no trustSignals field and are skipped — nothing to
+   * backfill from, since the per-hazard review state they'd need
+   * (reviewData) was never persisted.
+   */
+  async function renderTrustSignals() {
+    const panel = els.trustSignalsPanel;
+    if (!panel) return;
+    let records;
+    try {
+      records = await historyStore.list();
+    } catch (err) {
+      panel.innerHTML = `<p class="warning">Could not load trust signals: ${err.message}</p>`;
+      return;
+    }
+    const agg = {};
+    records.forEach(record => {
+      const ts = record.trustSignals;
+      if (!ts) return;
+      Object.keys(ts).forEach(key => {
+        const s = ts[key];
+        const a = agg[key] || (agg[key] = { aiFindings: 0, aiOverridden: 0, aiFlaggedForReview: 0, humanAdded: 0 });
+        a.aiFindings += s.aiFindings || 0;
+        a.aiOverridden += s.aiOverridden || 0;
+        a.aiFlaggedForReview += s.aiFlaggedForReview || 0;
+        a.humanAdded += s.humanAdded || 0;
+      });
+    });
+    const keys = Object.keys(agg);
+    if (keys.length === 0) {
+      panel.innerHTML = '<p style="color:#666;font-size:.85rem;margin:0;">No trust-signal data yet — save an assessment to history to start building this view. Only assessments saved after this feature shipped are included.</p>';
+      return;
+    }
+    // Categories generating the most correction activity first — that's
+    // what "needs more prompt work" actually means here.
+    keys.sort((a, b) => (agg[b].aiOverridden + agg[b].humanAdded) - (agg[a].aiOverridden + agg[a].humanAdded));
+    let html = `
+      <p style="font-size:.8rem;color:#666;margin:0 0 10px;">How often each hazard category needed a human correction, across every assessment saved on this device. A high "overridden" or "missed by AI" count points at a checklist category worth strengthening in the AI prompt — see DEVELOPMENT.md.</p>
+      <div style="overflow-x:auto;">
+      <table class="risk-table" style="min-width:640px;">
+        <thead><tr><th>Category</th><th>AI Findings</th><th>Overridden by Human</th><th>Flagged for Review</th><th>Missed by AI (added manually)</th></tr></thead>
+        <tbody>`;
+    keys.forEach(key => {
+      const s = agg[key];
+      const label = (hazardDB[key] && hazardDB[key].name) || key;
+      const overridePct = s.aiFindings > 0 ? ` (${Math.round((s.aiOverridden / s.aiFindings) * 100)}%)` : '';
+      html += `<tr>
+        <td>${escapeHtml(label)}</td>
+        <td>${s.aiFindings}</td>
+        <td>${s.aiOverridden}${overridePct}</td>
+        <td>${s.aiFlaggedForReview}</td>
+        <td>${s.humanAdded}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
     panel.innerHTML = html;
   }
 
@@ -5187,6 +5285,13 @@ Before finalising your answer, re-examine the image one more time specifically f
       const opening = els.siteTrendsPanel.classList.contains('hidden');
       els.siteTrendsPanel.classList.toggle('hidden');
       if (opening) await renderSiteTrends();
+    });
+  }
+  if (els.btnTrustSignals) {
+    els.btnTrustSignals.addEventListener('click', async () => {
+      const opening = els.trustSignalsPanel.classList.contains('hidden');
+      els.trustSignalsPanel.classList.toggle('hidden');
+      if (opening) await renderTrustSignals();
     });
   }
   els.btnExportHistory.addEventListener('click', () => {
