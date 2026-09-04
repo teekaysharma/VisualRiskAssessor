@@ -958,9 +958,12 @@
           ⬆ Import History File
           <input type="file" id="importHistoryInput" accept="application/json" style="display:none;" />
         </label>
+        <button type="button" class="btn btn-outline" id="btnSiteTrends">📈 Site Trends</button>
         <button type="button" class="btn btn-outline" id="btnClearHistory" style="margin-left:auto;color:#c62828;border-color:#c62828;">🗑 Clear All</button>
         <button type="button" class="btn btn-outline" id="btnHistoryClose">Close</button>
       </div>
+
+      <div id="siteTrendsPanel" class="hidden" style="background:#f4f5f7;border-radius:10px;padding:14px;margin-bottom:14px;"></div>
 
       <div id="historyList"></div>
     </section>
@@ -1005,6 +1008,7 @@
     btnHistoryToggle: $('btnHistoryToggle'), btnHistoryClose: $('btnHistoryClose'), historySection: $('historySection'),
     historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
+    btnSiteTrends: $('btnSiteTrends'), siteTrendsPanel: $('siteTrendsPanel'),
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
@@ -4485,6 +4489,84 @@ Before finalising your answer, re-examine the image one more time specifically f
     return [...(record.baselineHazards || []), ...(record.hazards || []), ...(record.manualHazards || [])];
   }
 
+  /**
+   * Groups saved assessments by the site name entered under "What are we
+   * analyzing?" (trimmed, case-insensitive) and shows how risk is trending
+   * across repeat visits to the same site — separate from AI Trust Signals,
+   * which aggregates by hazard category across ALL sites, not by site over
+   * time. Sites need a name to be trended; GPS-only matching (no typed
+   * name) isn't attempted — fuzzy proximity matching is a different, much
+   * bigger feature than "the same site name was typed twice". A site with
+   * only one saved assessment has nothing to trend, so it's left out too.
+   */
+  async function renderSiteTrends() {
+    const panel = els.siteTrendsPanel;
+    if (!panel) return;
+    let records;
+    try {
+      records = await historyStore.list();
+    } catch (err) {
+      panel.innerHTML = `<p class="warning">Could not load site trends: ${err.message}</p>`;
+      return;
+    }
+    const bySite = {};
+    records
+      .filter(r => r.status !== 'queued' && (r.siteName || '').trim())
+      .forEach(r => {
+        const key = r.siteName.trim().toLowerCase();
+        (bySite[key] || (bySite[key] = { label: r.siteName.trim(), records: [] })).records.push(r);
+      });
+    const sites = Object.values(bySite).filter(s => s.records.length >= 2);
+    if (sites.length === 0) {
+      panel.innerHTML = '<p style="color:#666;font-size:.85rem;margin:0;">No repeat-site trends yet — save at least two assessments with the same site name (under "What are we analyzing?") to see how risk is trending there.</p>';
+      return;
+    }
+    sites.forEach(s => s.records.sort((a, b) => a.timestamp - b.timestamp));
+    sites.sort((a, b) => b.records.length - a.records.length);
+
+    let html = '<p style="font-size:.8rem;color:#666;margin:0 0 12px;">Risk trend across repeat visits to the same named site. Only sites with 2 or more saved assessments are shown.</p>';
+    sites.forEach(site => {
+      const recs = site.records;
+      const first = recs[0], latest = recs[recs.length - 1];
+      const delta = (latest.overall || 0) - (first.overall || 0);
+      const deltaLabel = delta === 0 ? 'No change since first visit' : (delta > 0 ? `▲ Worsened by ${delta} since first visit` : `▼ Improved by ${Math.abs(delta)} since first visit`);
+      const deltaColor = delta === 0 ? '#666' : (delta > 0 ? '#c62828' : '#2e7d32');
+
+      // Hazard categories seen in 2+ separate visits to this site — a
+      // recurring finding, not a one-off, and worth flagging as such.
+      const keyVisitCounts = {};
+      recs.forEach(r => {
+        new Set(historyAllHazards(r).map(h => h.key).filter(Boolean)).forEach(k => {
+          keyVisitCounts[k] = (keyVisitCounts[k] || 0) + 1;
+        });
+      });
+      const recurring = Object.entries(keyVisitCounts).filter(([, c]) => c >= 2).sort((a, b) => b[1] - a[1]);
+
+      html += `<details style="margin-bottom:12px;background:#fff;border-radius:8px;padding:10px 14px;border:1px solid #ddd;">
+        <summary style="cursor:pointer;font-weight:700;">${escapeHtml(site.label)} — ${recs.length} visits
+          <span style="font-weight:400;font-size:.8rem;color:${deltaColor};margin-left:8px;">${deltaLabel}</span>
+        </summary>
+        <div style="overflow-x:auto;margin-top:10px;">
+        <table class="risk-table" style="min-width:480px;">
+          <thead><tr><th>Date</th><th>Risk Score</th><th>Hazards</th><th>Signed Off</th></tr></thead>
+          <tbody>${recs.map(r => {
+            const rr = riskFor(r.overall || 0);
+            const signedOff = !!(r.signoffData && r.signoffData.confirmed);
+            return `<tr>
+              <td>${new Date(r.timestamp).toLocaleDateString()}</td>
+              <td><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:.78rem;background:${rr.bg};color:${rr.textColor};">${r.overall || 0} — ${rr.label}</span></td>
+              <td>${historyAllHazards(r).length}</td>
+              <td>${signedOff ? '✓' : '—'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table>
+        </div>
+        ${recurring.length ? `<div style="margin-top:10px;font-size:.8rem;color:#b71c1c;"><strong>Recurring across visits:</strong> ${recurring.map(([k, c]) => `${escapeHtml((hazardDB[k] && hazardDB[k].name) || k)} (${c}/${recs.length})`).join(', ')}</div>` : ''}
+      </details>`;
+    });
+    panel.innerHTML = html;
+  }
+
   async function renderHistoryList() {
     let records;
     try {
@@ -4817,6 +4899,13 @@ Before finalising your answer, re-examine the image one more time specifically f
     }
   });
   els.btnHistoryClose.addEventListener('click', () => els.historySection.classList.add('hidden'));
+  if (els.btnSiteTrends) {
+    els.btnSiteTrends.addEventListener('click', async () => {
+      const opening = els.siteTrendsPanel.classList.contains('hidden');
+      els.siteTrendsPanel.classList.toggle('hidden');
+      if (opening) await renderSiteTrends();
+    });
+  }
   els.btnExportHistory.addEventListener('click', () => {
     const mode = document.querySelector('input[name="exportPhotoMode"]:checked')?.value || 'data-only';
     exportHistory(mode === 'with-photos');
@@ -5004,6 +5093,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       const h = hazardDB[hazardKey];
       const manualHazard = {
         name: h.name,
+        key: hazardKey,
         L: L,
         S: S,
         risk: L * S,
