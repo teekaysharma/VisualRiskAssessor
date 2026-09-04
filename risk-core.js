@@ -22,11 +22,28 @@ var RiskCore = (() => {
   var index_exports = {};
   __export(index_exports, {
     CONFIDENCE_REVIEW_THRESHOLD: () => CONFIDENCE_REVIEW_THRESHOLD,
+    DEFAULT_SCORING_METHOD_ID: () => DEFAULT_SCORING_METHOD_ID,
+    FINE_KINNEY_BANDS: () => FINE_KINNEY_BANDS,
+    FINE_KINNEY_DEFAULT_EXPOSURE: () => FINE_KINNEY_DEFAULT_EXPOSURE,
+    FINE_KINNEY_EXPOSURE_OPTIONS: () => FINE_KINNEY_EXPOSURE_OPTIONS,
+    FINE_KINNEY_LEGEND: () => FINE_KINNEY_LEGEND,
+    NEBOSH_BANDS: () => NEBOSH_BANDS,
+    NEBOSH_LEGEND: () => NEBOSH_LEGEND,
     RISK_BANDS: () => RISK_BANDS,
     RISK_MATRIX_LEGEND: () => RISK_MATRIX_LEGEND,
+    SCORING_METHODS: () => SCORING_METHODS,
     band: () => band,
     bandFor: () => bandFor,
+    fineKinneyBand: () => fineKinneyBand,
+    fineKinneyScore: () => fineKinneyScore,
+    getScoringMethod: () => getScoringMethod,
     hasUnreviewedHazards: () => hasUnreviewedHazards,
+    mapAppLikelihoodToKinney: () => mapAppLikelihoodToKinney,
+    mapAppLikelihoodToNebosh: () => mapAppLikelihoodToNebosh,
+    mapAppSeverityToKinneyConsequence: () => mapAppSeverityToKinneyConsequence,
+    mapAppSeverityToNebosh: () => mapAppSeverityToNebosh,
+    neboshBand: () => neboshBand,
+    neboshScore: () => neboshScore,
     needsReview: () => needsReview,
     score: () => score,
     validateHazards: () => validateHazards
@@ -104,6 +121,107 @@ var RiskCore = (() => {
   }
   function hasUnreviewedHazards(hazards) {
     return hazards.some((h) => h.needsReview && !h.reviewedByHuman);
+  }
+  function mapAppLikelihoodToNebosh(appLikelihood) {
+    if (appLikelihood <= 2) return 1;
+    if (appLikelihood <= 4) return 2;
+    return 3;
+  }
+  function mapAppSeverityToNebosh(appSeverity) {
+    return mapAppLikelihoodToNebosh(appSeverity);
+  }
+  function neboshScore(neboshLikelihood, neboshSeverity) {
+    return neboshLikelihood * neboshSeverity;
+  }
+  var NEBOSH_BANDS = [RISK_BANDS[0], RISK_BANDS[1], RISK_BANDS[2]];
+  function neboshBand(neboshScoreValue) {
+    if (neboshScoreValue <= 2) return NEBOSH_BANDS[0];
+    if (neboshScoreValue <= 4) return NEBOSH_BANDS[1];
+    return NEBOSH_BANDS[2];
+  }
+  var NEBOSH_LEGEND = "Score = Likelihood (1-3) x Severity (1-3), derived from this app's 1-5 scale | Low: 1-2 | Medium: 3-4 | High: 6-9 (5, 7, 8 unreachable)";
+  var KINNEY_LIKELIHOOD_BY_APP_LEVEL = [0.2, 1, 3, 6, 10];
+  var KINNEY_CONSEQUENCE_BY_APP_LEVEL = [1, 3, 7, 15, 40];
+  function clampAppLevel(appLevel) {
+    return Math.min(5, Math.max(1, Math.round(appLevel)));
+  }
+  function mapAppLikelihoodToKinney(appLikelihood) {
+    return KINNEY_LIKELIHOOD_BY_APP_LEVEL[clampAppLevel(appLikelihood) - 1];
+  }
+  function mapAppSeverityToKinneyConsequence(appSeverity) {
+    return KINNEY_CONSEQUENCE_BY_APP_LEVEL[clampAppLevel(appSeverity) - 1];
+  }
+  var FINE_KINNEY_EXPOSURE_OPTIONS = [
+    { value: 0.5, label: "Very rare (a few times a year)" },
+    { value: 1, label: "Rare (annually)" },
+    { value: 2, label: "Unusual (monthly)" },
+    { value: 3, label: "Occasional (weekly)" },
+    { value: 6, label: "Frequent (daily)" },
+    { value: 10, label: "Continuous" }
+  ];
+  var FINE_KINNEY_DEFAULT_EXPOSURE = 3;
+  function fineKinneyScore(kinneyLikelihood, exposure, consequence) {
+    return kinneyLikelihood * exposure * consequence;
+  }
+  var FINE_KINNEY_BANDS = [
+    { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
+    { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
+    { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
+    { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] },
+    { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28] }
+  ];
+  function fineKinneyBand(kinneyScoreValue) {
+    if (kinneyScoreValue < 20) return FINE_KINNEY_BANDS[0];
+    if (kinneyScoreValue < 70) return FINE_KINNEY_BANDS[1];
+    if (kinneyScoreValue < 160) return FINE_KINNEY_BANDS[2];
+    if (kinneyScoreValue < 320) return FINE_KINNEY_BANDS[3];
+    return FINE_KINNEY_BANDS[4];
+  }
+  var FINE_KINNEY_LEGEND = "Score = Likelihood x Exposure x Consequence | <20 Slight | 20-<70 Possible | 70-<160 Substantial | 160-<320 High | >=320 Very High (Kinney & Wiruth 1976)";
+  var DEFAULT_SCORING_METHOD_ID = "adosh-sf";
+  var SCORING_METHODS = {
+    "adosh-sf": {
+      id: "adosh-sf",
+      label: "ADOSH-SF (5\xD75, default)",
+      citation: 'ADOSH-SF Technical Guideline "Process of Risk Management", v4.0, Table 3',
+      legend: RISK_MATRIX_LEGEND,
+      bands: RISK_BANDS,
+      usesExposure: false,
+      bridgingNote: null,
+      axisLabels: { likelihood: "Likelihood (1-5)", severity: "Severity (1-5)" },
+      scoreFromAppScale: (likelihood, severity) => score(likelihood, severity),
+      bandForScore: (riskScore) => band(riskScore)
+    },
+    "nebosh-hsg65": {
+      id: "nebosh-hsg65",
+      label: "NEBOSH / HSG65 (3\xD73)",
+      citation: "NEBOSH National General Certificate handbook & NEBOSH IGC1",
+      legend: NEBOSH_LEGEND,
+      bands: NEBOSH_BANDS,
+      usesExposure: false,
+      bridgingNote: "Likelihood and Severity are compressed from this app's 1-5 scale into NEBOSH's 1-3 scale ({1,2}\u21921, {3,4}\u21922, {5}\u21923) - this bucketing is this app's own bridging choice, not part of the NEBOSH syllabus.",
+      axisLabels: { likelihood: "Likelihood (1-3, derived)", severity: "Severity (1-3, derived)" },
+      scoreFromAppScale: (likelihood, severity) => neboshScore(mapAppLikelihoodToNebosh(likelihood), mapAppSeverityToNebosh(severity)),
+      bandForScore: (riskScore) => neboshBand(riskScore)
+    },
+    "fine-kinney": {
+      id: "fine-kinney",
+      label: "Fine-Kinney (L\xD7E\xD7C)",
+      citation: "Kinney, G.F. & Wiruth, A.D. (1976); cutoffs per safetydojo.org/en/risk-assessment/kinney-method.php",
+      legend: FINE_KINNEY_LEGEND,
+      bands: FINE_KINNEY_BANDS,
+      usesExposure: true,
+      bridgingNote: "Likelihood and Consequence are derived from this app's 1-5 Likelihood/Severity scale via a fixed lookup table; Exposure has no 1-5 analog and is entered directly. This mapping is this app's own bridging choice, not part of the Kinney & Wiruth method itself.",
+      axisLabels: { likelihood: "Likelihood (derived)", severity: "Consequence (derived)", exposure: "Exposure" },
+      scoreFromAppScale: (likelihood, severity, exposure) => fineKinneyScore(mapAppLikelihoodToKinney(likelihood), exposure, mapAppSeverityToKinneyConsequence(severity)),
+      bandForScore: (riskScore) => fineKinneyBand(riskScore)
+    }
+  };
+  function getScoringMethod(id) {
+    if (id && Object.prototype.hasOwnProperty.call(SCORING_METHODS, id)) {
+      return SCORING_METHODS[id];
+    }
+    return SCORING_METHODS[DEFAULT_SCORING_METHOD_ID];
   }
   return __toCommonJS(index_exports);
 })();

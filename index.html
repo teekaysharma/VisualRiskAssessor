@@ -122,6 +122,13 @@
     #fallbackWarning { font-weight:700; border:2px solid #e0a800; }
     .info { background:#e3f2fd; color:#0d47a1; border-radius:8px; padding:10px; margin-bottom:10px; }
     .result-chip { display:inline-block; padding:8px 14px; border-radius:999px; color:#fff; font-weight:800; font-size:1.02rem; }
+    .scoring-method-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#eef2f7; border-radius:10px; padding:10px 14px; margin:12px 0; }
+    .scoring-method-bar label { font-weight:700; font-size:.82rem; color:#16233b; }
+    .scoring-method-bar select { padding:6px 8px; border:1.5px solid #b0bac9; border-radius:6px; font-size:.88rem; background:#fff; font-family:inherit; }
+    .scoring-method-note { font-size:.76rem; color:#5c6a7e; flex-basis:100%; margin:0; }
+    .matrix-list-table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    .matrix-list-table th, .matrix-list-table td { padding:6px 8px; border:1px solid #ddd; text-align:left; }
+    .matrix-list-table th { background:#f4f5f7; }
     .risk-hero { display:flex; align-items:center; gap:18px; background:#f4f5f7; border-radius:14px; padding:16px 20px; margin:12px 0 18px; flex-wrap:wrap; }
     .risk-hero-label { font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#9aa3b2; }
     .risk-hero-score { font-size:2.6rem; font-weight:600; color:#16233b; line-height:1; margin-top:2px; }
@@ -714,6 +721,12 @@
             </select>
           </div>
         </div>
+        <div class="manual-form-row hidden" id="manualExposureRow">
+          <div class="manual-form-group">
+            <label for="manualExposure">Exposure (Fine-Kinney only)</label>
+            <select id="manualExposure"></select>
+          </div>
+        </div>
         <div class="manual-form-row">
           <div class="manual-form-group" style="flex:2;">
             <label for="manualDescription">Description</label>
@@ -758,6 +771,17 @@
       <div id="fallbackWarning" class="warning hidden">⚠️ ML model unavailable. Showing rule-based keyword matching.</div>
       <div id="aiInfo" class="info hidden">🤖 AI Vision analysis used for enhanced hazard identification.</div>
       <img id="resultImg" alt="Analyzed image" />
+
+      <div class="scoring-method-bar">
+        <label for="scoringMethodSelect">📐 Scoring Method</label>
+        <select id="scoringMethodSelect">
+          <option value="adosh-sf">ADOSH-SF (5×5, default)</option>
+          <option value="nebosh-hsg65">NEBOSH / HSG65 (3×3)</option>
+          <option value="fine-kinney">Fine-Kinney (L×E×C)</option>
+        </select>
+        <p class="scoring-method-note" id="scoringMethodNote"></p>
+      </div>
+
       <div class="risk-hero">
         <div class="risk-hero-score-block">
           <div class="risk-hero-label">Risk Score</div>
@@ -887,6 +911,7 @@
                 <th>Override</th>
                 <th>Review L</th>
                 <th>Review S</th>
+                <th id="reviewExposureHeader" class="hidden">Review Exposure</th>
                 <th>Review Controls</th>
                 <th>Verified</th>
               </tr>
@@ -1001,6 +1026,9 @@
     manualModeToggle: $('manualModeToggle'), manualEntrySection: $('manualEntrySection'),
     manualHazardType: $('manualHazardType'), manualLikelihood: $('manualLikelihood'),
     manualSeverity: $('manualSeverity'), manualDescription: $('manualDescription'),
+    manualExposureRow: $('manualExposureRow'), manualExposure: $('manualExposure'),
+    scoringMethodSelect: $('scoringMethodSelect'), scoringMethodNote: $('scoringMethodNote'),
+    reviewExposureHeader: $('reviewExposureHeader'),
     btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle'),
     btnHistoryToggle: $('btnHistoryToggle'), btnHistoryClose: $('btnHistoryClose'), historySection: $('historySection'),
     historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
@@ -1259,7 +1287,7 @@
     const tagsEl = $('baselineTags');
     countEl.textContent = baselineHazards.length;
     tagsEl.innerHTML = baselineHazards.map(h => {
-      const color = RiskCore.band(h.risk).bg;
+      const color = bandForMethod(scoreForMethod(h.L, h.S, h.exposure)).bg;
       return `<span class="baseline-tag" style="border-color:${color};color:${color};background:${color}11">${escapeHtml(h.name)} <span style="font-size:.72rem;opacity:.8">(L${h.L}/S${h.S})</span></span>`;
     }).join('');
     infoEl.style.display = baselineHazards.length > 0 ? 'block' : 'none';
@@ -1521,10 +1549,6 @@
   function riskFor(score) {
     const b = RiskCore.band(score);
     return { label: b.label, cls: RISK_CSS_CLASS[b.key], color: RISK_CSS_VAR[b.key], bg: b.bg, textColor: b.textColor };
-  }
-
-  function residualBorderColor(score) {
-    return RiskCore.band(score).bg;
   }
 
   async function initModel() {
@@ -2183,6 +2207,7 @@ Before finalising your answer, re-examine the image one more time specifically f
             name: h.name || dbEntry.name,
             key: h.key,
             L: h.likelihood, S: h.severity, risk: h.score,
+            exposure: RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE,
             conf: h.confidence,
             // "unclear" (an object the AI can't identify) always requires a
             // human to look, regardless of what confidence value the model
@@ -2220,7 +2245,12 @@ Before finalising your answer, re-examine the image one more time specifically f
     const controls = $(`controls_${rowIndex}`)?.value || '';
     const rl = parseInt($(`rl_${rowIndex}`)?.value || '1', 10);
     const rs = parseInt($(`rs_${rowIndex}`)?.value || '1', 10);
-    const residualScore = rl * rs;
+    // Table B's residual row has no Exposure input of its own (out of
+    // scope — see the scoring-methodology PR notes) — residual Fine-Kinney
+    // scoring reuses the hazard's own effective exposure instead.
+    const allHazardsForResidual = [...baselineHazards, ...hazards, ...manualHazards];
+    const residualExposure = allHazardsForResidual[rowIndex]?.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE;
+    const residualScore = scoreForMethod(rl, rs, residualExposure);
     const owner = $(`owner_${rowIndex}`)?.value || '';
     const action = $(`action_${rowIndex}`)?.value || '';
     const target = $(`target_${rowIndex}`)?.value || '';
@@ -2264,7 +2294,71 @@ Before finalising your answer, re-examine the image one more time specifically f
     return sel;
   }
 
+  /**
+   * Table B's residual-risk score cell (id="residual_score_${i}") is
+   * separate from the matrix drawing itself (grid or list) — both modes
+   * need it kept in sync whenever a Res.L/Res.S dropdown changes, so it's
+   * shared rather than duplicated in both render paths.
+   */
+  function syncResidualScoreCells(allHazardsForMatrix) {
+    allHazardsForMatrix.forEach((h, i) => {
+      const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
+      const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
+      const residualScore = scoreForMethod(rl, rs, h.exposure);
+      const rr = bandForMethod(residualScore);
+      const scoreCell = $(`residual_score_${i}`);
+      if (scoreCell) {
+        scoreCell.textContent = formatMethodScore(residualScore);
+        scoreCell.style.backgroundColor = rr.bg;
+        scoreCell.style.color = rr.textColor;
+      }
+    });
+  }
+
+  /**
+   * Fine-Kinney has no honest 2D grid (Likelihood x Exposure x Consequence
+   * is three-dimensional, and Exposure varies per hazard, not per grid
+   * cell) — so when it's selected, the matrix tab swaps to a per-hazard
+   * L x E x C = Score breakdown list instead of drawing a fake grid.
+   */
+  function renderFineKinneyBreakdownList() {
+    const allHazardsForMatrix = [...hazards, ...manualHazards];
+    els.riskMatrix.className = 'matrix-list';
+    els.riskMatrix.textContent = '';
+    const method = selectedScoringMethod();
+    const table = document.createElement('table');
+    table.className = 'matrix-list-table';
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>#</th><th>Hazard</th><th>Likelihood</th><th>Exposure</th><th>Consequence</th><th>Score</th><th>Band</th></tr>';
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    allHazardsForMatrix.forEach((h, i) => {
+      const exposure = h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE;
+      const scoreValue = method.scoreFromAppScale(h.L, h.S, exposure);
+      const b = method.bandForScore(scoreValue);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${escapeHtml(h.name)}</td>
+        <td>${RiskCore.mapAppLikelihoodToKinney(h.L)}</td>
+        <td>${exposure}</td>
+        <td>${RiskCore.mapAppSeverityToKinneyConsequence(h.S)}</td>
+        <td style="background-color:${b.bg};color:${b.textColor};font-weight:700;">${formatMethodScore(scoreValue)}</td>
+        <td>${b.label}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    els.riskMatrix.appendChild(table);
+    syncResidualScoreCells(allHazardsForMatrix);
+  }
+
   function updateResidualMatrix() {
+    if (selectedScoringMethod().usesExposure) {
+      renderFineKinneyBreakdownList();
+      return;
+    }
+    els.riskMatrix.className = 'matrix';
     const allHazardsForMatrix = [...hazards, ...manualHazards];
     const residualPositions = new Map();
     allHazardsForMatrix.forEach((h, i) => {
@@ -2317,8 +2411,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       // Add residual risk markers
       if (l && s && residualPositions.has(`${l}-${s}`)) {
         const entries = residualPositions.get(`${l}-${s}`);
-        const score = l * s;
-        const borderCol = residualBorderColor(score);
+        const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
+        const borderCol = bandForMethod(score).bg;
         entries.forEach(entry => {
           const marker = document.createElement('div');
           marker.className = 'hazard-marker residual-marker';
@@ -2339,26 +2433,15 @@ Before finalising your answer, re-examine the image one more time specifically f
     [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
       for (let s = 1; s <= 5; s++) {
-        const score = l * s;
-        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[RiskCore.band(score).key];
-        add(String(score), cls, l, s);
+        const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[bandForMethod(score).key];
+        add(formatMethodScore(score), cls, l, s);
       }
     });
     add('', '');
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
 
-    allHazardsForMatrix.forEach((h, i) => {
-      const rl = parseInt($(`rl_${i}`)?.value || '1', 10);
-      const rs = parseInt($(`rs_${i}`)?.value || '1', 10);
-      const residualScore = rl * rs;
-      const rr = riskFor(residualScore);
-      const scoreCell = $(`residual_score_${i}`);
-      if (scoreCell) {
-        scoreCell.textContent = residualScore;
-        scoreCell.style.backgroundColor = rr.bg;
-        scoreCell.style.color = rr.textColor;
-      }
-    });
+    syncResidualScoreCells(allHazardsForMatrix);
   }
   function render() {
     els.results.classList.remove('hidden');
@@ -2394,11 +2477,13 @@ Before finalising your answer, re-examine the image one more time specifically f
 
     // Combine baseline, AI-detected, and manual hazards
     const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
-    overall = allHazards.length ? Math.max(...allHazards.map(h => h.risk)) : 0;
-    const r = riskFor(overall);
-    els.overallScore.textContent = String(overall);
+    updateScoringMethodUI();
+    overall = allHazards.length ? Math.max(...allHazards.map(h => scoreForMethod(h.L, h.S, h.exposure))) : 0;
+    const r = bandForMethod(overall);
+    els.overallScore.textContent = formatMethodScore(overall);
     els.overallLevel.textContent = r.label;
-    els.overallLevel.style.background = r.color;
+    els.overallLevel.style.background = r.bg;
+    els.overallLevel.style.color = r.textColor;
 
     assessmentTimestamp = assessmentTimestamp || new Date();
 
@@ -2456,12 +2541,13 @@ Before finalising your answer, re-examine the image one more time specifically f
     const tbodyB = document.createElement('tbody');
 
     allHazards.forEach((h, i) => {
-      const hr = riskFor(h.risk);
+      const rowScore = scoreForMethod(h.L, h.S, h.exposure);
+      const hr = bandForMethod(rowScore);
       const ratingLabel = hr.label.replace(' Risk', '');
       const defaultRL = Math.max(1, h.L - 1);
       const defaultRS = Math.max(1, h.S - 1);
-      const initialResidualScore = defaultRL * defaultRS;
-      const rrr = riskFor(initialResidualScore);
+      const initialResidualScore = scoreForMethod(defaultRL, defaultRS, h.exposure);
+      const rrr = bandForMethod(initialResidualScore);
 
       // Hazard properties initialization for override/verification
       if (h.manualOverride === undefined) h.manualOverride = false;
@@ -2512,7 +2598,7 @@ Before finalising your answer, re-examine the image one more time specifically f
               <option value="5" ${h.S === 5 ? 'selected' : ''}>5</option>
             </select>
           </td>
-          <td id="tableA_risk_${i}" style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${h.risk}</td>
+          <td id="tableA_risk_${i}" style="background-color:${hr.bg};color:${hr.textColor};font-weight:700">${formatMethodScore(rowScore)}</td>
           <td id="tableA_rating_${i}">${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
           <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && hazardNeedsReview(h) ? ` <span title="${h.key === 'unclear' ? 'AI could not clearly identify this — requires human verification' : 'Low or missing AI confidence — verify before sign-off'}" style="color:#c0392b;font-weight:700">⚠ Review</span>` : ''}</td>
           <td>
@@ -2528,7 +2614,7 @@ Before finalising your answer, re-examine the image one more time specifically f
           <td>${escapeHtml(h.details) || '-'}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_L_display_${i}">${h.L}</td>
           <td class="${isOverridden ? 'overridden-cell' : ''}" id="tableA_S_display_${i}">${h.S}</td>
-          <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${h.risk}</td>
+          <td style="background-color:${hr.bg};color:${hr.textColor};font-weight:700" id="tableA_risk_display_${i}">${formatMethodScore(rowScore)}</td>
           <td>${ratingLabel === 'Critical' ? 'Critical' : ratingLabel}</td>
           <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && hazardNeedsReview(h) ? ` <span title="${h.key === 'unclear' ? 'AI could not clearly identify this — requires human verification' : 'Low or missing AI confidence — verify before sign-off'}" style="color:#c0392b;font-weight:700">⚠ Review</span>` : ''}</td>
           <td>
@@ -2548,11 +2634,11 @@ Before finalising your answer, re-examine the image one more time specifically f
         const updateRisk = () => {
           const newL = parseInt(lSelect.value, 10);
           const newS = parseInt(sSelect.value, 10);
-          const newRisk = newL * newS;
-          const newHr = riskFor(newRisk);
+          const newRisk = scoreForMethod(newL, newS, h.exposure);
+          const newHr = bandForMethod(newRisk);
           const riskCell = document.getElementById(`tableA_risk_${i}`);
           const ratingCell = document.getElementById(`tableA_rating_${i}`);
-          riskCell.textContent = newRisk;
+          riskCell.textContent = formatMethodScore(newRisk);
           riskCell.style.backgroundColor = newHr.bg;
           riskCell.style.color = newHr.textColor;
           ratingCell.textContent = newHr.label.replace(' Risk', '');
@@ -2641,7 +2727,7 @@ Before finalising your answer, re-examine the image one more time specifically f
 
       const tdResidualScore = document.createElement('td');
       tdResidualScore.id = `residual_score_${i}`;
-      tdResidualScore.textContent = initialResidualScore;
+      tdResidualScore.textContent = formatMethodScore(initialResidualScore);
       tdResidualScore.style.backgroundColor = rrr.bg;
       tdResidualScore.style.color = rrr.textColor;
       tdResidualScore.style.fontWeight = '700';
@@ -2767,6 +2853,10 @@ Before finalising your answer, re-examine the image one more time specifically f
     if (confirmCb) confirmCb.addEventListener('change', updateSignoffData);
 
     // ── Risk Matrix ────────────────────────────────────────────────────────────
+    if (selectedScoringMethod().usesExposure) {
+      renderFineKinneyBreakdownList();
+    } else {
+    els.riskMatrix.className = 'matrix';
     els.riskMatrix.textContent = '';
 
     const hazardPositions = new Map();
@@ -2820,8 +2910,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       // Add residual risk markers
       if (l && s && residualPositions.has(`${l}-${s}`)) {
         const entries = residualPositions.get(`${l}-${s}`);
-        const score = l * s;
-        const borderCol = residualBorderColor(score);
+        const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
+        const borderCol = bandForMethod(score).bg;
         entries.forEach(entry => {
           const marker = document.createElement('div');
           marker.className = 'hazard-marker residual-marker';
@@ -2842,15 +2932,20 @@ Before finalising your answer, re-examine the image one more time specifically f
     [5, 4, 3, 2, 1].forEach(l => {
       add(`L${l}`, 'head');
       for (let s = 1; s <= 5; s++) {
-        const score = l * s;
-        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[RiskCore.band(score).key];
-        add(String(score), cls, l, s);
+        const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[bandForMethod(score).key];
+        add(formatMethodScore(score), cls, l, s);
       }
     });
     add('', '');
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
+    }
 
     // ── Risk Summary Dashboard ─────────────────────────────────────────────────
+    // NOTE: intentionally still ADOSH-SF-only (h.risk, hard-coded 4/9/16
+    // thresholds unrelated to RiskCore.band()). Explicitly out of scope for
+    // the selectable-scoring-methodology change — see the matching note in
+    // exportPDF's KPI Summary block.
     const totalHazards = allHazards.length;
     const highestRisk = overall;
     const highestRiskBand = highestRisk <= 4 ? 'kpi-green' : highestRisk <= 9 ? 'kpi-yellow' : highestRisk <= 16 ? 'kpi-amber' : 'kpi-red';
@@ -3001,7 +3096,8 @@ Before finalising your answer, re-examine the image one more time specifically f
     
     reviewSection.classList.remove('hidden');
     tbody.innerHTML = '';
-    
+    if (els.reviewExposureHeader) els.reviewExposureHeader.classList.toggle('hidden', !selectedScoringMethod().usesExposure);
+
     allHazards.forEach((h, i) => {
       // Initialize review data for this hazard if not exists
       if (!reviewData[i]) {
@@ -3009,6 +3105,7 @@ Before finalising your answer, re-examine the image one more time specifically f
           override: false,
           reviewL: h.L,
           reviewS: h.S,
+          reviewExposure: h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE,
           reviewControls: '',
           verified: false
         };
@@ -3093,7 +3190,28 @@ Before finalising your answer, re-examine the image one more time specifically f
       if (rd.override && rd.reviewS !== h.S) tdReviewS.classList.add('overridden-cell');
       tdReviewS.appendChild(reviewSSel);
       tr.appendChild(tdReviewS);
-      
+
+      // Review Exposure cell — only meaningful for Fine-Kinney; the column
+      // itself (header + cells) is hidden entirely for the other two
+      // methods rather than shown-but-disabled, since Exposure has no
+      // relevance to ADOSH-SF/NEBOSH at all.
+      const tdReviewExposure = document.createElement('td');
+      tdReviewExposure.id = `review_exposure_cell_${i}`;
+      tdReviewExposure.classList.toggle('hidden', !selectedScoringMethod().usesExposure);
+      const reviewExposureSel = document.createElement('select');
+      reviewExposureSel.id = `review_exposure_${i}`;
+      reviewExposureSel.disabled = !rd.override;
+      RiskCore.FINE_KINNEY_EXPOSURE_OPTIONS.forEach(opt => {
+        const optEl = document.createElement('option');
+        optEl.value = opt.value;
+        optEl.textContent = `${opt.value} — ${opt.label}`;
+        if (opt.value === rd.reviewExposure) optEl.selected = true;
+        reviewExposureSel.appendChild(optEl);
+      });
+      reviewExposureSel.addEventListener('change', () => updateReviewData(i));
+      tdReviewExposure.appendChild(reviewExposureSel);
+      tr.appendChild(tdReviewExposure);
+
       // Review Controls cell
       const tdControls = document.createElement('td');
       tdControls.id = `review_controls_cell_${i}`;
@@ -3150,35 +3268,42 @@ Before finalising your answer, re-examine the image one more time specifically f
     // Enable/disable review inputs
     const reviewL = $(`review_l_${index}`);
     const reviewS = $(`review_s_${index}`);
+    const reviewExposure = $(`review_exposure_${index}`);
     const reviewControls = $(`review_controls_${index}`);
-    
+
     reviewL.disabled = !cb.checked;
     reviewS.disabled = !cb.checked;
+    if (reviewExposure) reviewExposure.disabled = !cb.checked;
     reviewControls.disabled = !cb.checked;
-    
+
     // Reset to AI values if override is turned off
     if (!cb.checked) {
       reviewL.value = h.L;
       reviewS.value = h.S;
       reviewData[index].reviewL = h.L;
       reviewData[index].reviewS = h.S;
+      const defaultExposure = h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE;
+      if (reviewExposure) reviewExposure.value = defaultExposure;
+      reviewData[index].reviewExposure = defaultExposure;
     }
-    
+
     // Update cell highlighting
     updateCellHighlighting(index);
   }
-  
+
   function updateReviewData(index) {
     const reviewL = parseInt($(`review_l_${index}`).value, 10);
     const reviewS = parseInt($(`review_s_${index}`).value, 10);
+    const reviewExposureEl = $(`review_exposure_${index}`);
     const reviewControls = $(`review_controls_${index}`).value;
-    
+
     reviewData[index].reviewL = reviewL;
     reviewData[index].reviewS = reviewS;
+    if (reviewExposureEl) reviewData[index].reviewExposure = parseFloat(reviewExposureEl.value);
     reviewData[index].reviewControls = reviewControls;
-    
+
     updateCellHighlighting(index);
-    
+
     // Update residual matrix with new values if verified
     if (reviewData[index].verified) {
       updateResidualMatrix();
@@ -3298,16 +3423,69 @@ Before finalising your answer, re-examine the image one more time specifically f
     // Could update a display here if needed
   }
   
+  /**
+   * Which scoring method the reviewer currently has selected — read
+   * straight from the DOM each call, same pattern as selectedAIProvider().
+   * getScoringMethod() falls back to ADOSH-SF for an empty/unknown value,
+   * so this is always safe to call even before the selector is wired up.
+   */
+  function selectedScoringMethod() {
+    const id = els.scoringMethodSelect ? els.scoringMethodSelect.value : RiskCore.DEFAULT_SCORING_METHOD_ID;
+    return RiskCore.getScoringMethod(id);
+  }
+
+  /**
+   * A hazard's risk score under the CURRENTLY SELECTED method — this is
+   * the one function every on-screen/PDF consumer should call instead of
+   * hard-coding `L * S`. Exposure only matters for Fine-Kinney; every other
+   * method ignores the third argument.
+   */
+  function scoreForMethod(likelihood, severity, exposure) {
+    return selectedScoringMethod().scoreFromAppScale(likelihood, severity, exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
+  }
+
+  /** Bands a score already computed by scoreForMethod() through the same selected method — never RiskCore.band() directly, which is always ADOSH-SF. */
+  function bandForMethod(scoreValue) {
+    return selectedScoringMethod().bandForScore(scoreValue);
+  }
+
+  /** ADOSH-SF/NEBOSH scores are always integers (integer inputs, integer math); Fine-Kinney's Likelihood/Exposure/Consequence can produce a fractional product, shown to one decimal place. */
+  function formatMethodScore(scoreValue) {
+    return Number.isInteger(scoreValue) ? String(scoreValue) : (Math.round(scoreValue * 10) / 10).toString();
+  }
+
+  /**
+   * Keeps every UI surface that depends on WHICH method is selected in
+   * sync: the bridging-note tooltip, the manual-entry Exposure field
+   * (Fine-Kinney only — has no relevance to the other two methods), and the
+   * HSE Review table's Exposure column. Called on every render() and on
+   * the selector's own change event, so switching methods updates
+   * everything live with no page reload.
+   */
+  function updateScoringMethodUI() {
+    const method = selectedScoringMethod();
+    if (els.scoringMethodNote) {
+      els.scoringMethodNote.textContent = method.bridgingNote || '';
+      els.scoringMethodNote.classList.toggle('hidden', !method.bridgingNote);
+    }
+    if (els.manualExposureRow) els.manualExposureRow.classList.toggle('hidden', !method.usesExposure);
+    if (els.reviewExposureHeader) els.reviewExposureHeader.classList.toggle('hidden', !method.usesExposure);
+    document.querySelectorAll('[id^="review_exposure_cell_"]').forEach(td => {
+      td.classList.toggle('hidden', !method.usesExposure);
+    });
+  }
+
   // Get effective risk data for a hazard (verified/overridden takes precedence)
   function getEffectiveRiskData(index) {
     const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
     const h = allHazards[index];
     const rd = reviewData[index];
-    
+
     if (rd && rd.verified && rd.override) {
       return {
         L: rd.reviewL,
         S: rd.reviewS,
+        exposure: rd.reviewExposure ?? h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE,
         controls: rd.reviewControls,
         source: 'verified'
       };
@@ -3315,9 +3493,25 @@ Before finalising your answer, re-examine the image one more time specifically f
     return {
       L: h.L,
       S: h.S,
+      exposure: h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE,
       controls: '',
       source: 'ai'
     };
+  }
+
+  /**
+   * The one function every on-screen and PDF consumer should call for a
+   * hazard's FINAL score/band — resolves review-tab verified/override
+   * precedence (getEffectiveRiskData) THEN runs the result through the
+   * currently-selected scoring method. Replaces the previously-orphaned
+   * getEffectiveRiskData call in the PDF's review summary, whose return
+   * value used to be silently discarded.
+   */
+  function getEffectiveRiskResult(index) {
+    const data = getEffectiveRiskData(index);
+    const method = selectedScoringMethod();
+    const scoreValue = method.scoreFromAppScale(data.L, data.S, data.exposure);
+    return { ...data, score: scoreValue, band: method.bandForScore(scoreValue), methodId: method.id };
   }
 
   // Extract EXIF metadata from image file
@@ -3674,16 +3868,18 @@ Before finalising your answer, re-examine the image one more time specifically f
     const modeLabel = { ai: aiVisionModeLabel(), coco: 'Object Detection (COCO-SSD)', 'rule-based': 'Rule-Based (keyword matching)', manual: 'Manual Entry' }[analysisMode] || analysisMode;
     const hasManual = manualHazards.length > 0;
     const fullModeLabel = hasManual ? (modeLabel + (hazards.length > 0 ? ' + Manual Entry' : '')) : modeLabel;
-    const r = riskFor(overall).label;
+    const exportMethod = selectedScoringMethod();
+    const r = bandForMethod(overall).label;
     const siteName = els.siteLocationName ? els.siteLocationName.value.trim() : '';
     const siteLine = (siteName || siteGPS)
       ? `Site: ${siteName || 'Not named'}${siteGPS ? ` (${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)})` : ''}\n`
       : '';
-    let out = `HSE Risk Assessment Report\n${siteLine}Date: ${new Date().toISOString()}\nRisk Level: ${r} (${overall}/25)\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
+    let out = `HSE Risk Assessment Report\n${siteLine}Date: ${new Date().toISOString()}\nScoring Method: ${exportMethod.label}\nRisk Level: ${r} (${formatMethodScore(overall)})\nAnalysis Mode: ${fullModeLabel}\n\nHazards Detected:\n`;
     allHazardsForExport.forEach((h, i) => {
       const d = getRowResidualData(i);
       const sourceLabel = h.isBaseline ? 'Baseline' : (h.isManual ? 'Manual' : `AI (#${i + 1 - baselineHazards.length - manualHazards.length})`);
-      out += `${i + 1}. [${sourceLabel}] ${h.name} | L=${h.L} S=${h.S} Risk=${h.risk} | ResidualRisk=${d.residualScore} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
+      const exportScore = scoreForMethod(h.L, h.S, h.exposure);
+      out += `${i + 1}. [${sourceLabel}] ${h.name} | L=${h.L} S=${h.S} Risk=${formatMethodScore(exportScore)} | ResidualRisk=${formatMethodScore(d.residualScore)} | Owner=${d.owner} | Status=${d.status}${h.details ? ' | ' + h.details : ''}\n`;
     });
     out += `\nRecommendations:\n${[...new Set(allHazardsForExport.flatMap(h => h.recs || []))].map((r, i) => `${i + 1}. ${r}`).join('\n')}`;
     const blob = new Blob([out], { type: 'text/plain' });
@@ -3755,19 +3951,22 @@ Before finalising your answer, re-examine the image one more time specifically f
         ['Industry', ctxI.options[ctxI.selectedIndex]?.text || ''],
         ['Task Type', ctxT.options[ctxT.selectedIndex]?.text || ''],
         ['Location Type', ctxL.options[ctxL.selectedIndex]?.text || ''],
-        ['Baseline Hazards', `${baselineHazards.length} pre-loaded (ADOSH-SF)`]
+        ['Baseline Hazards', `${baselineHazards.length} pre-loaded`]
       ] : [];
       const pdfSiteName = els.siteLocationName ? els.siteLocationName.value.trim() : '';
       const pdfSiteRows = (pdfSiteName || siteGPS) ? [
         ['Site / Location', `${pdfSiteName || 'Not named'}${siteGPS ? ` (${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)})` : ''}`]
       ] : [];
+      const pdfMethod = selectedScoringMethod();
+      const pdfMaxScore = { 'adosh-sf': '/ 25', 'nebosh-hsg65': '/ 9' }[pdfMethod.id] || '';
       const metaRows = [
         ...pdfSiteRows,
         ['Date & Time', formattedDate],
         ['Analysis Method', modeLabel],
-        ['Standard Reference', 'ISO 45001:2018 / ADOSH-SF'],
-        ['Overall Risk Score', `${overall} / 25`],
-        ['Overall Risk Level', riskFor(overall).label],
+        ['Scoring Method', pdfMethod.label],
+        ['Standard Reference', `ISO 45001:2018 / ${pdfMethod.citation}`],
+        ['Overall Risk Score', `${formatMethodScore(overall)} ${pdfMaxScore}`.trim()],
+        ['Overall Risk Level', bandForMethod(overall).label],
         ...pdfCtxRows
       ];
       doc.autoTable({
@@ -3799,6 +3998,10 @@ Before finalising your answer, re-examine the image one more time specifically f
       }
 
       // ── KPI Summary ──
+      // NOTE: intentionally still ADOSH-SF-only (h.risk, hard-coded 10/17
+      // thresholds unrelated to RiskCore.band()). Explicitly out of scope
+      // for the selectable-scoring-methodology change — this dashboard
+      // needs its own equivalent-bands design per method, a separate PR.
       checkPageBreak(20);
       sectionTitle('Risk Summary');
       const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
@@ -3826,13 +4029,14 @@ Before finalising your answer, re-examine the image one more time specifically f
       sectionTitle('Risk Register');
 
       function scoreColor(score) {
-        return RiskCore.band(score).rgb;
+        return bandForMethod(score).rgb;
       }
 
       const rrHead = [['#', 'Hazard', 'Details', 'L', 'S', 'Score', 'Rating', 'Conf', 'Controls In Place', 'Res.L', 'Res.S', 'Res.Risk', 'Owner', 'Corrective Action', 'Target Date', 'Status']];
       const rrBody = allHazardsForPDF.map((h, i) => {
         const d = getRowResidualData(i);
-        const hr = riskFor(h.risk);
+        const rowScorePDF = scoreForMethod(h.L, h.S, h.exposure);
+        const hr = bandForMethod(rowScorePDF);
         const ratingLabel = hr.label.replace(' Risk', '');
         const numberCell = h.isManual ? 'Manual' : String(i + 1);
         return [
@@ -3841,13 +4045,13 @@ Before finalising your answer, re-examine the image one more time specifically f
           h.details || '-',
           h.L,
           h.S,
-          h.risk,
+          formatMethodScore(rowScorePDF),
           ratingLabel === 'Critical' ? 'Critical' : ratingLabel,
           `${Math.round((h.conf || 0) * 100)}%`,
           d.controls || '-',
           d.rl,
           d.rs,
-          d.residualScore,
+          formatMethodScore(d.residualScore),
           d.owner || '-',
           d.action || '-',
           d.target || '-',
@@ -3886,17 +4090,17 @@ Before finalising your answer, re-examine the image one more time specifically f
             const hazard = allHazardsForPDF[rowIdx];
             
             if (data.column.index === 5) {
-              const score = parseInt(data.cell.raw, 10);
+              const score = parseFloat(data.cell.raw);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33,33,33] : [255,255,255];
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 11) {
-              const score = parseInt(data.cell.raw, 10);
+              const score = parseFloat(data.cell.raw);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33,33,33] : [255,255,255];
               data.cell.styles.fontStyle = 'bold';
             }
             // Highlight overridden L (column 3) and S (column 4) cells in blue
@@ -3949,9 +4153,48 @@ Before finalising your answer, re-examine the image one more time specifically f
       try {
         checkPageBreak(10);
         sectionTitle('Risk Matrix');
+        const pdfMatrixMethod = selectedScoringMethod();
+        const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
+
+        if (pdfMatrixMethod.usesExposure) {
+          // Fine-Kinney has no honest 2D grid (Exposure varies per hazard,
+          // not per grid cell) — mirrors the on-screen L x E x C = Score
+          // breakdown list instead of drawing a fake grid.
+          const fkHead = [['#', 'Hazard', 'Likelihood', 'Exposure', 'Consequence', 'Score', 'Band']];
+          const fkBody = allHazardsForPDF.map((h, i) => {
+            const exposure = h.exposure ?? RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE;
+            const scoreVal = pdfMatrixMethod.scoreFromAppScale(h.L, h.S, exposure);
+            const b = pdfMatrixMethod.bandForScore(scoreVal);
+            return [i + 1, h.name, RiskCore.mapAppLikelihoodToKinney(h.L), exposure, RiskCore.mapAppSeverityToKinneyConsequence(h.S), formatMethodScore(scoreVal), b.label];
+          });
+          doc.autoTable({
+            startY: y,
+            head: fkHead,
+            body: fkBody,
+            theme: 'grid',
+            headStyles: { fillColor: [21, 101, 192], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+            bodyStyles: { fontSize: 8, cellPadding: 2 },
+            didParseCell(data) {
+              if (data.section === 'body' && data.column.index === 5) {
+                const scoreVal = parseFloat(data.cell.raw);
+                const b = pdfMatrixMethod.bandForScore(scoreVal);
+                data.cell.styles.fillColor = b.rgb;
+                data.cell.styles.textColor = (b.key === 'possible') ? [33, 33, 33] : [255, 255, 255];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            },
+            margin: { left: margin, right: margin }
+          });
+          y = doc.lastAutoTable.finalY + 6;
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(80, 80, 80);
+          doc.text(pdfMatrixMethod.legend, margin, y);
+          y += 8;
+          doc.setTextColor(33, 33, 33);
+        } else {
 
         // Build hazard position maps for initial and residual risks
-        const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
         const initialHazards = new Map();
         const residualHazards = new Map();
 
@@ -3983,7 +4226,7 @@ Before finalising your answer, re-examine the image one more time specifically f
 
         // Color mapping for risk levels
         function matrixCellColor(score) {
-          return RiskCore.band(score).rgb;
+          return bandForMethod(score).rgb;
         }
 
         // Draw the matrix table
@@ -4001,10 +4244,10 @@ Before finalising your answer, re-examine the image one more time specifically f
             if (data.section === 'body' && data.column.index > 0) {
               const l = likelihoods[data.row.index];
               const s = severities[data.column.index - 1];
-              const score = l * s;
+              const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
               const col = matrixCellColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = RiskCore.band(score).key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
+              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
               data.cell.styles.fontStyle = 'bold';
             }
           },
@@ -4019,17 +4262,17 @@ Before finalising your answer, re-examine the image one more time specifically f
               const cellH = data.cell.height;
 
               // Draw score number at top-center of cell (always visible)
-              const score = l * s;
+              const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
               doc.setFontSize(9);
               doc.setFont('helvetica', 'bold');
               // Use dark text on yellow (moderate band), white on others
-              if (RiskCore.band(score).key === 'moderate') {
+              if (bandForMethod(score).key === 'moderate') {
                 doc.setTextColor(33, 33, 33);
               } else {
                 doc.setTextColor(255, 255, 255);
               }
               const scoreY = cellY + 6; // Top of cell with small padding
-              doc.text(String(score), cellX + cellW / 2, scoreY, { align: 'center' });
+              doc.text(formatMethodScore(score), cellX + cellW / 2, scoreY, { align: 'center' });
 
               // Draw initial risk markers (white filled circles with hazard numbers)
               const initials = initialHazards.get(key) || [];
@@ -4093,6 +4336,7 @@ Before finalising your answer, re-examine the image one more time specifically f
         doc.text('Filled circle = Initial Risk    Hollow circle = Residual Risk    Numbers in circles = Hazard sequence numbers', margin, y);
         y += 8;
         doc.setTextColor(33, 33, 33);
+        }
       } catch (_) {}
 
       // ── Disclaimer ──
@@ -4171,11 +4415,16 @@ Before finalising your answer, re-examine the image one more time specifically f
           doc.text('Hazard Review & Override Summary', margin, y);
           y += 4;
           
-          const reviewHead = [['#', 'Hazard', 'AI L', 'AI S', 'Review L', 'Review S', 'Controls', 'Source', 'Verified']];
+          const reviewHead = [['#', 'Hazard', 'AI L', 'AI S', 'Review L', 'Review S', 'Score', 'Rating', 'Controls', 'Source', 'Verified']];
           const reviewBody = allHazardsForPDF.map((h, i) => {
             const rd = reviewData[i] || {};
-            const effective = getEffectiveRiskData(i);
-            const isOverridden = rd.override && (rd.reviewL !== h.L || rd.reviewS !== h.S);
+            // getEffectiveRiskResult resolves verified/override precedence
+            // THEN runs it through the currently-selected scoring method —
+            // this is what actually governs the Score/Rating columns below,
+            // not a re-derivation of rd/h inline (that was this table's
+            // pre-existing bug: it called getEffectiveRiskData but never
+            // used what it returned).
+            const effective = getEffectiveRiskResult(i);
             return [
               i + 1,
               h.name.substring(0, 20),
@@ -4183,12 +4432,14 @@ Before finalising your answer, re-examine the image one more time specifically f
               h.S,
               rd.override ? rd.reviewL : h.L,
               rd.override ? rd.reviewS : h.S,
+              formatMethodScore(effective.score),
+              effective.band.label.replace(' Risk', ''),
               (rd.reviewControls || '').substring(0, 25) || '-',
               rd.override && rd.verified ? 'Verified' : 'AI',
               rd.verified ? 'Yes' : 'No'
             ];
           }).filter((row, i) => reviewData[i]?.override || reviewData[i]?.verified);
-          
+
           doc.autoTable({
             startY: y,
             head: reviewHead,
@@ -4198,14 +4449,16 @@ Before finalising your answer, re-examine the image one more time specifically f
             bodyStyles: { fontSize: 7, cellPadding: 2 },
             columnStyles: {
               0: { cellWidth: 6 },
-              1: { cellWidth: 25 },
-              2: { cellWidth: 8 },
-              3: { cellWidth: 8 },
-              4: { cellWidth: 10 },
-              5: { cellWidth: 10 },
-              6: { cellWidth: 30 },
-              7: { cellWidth: 14 },
-              8: { cellWidth: 10 }
+              1: { cellWidth: 22 },
+              2: { cellWidth: 7 },
+              3: { cellWidth: 7 },
+              4: { cellWidth: 9 },
+              5: { cellWidth: 9 },
+              6: { cellWidth: 9 },
+              7: { cellWidth: 12 },
+              8: { cellWidth: 26 },
+              9: { cellWidth: 12 },
+              10: { cellWidth: 9 }
             },
             didParseCell(data) {
               if (data.section === 'body') {
@@ -4213,9 +4466,16 @@ Before finalising your answer, re-examine the image one more time specifically f
                 if (data.column.index === 4 || data.column.index === 5) {
                   const rowIdx = data.row.index;
                   const actualRow = reviewBody[rowIdx];
-                  if (actualRow && actualRow[7] === 'Verified') {
+                  if (actualRow && actualRow[9] === 'Verified') {
                     data.cell.styles.fillColor = [187, 222, 251];
                   }
+                }
+                if (data.column.index === 6) {
+                  const scoreVal = parseFloat(data.cell.raw);
+                  const b = bandForMethod(scoreVal);
+                  data.cell.styles.fillColor = b.rgb;
+                  data.cell.styles.textColor = b.key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
+                  data.cell.styles.fontStyle = 'bold';
                 }
               }
             },
@@ -4982,6 +5242,16 @@ Before finalising your answer, re-examine the image one more time specifically f
       els.manualHazardType.appendChild(opt);
     });
 
+    if (els.manualExposure) {
+      RiskCore.FINE_KINNEY_EXPOSURE_OPTIONS.forEach(opt => {
+        const optEl = document.createElement('option');
+        optEl.value = opt.value;
+        optEl.textContent = `${opt.value} — ${opt.label}`;
+        if (opt.value === RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE) optEl.selected = true;
+        els.manualExposure.appendChild(optEl);
+      });
+    }
+
     els.manualModeToggle.addEventListener('change', (e) => {
       manualModeActive = e.target.checked;
       els.manualEntrySection.classList.toggle('hidden', !manualModeActive);
@@ -5004,9 +5274,11 @@ Before finalising your answer, re-examine the image one more time specifically f
       const h = hazardDB[hazardKey];
       const manualHazard = {
         name: h.name,
+        key: hazardKey,
         L: L,
         S: S,
         risk: L * S,
+        exposure: els.manualExposure && els.manualExposure.value ? parseFloat(els.manualExposure.value) : RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE,
         conf: 1.0,
         recs: h.recs,
         source: 'manual',
@@ -5021,13 +5293,23 @@ Before finalising your answer, re-examine the image one more time specifically f
 
       manualHazards.push(manualHazard);
       els.manualDescription.value = '';
-      
+
       if (!imageData) {
         imageData = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
       }
       assessmentTimestamp = assessmentTimestamp || new Date();
       render();
     });
+
+    if (els.scoringMethodSelect) {
+      els.scoringMethodSelect.addEventListener('change', () => {
+        updateScoringMethodUI();
+        if (!els.results.classList.contains('hidden')) {
+          render();
+          renderReviewTable();
+        }
+      });
+    }
   }
 
   initManualMode();
@@ -5083,9 +5365,16 @@ Before finalising your answer, re-examine the image one more time specifically f
     var emergencyRows=document.querySelectorAll('#emergencyTableBody tr').length;
     var hocRows=document.querySelectorAll('#hocTable tbody tr').length;
     var hasHeat=hazards&&hazards.some(function(h){return h.name&&/heat|thermal/i.test(h.name);});
+    // A separate <script> block from the main app — no access to that
+    // closure's selectedScoringMethod() helper, so this reads the
+    // selector and RiskCore's registry directly (both are on window/DOM,
+    // reachable from any script block).
+    var scoringMethodEl=document.getElementById('scoringMethodSelect');
+    var scoringMethod=window.RiskCore&&window.RiskCore.getScoringMethod?window.RiskCore.getScoringMethod(scoringMethodEl&&scoringMethodEl.value):null;
+    var scoringRef=scoringMethod?('ISO 45001 §6.1.2.2 / '+scoringMethod.citation):'ISO 45001 §6.1.2.2 / ADOSH-SF Table 3';
     var items=[
       {label:'Hazard identification completed',ref:'ISO 45001 §6.1.2.1',ok:hazards&&hazards.length>0},
-      {label:'Risk scoring applied (L × S matrix)',ref:'ISO 45001 §6.1.2.2 / ADOSH-SF Table 3',ok:overall>0},
+      {label:'Risk scoring applied',ref:scoringRef,ok:overall>0},
       {label:'Hierarchy of Controls recorded',ref:'ISO 45001 §8.1.2',ok:hocRows>0},
       {label:'Competent person sign-off',ref:'ISO 45001:2018 / applicable UAE OH&S legislation',ok:!!hseConfirmed},
       {label:'Emergency preparedness recorded',ref:'ISO 45001 §8.2',ok:emergencyRows>0},

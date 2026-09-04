@@ -7,6 +7,18 @@ import {
   validateHazards,
   hasUnreviewedHazards,
   CONFIDENCE_REVIEW_THRESHOLD,
+  SCORING_METHODS,
+  DEFAULT_SCORING_METHOD_ID,
+  getScoringMethod,
+  mapAppLikelihoodToNebosh,
+  mapAppSeverityToNebosh,
+  neboshScore,
+  neboshBand,
+  mapAppLikelihoodToKinney,
+  mapAppSeverityToKinneyConsequence,
+  fineKinneyScore,
+  fineKinneyBand,
+  FINE_KINNEY_DEFAULT_EXPOSURE,
 } from "../src/index";
 
 describe("score", () => {
@@ -153,5 +165,132 @@ describe("hasUnreviewedHazards", () => {
 
   it("is false when nothing needs review", () => {
     expect(hasUnreviewedHazards([{ needsReview: false }])).toBe(false);
+  });
+});
+
+describe("selectable scoring methodology — ADOSH-SF adapter never diverges from score()/band()", () => {
+  it("is the default method", () => {
+    expect(DEFAULT_SCORING_METHOD_ID).toBe("adosh-sf");
+    expect(getScoringMethod(undefined).id).toBe("adosh-sf");
+  });
+
+  it("scoreFromAppScale/bandForScore match score()/band() exactly across every 1-5 x 1-5 pair — the regression guard for 'switching methods never changes ADOSH-SF's own numbers'", () => {
+    const adosh = SCORING_METHODS["adosh-sf"];
+    for (let l = 1; l <= 5; l++) {
+      for (let s = 1; s <= 5; s++) {
+        const expectedScore = score(l, s);
+        expect(adosh.scoreFromAppScale(l, s, FINE_KINNEY_DEFAULT_EXPOSURE)).toBe(expectedScore);
+        expect(adosh.bandForScore(expectedScore).key).toBe(band(expectedScore).key);
+      }
+    }
+  });
+
+  it("has no bridging note (nothing bridged - it's the app's native scale)", () => {
+    expect(SCORING_METHODS["adosh-sf"].bridgingNote).toBeNull();
+  });
+});
+
+describe("getScoringMethod — falls back to ADOSH-SF for unknown/missing ids", () => {
+  it("falls back for an unrecognised id", () => {
+    expect(getScoringMethod("some-future-method").id).toBe("adosh-sf");
+  });
+
+  it("falls back for null/undefined", () => {
+    expect(getScoringMethod(null).id).toBe("adosh-sf");
+    expect(getScoringMethod(undefined).id).toBe("adosh-sf");
+  });
+
+  it("returns the requested method when it exists", () => {
+    expect(getScoringMethod("fine-kinney").id).toBe("fine-kinney");
+    expect(getScoringMethod("nebosh-hsg65").id).toBe("nebosh-hsg65");
+  });
+});
+
+describe("NEBOSH/HSG65 bridging", () => {
+  it("compresses the app's 1-5 scale into NEBOSH's 1-3 scale as {1,2}->1, {3,4}->2, {5}->3", () => {
+    expect(mapAppLikelihoodToNebosh(1)).toBe(1);
+    expect(mapAppLikelihoodToNebosh(2)).toBe(1);
+    expect(mapAppLikelihoodToNebosh(3)).toBe(2);
+    expect(mapAppLikelihoodToNebosh(4)).toBe(2);
+    expect(mapAppLikelihoodToNebosh(5)).toBe(3);
+    // Severity uses the identical bucketing.
+    for (let i = 1; i <= 5; i++) {
+      expect(mapAppSeverityToNebosh(i)).toBe(mapAppLikelihoodToNebosh(i));
+    }
+  });
+
+  it("only produces the reachable {1,2,3,4,6,9} scores across every derived 1-3 x 1-3 pair — 5, 7, 8 never occur", () => {
+    const seen = new Set<number>();
+    for (let l = 1; l <= 5; l++) {
+      for (let s = 1; s <= 5; s++) {
+        seen.add(neboshScore(mapAppLikelihoodToNebosh(l), mapAppSeverityToNebosh(s)));
+      }
+    }
+    expect([...seen].sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 6, 9]);
+  });
+
+  it("bands 1-2 Low, 3-4 Medium, 6-9 High", () => {
+    expect(neboshBand(1).key).toBe("low");
+    expect(neboshBand(2).key).toBe("low");
+    expect(neboshBand(3).key).toBe("moderate");
+    expect(neboshBand(4).key).toBe("moderate");
+    expect(neboshBand(6).key).toBe("high");
+    expect(neboshBand(9).key).toBe("high");
+  });
+
+  it("the registry entry matches the standalone functions", () => {
+    const nebosh = SCORING_METHODS["nebosh-hsg65"];
+    expect(nebosh.scoreFromAppScale(4, 5, FINE_KINNEY_DEFAULT_EXPOSURE)).toBe(
+      neboshScore(mapAppLikelihoodToNebosh(4), mapAppSeverityToNebosh(5))
+    );
+  });
+});
+
+describe("Fine-Kinney bridging", () => {
+  it("maps app Likelihood 1-5 to Kinney's native scale monotonically", () => {
+    const mapped = [1, 2, 3, 4, 5].map(mapAppLikelihoodToKinney);
+    expect(mapped).toEqual([0.2, 1, 3, 6, 10]);
+  });
+
+  it("maps app Severity 1-5 to Kinney's native Consequence scale monotonically, never reaching Kinney's own 100 (by design)", () => {
+    const mapped = [1, 2, 3, 4, 5].map(mapAppSeverityToKinneyConsequence);
+    expect(mapped).toEqual([1, 3, 7, 15, 40]);
+    expect(mapped).not.toContain(100);
+  });
+
+  it("clamps out-of-range/non-integer app levels rather than throwing or indexing out of bounds", () => {
+    expect(mapAppLikelihoodToKinney(0)).toBe(mapAppLikelihoodToKinney(1));
+    expect(mapAppLikelihoodToKinney(6)).toBe(mapAppLikelihoodToKinney(5));
+    expect(mapAppLikelihoodToKinney(3.4)).toBe(mapAppLikelihoodToKinney(3));
+  });
+
+  it("scores as Likelihood x Exposure x Consequence", () => {
+    expect(fineKinneyScore(3, 6, 15)).toBe(270);
+  });
+
+  it("bands lower-bound-inclusive: <20 Slight, 20-<70 Possible, 70-<160 Substantial, 160-<320 High, >=320 Very High", () => {
+    expect(fineKinneyBand(19.9).key).toBe("slight");
+    expect(fineKinneyBand(20).key).toBe("possible");
+    expect(fineKinneyBand(69.9).key).toBe("possible");
+    expect(fineKinneyBand(70).key).toBe("substantial");
+    expect(fineKinneyBand(159.9).key).toBe("substantial");
+    expect(fineKinneyBand(160).key).toBe("high");
+    expect(fineKinneyBand(319.9).key).toBe("high");
+    expect(fineKinneyBand(320).key).toBe("very-high");
+  });
+
+  it("an app-max hazard (L5/S5) at the default exposure lands in Very High, and an app-min hazard (L1/S1) lands in Slight", () => {
+    const fineKinney = SCORING_METHODS["fine-kinney"];
+    const maxScore = fineKinney.scoreFromAppScale(5, 5, FINE_KINNEY_DEFAULT_EXPOSURE);
+    const minScore = fineKinney.scoreFromAppScale(1, 1, FINE_KINNEY_DEFAULT_EXPOSURE);
+    expect(fineKinney.bandForScore(maxScore).key).toBe("very-high");
+    expect(fineKinney.bandForScore(minScore).key).toBe("slight");
+  });
+
+  it("declares usesExposure and a non-null bridging note, unlike the other two methods", () => {
+    expect(SCORING_METHODS["fine-kinney"].usesExposure).toBe(true);
+    expect(SCORING_METHODS["fine-kinney"].bridgingNote).not.toBeNull();
+    expect(SCORING_METHODS["adosh-sf"].usesExposure).toBe(false);
+    expect(SCORING_METHODS["nebosh-hsg65"].usesExposure).toBe(false);
   });
 });

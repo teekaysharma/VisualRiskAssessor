@@ -185,3 +185,203 @@ export function validateHazards(raw: unknown): ValidationResult {
 export function hasUnreviewedHazards(hazards: readonly { needsReview: boolean; reviewedByHuman?: boolean }[]): boolean {
   return hazards.some((h) => h.needsReview && !h.reviewedByHuman);
 }
+
+// ---------------------------------------------------------------------------
+// Selectable scoring methodologies
+//
+// The AI always returns Likelihood/Severity on this app's own 1-5 integer
+// scale (see isInt1to5 above) - that never changes, regardless of which
+// scoring method is selected for on-screen/PDF display. NEBOSH's and
+// Fine-Kinney's native scales are DERIVED from that 1-5 scale via the
+// bucket mappings below, never re-collected from the AI or re-entered by
+// hand. Those mappings are THIS APP'S OWN BRIDGING CHOICE, not part of
+// either published standard - every mapping function says so below, and
+// the app surfaces the same note next to the on-screen method selector, so
+// nothing invented gets misattributed to NEBOSH or to Kinney & Wiruth.
+//
+// ADOSH-SF stays the default and is a pure adapter over score()/band()
+// above - zero new logic - which is how "switching methods never changes
+// ADOSH-SF's own numbers" is guaranteed, not just asserted.
+// ---------------------------------------------------------------------------
+
+export type ScoringMethodId = "adosh-sf" | "nebosh-hsg65" | "fine-kinney";
+
+/**
+ * Same shape as RiskBand, but not RiskBand itself - Fine-Kinney has five
+ * bands (Slight/Possible/Substantial/High/Very High), one more than
+ * RiskBandKey's four, so it needs its own key space. Kept structurally
+ * identical so UI code can render any method's bands the same way.
+ */
+export interface MethodBand {
+  key: string;
+  label: string;
+  bg: string;
+  textColor: string;
+  rgb: readonly [number, number, number];
+}
+
+export interface ScoringMethod {
+  id: ScoringMethodId;
+  label: string;
+  citation: string;
+  legend: string;
+  bands: readonly MethodBand[];
+  /** True only for Fine-Kinney - the one method with a dimension that isn't derived from the app's existing 1-5 scale. */
+  usesExposure: boolean;
+  /** Null for ADOSH-SF (nothing bridged - it's the app's native scale). Shown next to the method selector for the other two. */
+  bridgingNote: string | null;
+  axisLabels: { likelihood: string; severity: string; exposure?: string };
+  scoreFromAppScale(likelihood: number, severity: number, exposure: number): number;
+  bandForScore(riskScore: number): MethodBand;
+}
+
+// --- NEBOSH / HSG65-style 3x3 ------------------------------------------------
+
+/** App's 1-5 Likelihood/Severity compressed to NEBOSH's 1-3 scale: {1,2}->1, {3,4}->2, {5}->3. This bucketing is this app's own choice, not part of the NEBOSH syllabus. */
+export function mapAppLikelihoodToNebosh(appLikelihood: number): number {
+  if (appLikelihood <= 2) return 1;
+  if (appLikelihood <= 4) return 2;
+  return 3;
+}
+
+/** Same bucketing as mapAppLikelihoodToNebosh, kept as a separate named function per axis for readable call sites. */
+export function mapAppSeverityToNebosh(appSeverity: number): number {
+  return mapAppLikelihoodToNebosh(appSeverity);
+}
+
+export function neboshScore(neboshLikelihood: number, neboshSeverity: number): number {
+  return neboshLikelihood * neboshSeverity;
+}
+
+/** Reuses the exact ADOSH-SF band objects (same colours/labels) for NEBOSH's Low/Medium/High - NEBOSH has no fourth "Extreme" band. */
+export const NEBOSH_BANDS: readonly MethodBand[] = [RISK_BANDS[0], RISK_BANDS[1], RISK_BANDS[2]];
+
+/** Reachable NEBOSH S x L products (L,S each 1-3) are {1,2,3,4,6,9} - 5, 7 and 8 never occur. */
+export function neboshBand(neboshScoreValue: number): MethodBand {
+  if (neboshScoreValue <= 2) return NEBOSH_BANDS[0];
+  if (neboshScoreValue <= 4) return NEBOSH_BANDS[1];
+  return NEBOSH_BANDS[2];
+}
+
+export const NEBOSH_LEGEND =
+  "Score = Likelihood (1-3) x Severity (1-3), derived from this app's 1-5 scale | Low: 1-2 | Medium: 3-4 | High: 6-9 (5, 7, 8 unreachable)";
+
+// --- Fine-Kinney --------------------------------------------------------------
+//
+// Kinney, G.F. & Wiruth, A.D. (1976), "Practical Risk Analysis for Safety
+// Management". Band cutoffs per safetydojo.org/en/risk-assessment/kinney-method.php
+// - published cutoffs vary slightly by textbook, this specific source is
+// the one cited here. The app-scale-to-Kinney-scale mappings below are
+// this app's own bridging choice, not part of the Kinney & Wiruth method.
+
+/** Index 0 = app Likelihood 1 ... index 4 = app Likelihood 5, mapped onto Kinney's native Likelihood scale. */
+const KINNEY_LIKELIHOOD_BY_APP_LEVEL: readonly number[] = [0.2, 1, 3, 6, 10];
+
+/** Index 0 = app Severity 1 ... index 4 = app Severity 5. Kinney's 100 ("catastrophe, numerous fatalities") is never reached from this app's 1-5 severity scale, by design - the same "some published values are unreachable" pattern as ADOSH-SF's own bands (7, 11, 13, 14). */
+const KINNEY_CONSEQUENCE_BY_APP_LEVEL: readonly number[] = [1, 3, 7, 15, 40];
+
+function clampAppLevel(appLevel: number): number {
+  return Math.min(5, Math.max(1, Math.round(appLevel)));
+}
+
+export function mapAppLikelihoodToKinney(appLikelihood: number): number {
+  return KINNEY_LIKELIHOOD_BY_APP_LEVEL[clampAppLevel(appLikelihood) - 1];
+}
+
+export function mapAppSeverityToKinneyConsequence(appSeverity: number): number {
+  return KINNEY_CONSEQUENCE_BY_APP_LEVEL[clampAppLevel(appSeverity) - 1];
+}
+
+/** Exposure has no 1-5 analog in this app - it's a new field the reviewer sets directly when Fine-Kinney is selected. Values are Kinney's own native exposure scale. */
+export const FINE_KINNEY_EXPOSURE_OPTIONS: readonly { value: number; label: string }[] = [
+  { value: 0.5, label: "Very rare (a few times a year)" },
+  { value: 1, label: "Rare (annually)" },
+  { value: 2, label: "Unusual (monthly)" },
+  { value: 3, label: "Occasional (weekly)" },
+  { value: 6, label: "Frequent (daily)" },
+  { value: 10, label: "Continuous" },
+];
+
+export const FINE_KINNEY_DEFAULT_EXPOSURE = 3; // "Occasional (weekly)"
+
+export function fineKinneyScore(kinneyLikelihood: number, exposure: number, consequence: number): number {
+  return kinneyLikelihood * exposure * consequence;
+}
+
+export const FINE_KINNEY_BANDS: readonly MethodBand[] = [
+  { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
+  { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
+  { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
+  { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] },
+  { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28] },
+] as const;
+
+/** Boundaries are lower-bound-inclusive (the published cutoffs are ambiguous at the boundary): <20 Slight, 20-<70 Possible, 70-<160 Substantial, 160-<320 High, >=320 Very High. */
+export function fineKinneyBand(kinneyScoreValue: number): MethodBand {
+  if (kinneyScoreValue < 20) return FINE_KINNEY_BANDS[0];
+  if (kinneyScoreValue < 70) return FINE_KINNEY_BANDS[1];
+  if (kinneyScoreValue < 160) return FINE_KINNEY_BANDS[2];
+  if (kinneyScoreValue < 320) return FINE_KINNEY_BANDS[3];
+  return FINE_KINNEY_BANDS[4];
+}
+
+export const FINE_KINNEY_LEGEND =
+  "Score = Likelihood x Exposure x Consequence | <20 Slight | 20-<70 Possible | 70-<160 Substantial | 160-<320 High | >=320 Very High (Kinney & Wiruth 1976)";
+
+// --- Registry ------------------------------------------------------------------
+
+export const DEFAULT_SCORING_METHOD_ID: ScoringMethodId = "adosh-sf";
+
+export const SCORING_METHODS: Readonly<Record<ScoringMethodId, ScoringMethod>> = {
+  "adosh-sf": {
+    id: "adosh-sf",
+    label: "ADOSH-SF (5×5, default)",
+    citation: 'ADOSH-SF Technical Guideline "Process of Risk Management", v4.0, Table 3',
+    legend: RISK_MATRIX_LEGEND,
+    bands: RISK_BANDS,
+    usesExposure: false,
+    bridgingNote: null,
+    axisLabels: { likelihood: "Likelihood (1-5)", severity: "Severity (1-5)" },
+    scoreFromAppScale: (likelihood, severity) => score(likelihood, severity),
+    bandForScore: (riskScore) => band(riskScore),
+  },
+  "nebosh-hsg65": {
+    id: "nebosh-hsg65",
+    label: "NEBOSH / HSG65 (3×3)",
+    citation: "NEBOSH National General Certificate handbook & NEBOSH IGC1",
+    legend: NEBOSH_LEGEND,
+    bands: NEBOSH_BANDS,
+    usesExposure: false,
+    bridgingNote:
+      "Likelihood and Severity are compressed from this app's 1-5 scale into NEBOSH's 1-3 scale " +
+      "({1,2}→1, {3,4}→2, {5}→3) - this bucketing is this app's own bridging choice, not part of the NEBOSH syllabus.",
+    axisLabels: { likelihood: "Likelihood (1-3, derived)", severity: "Severity (1-3, derived)" },
+    scoreFromAppScale: (likelihood, severity) =>
+      neboshScore(mapAppLikelihoodToNebosh(likelihood), mapAppSeverityToNebosh(severity)),
+    bandForScore: (riskScore) => neboshBand(riskScore),
+  },
+  "fine-kinney": {
+    id: "fine-kinney",
+    label: "Fine-Kinney (L×E×C)",
+    citation: "Kinney, G.F. & Wiruth, A.D. (1976); cutoffs per safetydojo.org/en/risk-assessment/kinney-method.php",
+    legend: FINE_KINNEY_LEGEND,
+    bands: FINE_KINNEY_BANDS,
+    usesExposure: true,
+    bridgingNote:
+      "Likelihood and Consequence are derived from this app's 1-5 Likelihood/Severity scale via a fixed lookup " +
+      "table; Exposure has no 1-5 analog and is entered directly. This mapping is this app's own bridging choice, " +
+      "not part of the Kinney & Wiruth method itself.",
+    axisLabels: { likelihood: "Likelihood (derived)", severity: "Consequence (derived)", exposure: "Exposure" },
+    scoreFromAppScale: (likelihood, severity, exposure) =>
+      fineKinneyScore(mapAppLikelihoodToKinney(likelihood), exposure, mapAppSeverityToKinneyConsequence(severity)),
+    bandForScore: (riskScore) => fineKinneyBand(riskScore),
+  },
+};
+
+/** Unknown/undefined ids (e.g. an older saved record, or a future method removed later) fall back to ADOSH-SF rather than throwing. */
+export function getScoringMethod(id: string | null | undefined): ScoringMethod {
+  if (id && Object.prototype.hasOwnProperty.call(SCORING_METHODS, id)) {
+    return SCORING_METHODS[id as ScoringMethodId];
+  }
+  return SCORING_METHODS[DEFAULT_SCORING_METHOD_ID];
+}
