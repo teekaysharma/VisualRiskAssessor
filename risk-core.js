@@ -49,10 +49,10 @@ var RiskCore = (() => {
     validateHazards: () => validateHazards
   });
   var RISK_BANDS = [
-    { key: "low", label: "Low Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
-    { key: "moderate", label: "Moderate Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
-    { key: "high", label: "High Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
-    { key: "extreme", label: "Extreme Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] }
+    { key: "low", label: "Low Risk", bg: "#27ae60", textColor: "#212121", rgb: [39, 174, 96], textRgb: [33, 33, 33] },
+    { key: "moderate", label: "Moderate Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15], textRgb: [33, 33, 33] },
+    { key: "high", label: "High Risk", bg: "#e67e22", textColor: "#212121", rgb: [230, 126, 34], textRgb: [33, 33, 33] },
+    { key: "extreme", label: "Extreme Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43], textRgb: [255, 255, 255] }
   ];
   var RISK_MATRIX_LEGEND = "Score = Likelihood (1-5) x Severity (1-5) | Low Risk: 1-3 | Moderate Risk: 4-6 | High Risk: 8-12 | Extreme Risk: 15-25 (ADOSH-SF Technical Guideline v4.0, Table 3)";
   function score(likelihood, severity) {
@@ -164,11 +164,11 @@ var RiskCore = (() => {
     return kinneyLikelihood * exposure * consequence;
   }
   var FINE_KINNEY_BANDS = [
-    { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
-    { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
-    { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
-    { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] },
-    { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28] }
+    { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#212121", rgb: [39, 174, 96], textRgb: [33, 33, 33] },
+    { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15], textRgb: [33, 33, 33] },
+    { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#212121", rgb: [230, 126, 34], textRgb: [33, 33, 33] },
+    { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43], textRgb: [255, 255, 255] },
+    { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28], textRgb: [255, 255, 255] }
   ];
   function fineKinneyBand(kinneyScoreValue) {
     if (kinneyScoreValue < 20) return FINE_KINNEY_BANDS[0];

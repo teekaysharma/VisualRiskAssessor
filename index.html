@@ -137,7 +137,9 @@
     .results-tab-strip { display:flex; gap:20px; border-bottom:1px solid #e6e8ec; margin:14px 0 4px; overflow-x:auto; }
     .results-tab-btn { border:none; background:transparent; cursor:pointer; font-family:inherit; padding:10px 2px; font-size:.92rem; font-weight:600; color:#8a94a6; white-space:nowrap; border-bottom:2.5px solid transparent; }
     .results-tab-btn.active { color:#16233b; font-weight:700; border-bottom-color:#ff6d00; }
+    .results-tab-btn:focus-visible { outline:3px solid #1565c0; outline-offset:2px; }
     .results-tab-panel.hidden { display:none !important; }
+    .results-tab-panel:focus-visible { outline:2px solid #1565c0; outline-offset:2px; }
     .hazard-item { border-left:5px solid var(--mid); background:#fafafa; padding:10px; border-radius:8px; margin-bottom:8px; }
     .risk-low { border-left-color:var(--ok); }
     .risk-medium { border-left-color:var(--mid); }
@@ -151,9 +153,12 @@
     .legend-dot-residual { width:14px; height:14px; background:transparent; border-radius:50%; border:3px solid #212121; display:inline-block; flex-shrink:0; }
     .cell { min-height:60px; min-width:60px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; position:relative; }
     .head { background:#1565c0; color:#fff; }
-    .low { background:#27ae60; color:#fff; }
+    /* .low and .high use dark text, not white: white-on-#27ae60 (2.87:1) and
+       white-on-#e67e22 (2.85:1) both fail WCAG AA's 4.5:1 for normal text;
+       #212121 clears both (5.60:1 / 5.65:1). .med and .ext already passed. */
+    .low { background:#27ae60; color:#212121; }
     .med { background:#f1c40f; }
-    .high { background:#e67e22; color:#fff; }
+    .high { background:#e67e22; color:#212121; }
     .ext { background:#c0392b; color:#fff; }
     .hazard-marker {
       width:22px;
@@ -239,9 +244,14 @@
     .kpi-card.kpi-red { border-color:#c0392b; }
     .kpi-label { font-size:12px; color:#666; font-weight:600; margin-bottom:6px; }
     .kpi-value { font-size:28px; font-weight:700; color:#212121; }
-    .kpi-card.kpi-green .kpi-value { color:#27ae60; }
-    .kpi-card.kpi-yellow .kpi-value { color:#f1c40f; }
-    .kpi-card.kpi-amber .kpi-value { color:#e67e22; }
+    /* Border colors above stay the bright brand accents (decorative, not
+       text). The value text uses darkened variants instead: the accent
+       colors themselves fail WCAG AA's 4.5:1 against this card's white
+       background (green 2.87:1, yellow 1.66:1, amber 2.85:1) except red
+       (5.44:1, left as-is). Each darkened value clears 4.5:1 with margin. */
+    .kpi-card.kpi-green .kpi-value { color:#1e8449; }
+    .kpi-card.kpi-yellow .kpi-value { color:#8a6d00; }
+    .kpi-card.kpi-amber .kpi-value { color:#a8590a; }
     .kpi-card.kpi-red .kpi-value { color:#c0392b; }
     .hoc-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:12px; }
     .hoc-table caption { font-size:14px; font-weight:700; text-align:left; padding:8px 4px; color:#212121; }
@@ -318,19 +328,23 @@
     .risk-table.table-b th:nth-child(9), .risk-table.table-b td:nth-child(9) { min-width:130px; }
     .risk-table.table-b th:nth-child(10), .risk-table.table-b td:nth-child(10) { min-width:100px; }
     .risk-table.table-b th:nth-child(11), .risk-table.table-b td:nth-child(11) { min-width:70px; text-align:center; }
-    .status-open { background:#f44336 !important; color:#fff; }
-    .status-open select { background:#f44336; color:#fff; }
-    .status-inprogress { background:#ff9800 !important; color:#fff; }
-    .status-inprogress select { background:#ff9800; color:#fff; }
-    .status-closed { background:#4caf50 !important; color:#fff; }
-    .status-closed select { background:#4caf50; color:#fff; }
+    /* Darkened from #f44336/#ff9800/#4caf50: white text on those failed
+       WCAG AA's 4.5:1 (3.68 / 2.16 / 2.78). Each replacement clears 4.5:1. */
+    .status-open { background:#c62828 !important; color:#fff; }
+    .status-open select { background:#c62828; color:#fff; }
+    .status-inprogress { background:#a05f00 !important; color:#fff; }
+    .status-inprogress select { background:#a05f00; color:#fff; }
+    .status-closed { background:#2e7d32 !important; color:#fff; }
+    .status-closed select { background:#2e7d32; color:#fff; }
     .mode-badge { display:inline-block; padding:3px 8px; border-radius:999px; font-size:.75rem; font-weight:700; margin-left:8px; vertical-align:middle; }
     .mode-ai { background:#6a1b9a; color:#fff; }
     .mode-ml { background:#1565c0; color:#fff; }
-    .mode-rule { background:#f57c00; color:#fff; }
-    .mode-manual { background:#e65100; color:#fff; }
+    /* Darkened from #f57c00/#e65100: white text on those failed WCAG AA's
+       4.5:1 (2.70 / 3.79). Each replacement clears 4.5:1. */
+    .mode-rule { background:#a85400; color:#fff; }
+    .mode-manual { background:#c04400; color:#fff; }
     .mode-baseline { background:#00695c; color:#fff; }
-    .manual-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#e65100; color:#fff; margin-left:4px; }
+    .manual-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#c04400; color:#fff; margin-left:4px; }
     .baseline-badge { display:inline-block; padding:2px 6px; border-radius:4px; font-size:.7rem; font-weight:700; background:#00695c; color:#fff; margin-left:4px; }
     .context-panel { background:linear-gradient(135deg,#e8f5e9,#e3f2fd); border:2px solid #1565c0; border-radius:14px; padding:18px; margin-bottom:16px; }
     .context-panel h2 { margin:0 0 14px; color:#0d47a1; font-size:1.1rem; display:flex; align-items:center; gap:8px; }
@@ -794,20 +808,20 @@
         </div>
       </div>
 
-      <div class="results-tab-strip" role="tablist">
-        <button type="button" class="results-tab-btn active" data-tab="hazards" role="tab">Hazard Register</button>
-        <button type="button" class="results-tab-btn" data-tab="matrix" role="tab">Risk Matrix</button>
-        <button type="button" class="results-tab-btn" data-tab="compliance" role="tab">Compliance</button>
-        <button type="button" class="results-tab-btn" data-tab="emergency" role="tab">Emergency Plan</button>
-        <button type="button" class="results-tab-btn" data-tab="review" role="tab">HSE Review</button>
+      <div class="results-tab-strip" role="tablist" aria-label="Assessment results">
+        <button type="button" id="tab-hazards" class="results-tab-btn active" data-tab="hazards" role="tab" aria-selected="true" aria-controls="panel-hazards" tabindex="0">Hazard Register</button>
+        <button type="button" id="tab-matrix" class="results-tab-btn" data-tab="matrix" role="tab" aria-selected="false" aria-controls="panel-matrix" tabindex="-1">Risk Matrix</button>
+        <button type="button" id="tab-compliance" class="results-tab-btn" data-tab="compliance" role="tab" aria-selected="false" aria-controls="panel-compliance" tabindex="-1">Compliance</button>
+        <button type="button" id="tab-emergency" class="results-tab-btn" data-tab="emergency" role="tab" aria-selected="false" aria-controls="panel-emergency" tabindex="-1">Emergency Plan</button>
+        <button type="button" id="tab-review" class="results-tab-btn" data-tab="review" role="tab" aria-selected="false" aria-controls="panel-review" tabindex="-1">HSE Review</button>
       </div>
 
-      <div class="results-tab-panel" data-tab-panel="hazards">
+      <div class="results-tab-panel" id="panel-hazards" data-tab-panel="hazards" role="tabpanel" aria-labelledby="tab-hazards" tabindex="0">
         <h3>Detected Hazards &amp; Risk Register</h3>
         <div id="hazardsList"></div>
       </div>
 
-      <div class="results-tab-panel hidden" data-tab-panel="matrix">
+      <div class="results-tab-panel hidden" id="panel-matrix" data-tab-panel="matrix" role="tabpanel" aria-labelledby="tab-matrix" tabindex="0">
         <h3>Risk Matrix</h3>
         <div class="matrix-wrap">
           <div id="riskMatrix" class="matrix"></div>
@@ -826,7 +840,7 @@
         <div id="riskSummary" class="risk-summary"></div>
       </div>
 
-      <div class="results-tab-panel hidden" data-tab-panel="compliance">
+      <div class="results-tab-panel hidden" id="panel-compliance" data-tab-panel="compliance" role="tabpanel" aria-labelledby="tab-compliance" tabindex="0">
         <details id="compliancePanel" open style="margin:12px 0;">
           <summary style="cursor:pointer;font-weight:700;color:#1565c0;font-size:.95rem;padding:8px 0;">
             📋 Compliance Coverage Status
@@ -852,7 +866,7 @@
         <div id="metadataFooter" class="metadata-footer"></div>
       </div>
 
-      <div class="results-tab-panel hidden" data-tab-panel="emergency">
+      <div class="results-tab-panel hidden" id="panel-emergency" data-tab-panel="emergency" role="tabpanel" aria-labelledby="tab-emergency" tabindex="0">
         <details id="emergencySection" class="card" open style="margin-top:0;">
           <summary style="cursor:pointer;font-weight:700;font-size:1rem;color:#b71c1c;padding:12px;">
             🚨 Emergency Preparedness — ISO 45001:2018 §8.2
@@ -881,7 +895,7 @@
         </details>
       </div>
 
-      <div class="results-tab-panel hidden" data-tab-panel="review">
+      <div class="results-tab-panel hidden" id="panel-review" data-tab-panel="review" role="tabpanel" aria-labelledby="tab-review" tabindex="0">
       <div id="hseReviewSection" class="hse-review-section hidden">
         <h3>📋 HSE Officer Review</h3>
         <div class="reviewer-info-grid">
@@ -1493,7 +1507,10 @@
    */
   function switchResultsTab(tab) {
     document.querySelectorAll('.results-tab-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tab);
+      const active = btn.dataset.tab === tab;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', String(active));
+      btn.tabIndex = active ? 0 : -1;
     });
     document.querySelectorAll('.results-tab-panel').forEach(panel => {
       panel.classList.toggle('hidden', panel.dataset.tabPanel !== tab);
@@ -2389,6 +2406,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       return;
     }
     els.riskMatrix.className = 'matrix';
+    els.riskMatrix.setAttribute('role', 'grid');
+    els.riskMatrix.setAttribute('aria-label', 'Risk matrix: likelihood by severity, with hazard markers');
     const allHazardsForMatrix = [...hazards, ...manualHazards];
     const residualPositions = new Map();
     allHazardsForMatrix.forEach((h, i) => {
@@ -2409,12 +2428,16 @@ Before finalising your answer, re-examine the image one more time specifically f
       hazardPositions.get(key).push({ seq: i + 1, name: h.name });
     });
 
-    const add = (txt, cls, l, s) => {
+    const add = (txt, cls, l, s, ariaLabel) => {
       const c = document.createElement('div');
       c.className = `cell ${cls}`;
       if (l && s) {
         c.dataset.l = l;
         c.dataset.s = s;
+      }
+      if (ariaLabel) {
+        c.setAttribute('role', 'gridcell');
+        c.setAttribute('aria-label', ariaLabel);
       }
 
       // Score number at top-center
@@ -2461,15 +2484,16 @@ Before finalising your answer, re-examine the image one more time specifically f
     };
 
     [5, 4, 3, 2, 1].forEach(l => {
-      add(`L${l}`, 'head');
+      add(`L${l}`, 'head', null, null, `Likelihood ${l}`);
       for (let s = 1; s <= 5; s++) {
         const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
-        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[bandForMethod(score).key];
-        add(formatMethodScore(score), cls, l, s);
+        const band = bandForMethod(score);
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[band.key];
+        add(formatMethodScore(score), cls, l, s, `Likelihood ${l}, Severity ${s}, score ${formatMethodScore(score)}, ${band.label}`);
       }
     });
     add('', '');
-    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
+    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head', null, null, `Severity ${s}`));
 
     syncResidualScoreCells(allHazardsForMatrix);
   }
@@ -2955,6 +2979,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       renderFineKinneyBreakdownList();
     } else {
     els.riskMatrix.className = 'matrix';
+    els.riskMatrix.setAttribute('role', 'grid');
+    els.riskMatrix.setAttribute('aria-label', 'Risk matrix: likelihood by severity, with hazard markers');
     els.riskMatrix.textContent = '';
 
     const hazardPositions = new Map();
@@ -2976,12 +3002,16 @@ Before finalising your answer, re-examine the image one more time specifically f
       residualPositions.get(key).push({ seq: i + 1, name: h.name, isManual: h.isManual });
     });
 
-    const add = (txt, cls, l, s) => {
+    const add = (txt, cls, l, s, ariaLabel) => {
       const c = document.createElement('div');
       c.className = `cell ${cls}`;
       if (l && s) {
         c.dataset.l = l;
         c.dataset.s = s;
+      }
+      if (ariaLabel) {
+        c.setAttribute('role', 'gridcell');
+        c.setAttribute('aria-label', ariaLabel);
       }
 
       // Score number at top-center
@@ -3028,15 +3058,16 @@ Before finalising your answer, re-examine the image one more time specifically f
     };
 
     [5, 4, 3, 2, 1].forEach(l => {
-      add(`L${l}`, 'head');
+      add(`L${l}`, 'head', null, null, `Likelihood ${l}`);
       for (let s = 1; s <= 5; s++) {
         const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
-        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[bandForMethod(score).key];
-        add(formatMethodScore(score), cls, l, s);
+        const band = bandForMethod(score);
+        const cls = { low: 'low', moderate: 'med', high: 'high', extreme: 'ext' }[band.key];
+        add(formatMethodScore(score), cls, l, s, `Likelihood ${l}, Severity ${s}, score ${formatMethodScore(score)}, ${band.label}`);
       }
     });
     add('', '');
-    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
+    [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head', null, null, `Severity ${s}`));
     }
 
     renderRiskSummary();
@@ -4182,14 +4213,14 @@ Before finalising your answer, re-examine the image one more time specifically f
               const score = parseFloat(data.cell.raw);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = bandForMethod(score).textRgb;
               data.cell.styles.fontStyle = 'bold';
             }
             if (data.column.index === 11) {
               const score = parseFloat(data.cell.raw);
               const col = scoreColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33,33,33] : [255,255,255];
+              data.cell.styles.textColor = bandForMethod(score).textRgb;
               data.cell.styles.fontStyle = 'bold';
             }
             // Highlight overridden L (column 3) and S (column 4) cells in blue
@@ -4268,7 +4299,7 @@ Before finalising your answer, re-examine the image one more time specifically f
                 const scoreVal = parseFloat(data.cell.raw);
                 const b = pdfMatrixMethod.bandForScore(scoreVal);
                 data.cell.styles.fillColor = b.rgb;
-                data.cell.styles.textColor = (b.key === 'possible') ? [33, 33, 33] : [255, 255, 255];
+                data.cell.styles.textColor = b.textRgb;
                 data.cell.styles.fontStyle = 'bold';
               }
             },
@@ -4336,7 +4367,7 @@ Before finalising your answer, re-examine the image one more time specifically f
               const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
               const col = matrixCellColor(score);
               data.cell.styles.fillColor = col;
-              data.cell.styles.textColor = bandForMethod(score).key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
+              data.cell.styles.textColor = bandForMethod(score).textRgb;
               data.cell.styles.fontStyle = 'bold';
             }
           },
@@ -4354,12 +4385,10 @@ Before finalising your answer, re-examine the image one more time specifically f
               const score = scoreForMethod(l, s, RiskCore.FINE_KINNEY_DEFAULT_EXPOSURE);
               doc.setFontSize(9);
               doc.setFont('helvetica', 'bold');
-              // Use dark text on yellow (moderate band), white on others
-              if (bandForMethod(score).key === 'moderate') {
-                doc.setTextColor(33, 33, 33);
-              } else {
-                doc.setTextColor(255, 255, 255);
-              }
+              // textRgb is band-specific (WCAG AA-checked per band, not just
+              // "yellow gets dark text") — see RISK_BANDS/FINE_KINNEY_BANDS.
+              const scoreTextRgb = bandForMethod(score).textRgb;
+              doc.setTextColor(scoreTextRgb[0], scoreTextRgb[1], scoreTextRgb[2]);
               const scoreY = cellY + 6; // Top of cell with small padding
               doc.text(formatMethodScore(score), cellX + cellW / 2, scoreY, { align: 'center' });
 
@@ -4563,7 +4592,7 @@ Before finalising your answer, re-examine the image one more time specifically f
                   const scoreVal = parseFloat(data.cell.raw);
                   const b = bandForMethod(scoreVal);
                   data.cell.styles.fillColor = b.rgb;
-                  data.cell.styles.textColor = b.key === 'moderate' ? [33, 33, 33] : [255, 255, 255];
+                  data.cell.styles.textColor = b.textRgb;
                   data.cell.styles.fontStyle = 'bold';
                 }
               }
@@ -5399,6 +5428,25 @@ Before finalising your answer, re-examine the image one more time specifically f
   document.querySelectorAll('.results-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchResultsTab(btn.dataset.tab));
   });
+  // ARIA APG tab pattern: arrow keys move focus AND activate (automatic
+  // activation model) — Home/End jump to the first/last tab.
+  const resultsTabStrip = document.querySelector('.results-tab-strip');
+  if (resultsTabStrip) {
+    resultsTabStrip.addEventListener('keydown', e => {
+      const tabs = Array.from(resultsTabStrip.querySelectorAll('.results-tab-btn'));
+      const currentIndex = tabs.indexOf(document.activeElement);
+      if (currentIndex === -1) return;
+      let newIndex = null;
+      if (e.key === 'ArrowRight') newIndex = (currentIndex + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft') newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home') newIndex = 0;
+      else if (e.key === 'End') newIndex = tabs.length - 1;
+      if (newIndex === null) return;
+      e.preventDefault();
+      tabs[newIndex].focus();
+      switchResultsTab(tabs[newIndex].dataset.tab);
+    });
+  }
   updateConnectivityBadge();
 
   // ── AI provider selection ───────────────────────────────────────────────
