@@ -3113,7 +3113,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       tdVerified.id = `verified_cell_${i}`;
       const verifiedCb = document.createElement('input');
       verifiedCb.type = 'checkbox';
-      verifiedCb.id = `verified_${i}`;
+      verifiedCb.id = `review_verified_${i}`;
       verifiedCb.checked = rd.verified;
       verifiedCb.addEventListener('change', () => toggleVerified(i));
       tdVerified.appendChild(verifiedCb);
@@ -3207,7 +3207,7 @@ Before finalising your answer, re-examine the image one more time specifically f
   }
   
   function toggleVerified(index) {
-    const cb = $(`verified_${index}`);
+    const cb = $(`review_verified_${index}`);
     const row = $(`review_row_${index}`);
     
     reviewData[index].verified = cb.checked;
