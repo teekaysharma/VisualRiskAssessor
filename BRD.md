@@ -158,14 +158,12 @@ justification):
 
 ### 5.3 Implementation status note
 
-Everything in §5.1–5.2 has been built and individually verified live in a
-browser. As of this writing, several pieces exist as open, tested, but not
-yet merged pull requests against `main` (PPE/Ladders/Scaffold-tags
-checklists, AI Trust Signals, Site Trends, selectable scoring methodology) —
-this section describes the product's designed and implemented functional
-scope, not a claim that every listed capability is already live in the
-public GitHub Pages deployment at any given moment. Check `git log main` for
-current merge state.
+Everything in §5.1–5.2 has been built, individually verified live in a
+browser, and merged into `main` as of 2026-09-05 (PPE/Ladders/
+Scaffold-tags checklists: #94; AI Trust Signals: #97; Site Trends: #98;
+selectable scoring methodology: #99). This section describes the
+product's designed and implemented functional scope — check
+`git log main` for the current state if this note has aged since.
 
 ## 6. Non-Functional Requirements
 
