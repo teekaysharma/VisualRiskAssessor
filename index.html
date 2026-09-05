@@ -231,7 +231,7 @@
     .hazard-marker-count:hover .hazard-tooltip {
       display:block;
     }
-    .risk-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+    .risk-summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:20px; }
     .kpi-card { border:2px solid #ddd; border-radius:10px; padding:14px 12px; text-align:center; }
     .kpi-card.kpi-green { border-color:#27ae60; }
     .kpi-card.kpi-yellow { border-color:#f1c40f; }
@@ -2473,6 +2473,74 @@ Before finalising your answer, re-examine the image one more time specifically f
 
     syncResidualScoreCells(allHazardsForMatrix);
   }
+
+  // ── Risk Summary Dashboard ─────────────────────────────────────────────────
+  // Method-aware: classifies every hazard by its own band KEY under the
+  // currently-selected method (via methodBandToSeverityTier), not a
+  // hard-coded numeric threshold — so this no longer silently shows
+  // ADOSH-SF-shaped numbers/colors while NEBOSH or Fine-Kinney is active
+  // and displayed everywhere else on the page. Mirrored in exportPDF's
+  // KPI Summary block. Its own function (not inlined in render()) so the
+  // review-coverage tiles can refresh from toggleOverride()/toggleVerified()
+  // without triggering a full render() — those intentionally patch the
+  // review table in place rather than rebuild it, to avoid losing focus/
+  // scroll mid-review.
+  function renderRiskSummary() {
+    const allHazards = [...baselineHazards, ...hazards, ...manualHazards];
+    const totalHazards = allHazards.length;
+    const highestRisk = overall;
+    const highestRiskTier = methodBandToSeverityTier(bandForMethod(highestRisk).key);
+    const hazardTiers = allHazards.map(h => methodBandToSeverityTier(bandForMethod(scoreForMethod(h.L, h.S, h.exposure)).key));
+    const criticalCount = hazardTiers.filter(t => t === 'critical').length;
+    const highCount = hazardTiers.filter(t => t === 'high').length;
+    const criticalHighCombined = criticalCount + highCount;
+    let overallSiteRating = 'Low';
+    if (criticalCount > 0) overallSiteRating = 'Critical';
+    else if (highCount > 0) overallSiteRating = 'High';
+    else if (hazardTiers.some(t => t === 'medium')) overallSiteRating = 'Medium';
+    const overallSiteTier = overallSiteRating.toLowerCase();
+    const criticalHighTier = criticalCount > 0 ? 'critical' : (highCount > 0 ? 'high' : 'low');
+
+    // Review-coverage tiles: how much of what the AI flagged as needing a
+    // human look has actually been looked at, not just the final score —
+    // reuses hazardNeedsReview() and reviewData, the same sign-off-gate
+    // logic already enforced elsewhere, not a new definition of "needs
+    // review".
+    const needsReviewEntries = allHazards
+      .map((h, i) => ({ h, i }))
+      .filter(({ h }) => h.source === 'ai' && hazardNeedsReview(h));
+    const needsReviewCount = needsReviewEntries.length;
+    const clearedCount = needsReviewEntries.filter(({ i }) => reviewData[i]?.override).length;
+    const coverageLabel = needsReviewCount === 0 ? '✓ None flagged' : `${clearedCount} / ${needsReviewCount}`;
+    const coverageTier = needsReviewCount === 0 || clearedCount === needsReviewCount ? 'low' : 'high';
+
+    els.riskSummary.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">Total Hazards Identified</div>
+        <div class="kpi-value">${totalHazards}</div>
+      </div>
+      <div class="kpi-card ${kpiClassForTier(highestRiskTier)}">
+        <div class="kpi-label">Highest Risk Score</div>
+        <div class="kpi-value">${formatMethodScore(highestRisk)}</div>
+      </div>
+      <div class="kpi-card ${kpiClassForTier(criticalHighTier)}">
+        <div class="kpi-label">Critical + High Count</div>
+        <div class="kpi-value">${criticalHighCombined}</div>
+      </div>
+      <div class="kpi-card ${kpiClassForTier(overallSiteTier)}">
+        <div class="kpi-label">Overall Site Risk Rating</div>
+        <div class="kpi-value">${overallSiteRating}</div>
+      </div>
+      <div class="kpi-card ${needsReviewCount > 0 ? 'kpi-amber' : 'kpi-green'}">
+        <div class="kpi-label">AI Findings Needing Review</div>
+        <div class="kpi-value">${needsReviewCount}</div>
+      </div>
+      <div class="kpi-card ${kpiClassForTier(coverageTier)}">
+        <div class="kpi-label">Needs-Review Cleared</div>
+        <div class="kpi-value">${coverageLabel}</div>
+      </div>
+    `;
+  }
   function render() {
     els.results.classList.remove('hidden');
     const isPlaceholderImage = imageData && imageData.startsWith('data:image/svg+xml');
@@ -2971,47 +3039,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     [1, 2, 3, 4, 5].forEach(s => add(`S${s}`, 'head'));
     }
 
-    // ── Risk Summary Dashboard ─────────────────────────────────────────────────
-    // NOTE: intentionally still ADOSH-SF-only (h.risk, hard-coded 4/9/16
-    // thresholds unrelated to RiskCore.band()). Explicitly out of scope for
-    // the selectable-scoring-methodology change — see the matching note in
-    // exportPDF's KPI Summary block.
-    const totalHazards = allHazards.length;
-    const highestRisk = overall;
-    const highestRiskBand = highestRisk <= 4 ? 'kpi-green' : highestRisk <= 9 ? 'kpi-yellow' : highestRisk <= 16 ? 'kpi-amber' : 'kpi-red';
-    const criticalCount = allHazards.filter(h => h.risk >= 17).length;
-    const highCount = allHazards.filter(h => h.risk >= 10 && h.risk <= 16).length;
-    const criticalHighCombined = criticalCount + highCount;
-    let overallSiteRating = 'Low';
-    let overallSiteBand = 'kpi-green';
-    if (criticalCount > 0) {
-      overallSiteRating = 'Critical';
-      overallSiteBand = 'kpi-red';
-    } else if (highCount > 0) {
-      overallSiteRating = 'High';
-      overallSiteBand = 'kpi-amber';
-    } else if (allHazards.length > 0 && allHazards.every(h => h.risk <= 9)) {
-      overallSiteRating = 'Medium';
-      overallSiteBand = 'kpi-yellow';
-    }
-    els.riskSummary.innerHTML = `
-      <div class="kpi-card">
-        <div class="kpi-label">Total Hazards Identified</div>
-        <div class="kpi-value">${totalHazards}</div>
-      </div>
-      <div class="kpi-card ${highestRiskBand}">
-        <div class="kpi-label">Highest Risk Score</div>
-        <div class="kpi-value">${highestRisk}</div>
-      </div>
-      <div class="kpi-card kpi-amber">
-        <div class="kpi-label">Critical + High Count</div>
-        <div class="kpi-value">${criticalHighCombined}</div>
-      </div>
-      <div class="kpi-card ${overallSiteBand}">
-        <div class="kpi-label">Overall Site Risk Rating</div>
-        <div class="kpi-value">${overallSiteRating}</div>
-      </div>
-    `;
+    renderRiskSummary();
 
     // ── Hierarchy of Controls ──────────────────────────────────────────────────
     const hocTable = document.createElement('table');
@@ -3319,6 +3347,7 @@ Before finalising your answer, re-examine the image one more time specifically f
 
     // Update cell highlighting
     updateCellHighlighting(index);
+    renderRiskSummary();
   }
 
   function updateReviewData(index) {
@@ -3482,6 +3511,29 @@ Before finalising your answer, re-examine the image one more time specifically f
   /** ADOSH-SF/NEBOSH scores are always integers (integer inputs, integer math); Fine-Kinney's Likelihood/Exposure/Consequence can produce a fractional product, shown to one decimal place. */
   function formatMethodScore(scoreValue) {
     return Number.isInteger(scoreValue) ? String(scoreValue) : (Math.round(scoreValue * 10) / 10).toString();
+  }
+
+  /**
+   * Maps a scoring method's own band KEY onto the KPI dashboard's four
+   * severity tiers (critical/high/medium/low) — not a re-derivation from
+   * the raw score, which is what let the dashboard silently stay
+   * ADOSH-SF-only before. ADOSH-SF and NEBOSH share identical band keys
+   * (low/moderate/high/extreme) and map identically; Fine-Kinney's fifth
+   * band (very-high, with no analog in the other two) gets its own row.
+   * Classifying by key means no new numeric cutoffs need inventing per
+   * method — NEBOSH's 1-9 range and Fine-Kinney's much wider range both
+   * "just work" through whichever method's own bandForScore() already is.
+   */
+  function methodBandToSeverityTier(bandKey) {
+    const TIERS = {
+      extreme: 'critical', high: 'high', moderate: 'medium', low: 'low',
+      'very-high': 'critical', substantial: 'high', possible: 'medium', slight: 'low',
+    };
+    return TIERS[bandKey] || 'low';
+  }
+
+  function kpiClassForTier(tier) {
+    return { critical: 'kpi-red', high: 'kpi-amber', medium: 'kpi-yellow', low: 'kpi-green' }[tier] || 'kpi-green';
   }
 
   /**
@@ -4028,28 +4080,35 @@ Before finalising your answer, re-examine the image one more time specifically f
       }
 
       // ── KPI Summary ──
-      // NOTE: intentionally still ADOSH-SF-only (h.risk, hard-coded 10/17
-      // thresholds unrelated to RiskCore.band()). Explicitly out of scope
-      // for the selectable-scoring-methodology change — this dashboard
-      // needs its own equivalent-bands design per method, a separate PR.
+      // Method-aware, mirroring the on-screen Risk Summary Dashboard exactly
+      // (see render() for the shared reasoning) — classifies by band KEY via
+      // methodBandToSeverityTier(), not a hard-coded numeric threshold.
       checkPageBreak(20);
       sectionTitle('Risk Summary');
       const allHazardsForPDF = [...baselineHazards, ...hazards, ...manualHazards];
       const totalHazards = allHazardsForPDF.length;
-      const criticalCount = allHazardsForPDF.filter(h => h.risk >= 17).length;
-      const highCount = allHazardsForPDF.filter(h => h.risk >= 10 && h.risk <= 16).length;
+      const pdfHazardTiers = allHazardsForPDF.map(h => methodBandToSeverityTier(bandForMethod(scoreForMethod(h.L, h.S, h.exposure)).key));
+      const criticalCount = pdfHazardTiers.filter(t => t === 'critical').length;
+      const highCount = pdfHazardTiers.filter(t => t === 'high').length;
       let overallSiteRating = 'Low';
       if (criticalCount > 0) overallSiteRating = 'Critical';
       else if (highCount > 0) overallSiteRating = 'High';
-      else if (allHazardsForPDF.length > 0 && allHazardsForPDF.every(h => h.risk <= 9)) overallSiteRating = 'Medium';
+      else if (pdfHazardTiers.some(t => t === 'medium')) overallSiteRating = 'Medium';
+
+      const pdfNeedsReviewEntries = allHazardsForPDF
+        .map((h, i) => ({ h, i }))
+        .filter(({ h }) => h.source === 'ai' && hazardNeedsReview(h));
+      const pdfNeedsReviewCount = pdfNeedsReviewEntries.length;
+      const pdfClearedCount = pdfNeedsReviewEntries.filter(({ i }) => reviewData[i]?.override).length;
+      const pdfCoverageLabel = pdfNeedsReviewCount === 0 ? 'None flagged' : `${pdfClearedCount} / ${pdfNeedsReviewCount}`;
 
       doc.autoTable({
         startY: y,
-        head: [['Total Hazards', 'Highest Risk Score', 'Critical + High', 'Overall Site Rating']],
-        body: [[totalHazards, overall, criticalCount + highCount, overallSiteRating]],
+        head: [['Total Hazards', 'Highest Risk Score', 'Critical + High', 'Overall Site Rating', 'Needs Review', 'Review Cleared']],
+        body: [[totalHazards, formatMethodScore(overall), criticalCount + highCount, overallSiteRating, pdfNeedsReviewCount, pdfCoverageLabel]],
         theme: 'grid',
-        headStyles: { fillColor: [66, 66, 66], textColor: 255, fontStyle: 'bold', fontSize: 10 },
-        bodyStyles: { fontSize: 12, fontStyle: 'bold', halign: 'center' },
+        headStyles: { fillColor: [66, 66, 66], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 11, fontStyle: 'bold', halign: 'center' },
         margin: { left: margin, right: margin }
       });
       y = doc.lastAutoTable.finalY + 6;
