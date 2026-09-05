@@ -117,7 +117,23 @@
     #uploadArea { border:2px dashed var(--s); border-radius:10px; padding:20px; margin-top:12px; background:#eef6ff; cursor:pointer; }
     #uploadArea:focus-visible { outline:3px solid #000; }
     #cameraSection { text-align:center; margin-top:12px; }
-    #videoPreview,#resultImg { width:100%; max-width:620px; border-radius:10px; background:#000; }
+    #videoPreview { width:100%; max-width:620px; border-radius:10px; background:#000; }
+    .result-img-wrap { position:relative; display:block; width:100%; max-width:620px; }
+    #resultImg { width:100%; display:block; border-radius:10px; background:#000; }
+    #photoMarkerOverlay { position:absolute; inset:0; pointer-events:none; }
+    .photo-marker {
+      position:absolute; transform:translate(-50%,-50%);
+      width:26px; height:26px; border-radius:50%;
+      background:#c0392b; color:#fff; font-weight:700; font-size:13px;
+      display:flex; align-items:center; justify-content:center;
+      border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.5);
+    }
+    .marking-mode-banner {
+      background:#fff3cd; color:#694f00; border-radius:8px; padding:8px 12px;
+      margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;
+      gap:10px; font-size:.88rem; flex-wrap:wrap; border:2px solid #e0a800;
+    }
+    .marking-mode-banner .btn { padding:5px 12px; font-size:.8rem; }
     .warning { background:#fff3cd; color:#694f00; border-radius:8px; padding:10px; margin-bottom:10px; }
     #fallbackWarning { font-weight:700; border:2px solid #e0a800; }
     .info { background:#e3f2fd; color:#0d47a1; border-radius:8px; padding:10px; margin-bottom:10px; }
@@ -784,7 +800,14 @@
       <h2 style="margin-top:0">Assessment Results</h2>
       <div id="fallbackWarning" class="warning hidden">⚠️ ML model unavailable. Showing rule-based keyword matching.</div>
       <div id="aiInfo" class="info hidden">🤖 AI Vision analysis used for enhanced hazard identification.</div>
-      <img id="resultImg" alt="Analyzed image" />
+      <div id="markingModeBanner" class="marking-mode-banner hidden">
+        <span>📍 Click on the photo to place a marker for: <strong id="markingModeHazardName"></strong></span>
+        <button type="button" class="btn btn-outline" id="btnCancelMarking">Cancel</button>
+      </div>
+      <div id="resultImgWrap" class="result-img-wrap">
+        <img id="resultImg" alt="Analyzed image" />
+        <div id="photoMarkerOverlay" aria-hidden="true"></div>
+      </div>
 
       <div class="scoring-method-bar">
         <label for="scoringMethodSelect">📐 Scoring Method</label>
@@ -1035,6 +1058,8 @@
   const els = {
     envWarning: $('envWarning'), results: $('results'), fileInput: $('fileInput'), uploadArea: $('uploadArea'),
     cameraSection: $('cameraSection'), videoPreview: $('videoPreview'), resultImg: $('resultImg'),
+    resultImgWrap: $('resultImgWrap'), photoMarkerOverlay: $('photoMarkerOverlay'),
+    markingModeBanner: $('markingModeBanner'), markingModeHazardName: $('markingModeHazardName'), btnCancelMarking: $('btnCancelMarking'),
     overallScore: $('overallScore'), overallLevel: $('overallLevel'), hazardsList: $('hazardsList'),
     riskMatrix: $('riskMatrix'), recsList: $('recsList'), fallbackWarning: $('fallbackWarning'),
     aiInfo: $('aiInfo'), loading: $('loading'), loadingMsg: $('loadingMsg'), modeBadge: $('modeBadge'),
@@ -1089,6 +1114,9 @@
   // the plan-plotting feature (that needs real calibration and is tracked
   // separately). null until the assessor explicitly taps "Use my location".
   let siteGPS = null;
+  // Index into [...baselineHazards, ...hazards, ...manualHazards] while the
+  // reviewer is in "click the photo to place a marker" mode; null otherwise.
+  let markingHazardIndex = null;
   let manualHazards = [];
   let useDemoMode = false;
   let baselineHazards = [];
@@ -2565,11 +2593,73 @@ Before finalising your answer, re-examine the image one more time specifically f
       </div>
     `;
   }
+
+  // ── Photo annotation/markup ──────────────────────────────────────────────
+  // Human-only marking (never AI-placed): the AI's JSON schema has no
+  // coordinate output, and vision models aren't reliable at precise pixel
+  // localization from a description-focused prompt — a confidently-wrong
+  // marker would be exactly the kind of ungrounded output this app avoids
+  // elsewhere. A reviewer placing their own marker is safe and closes the
+  // real gap (a marked photo vs. an unmarked one).
+  //
+  // Stored as relative percentage coordinates (h.marker = {xPct, yPct}),
+  // not absolute pixels, so it survives both responsive display-size
+  // changes and the thumbnail-only history constraint (full photos are
+  // never persisted — only a thumbnail). Rendered as a plain CSS
+  // percentage position inside a wrap sized to match the image exactly,
+  // so no resize/load listener is needed to keep it aligned.
+  function startMarkingMode(index) {
+    const allHazardsNow = [...baselineHazards, ...hazards, ...manualHazards];
+    const h = allHazardsNow[index];
+    if (!h) return;
+    markingHazardIndex = index;
+    if (els.markingModeHazardName) els.markingModeHazardName.textContent = h.name;
+    if (els.markingModeBanner) els.markingModeBanner.classList.remove('hidden');
+    els.resultImg.style.cursor = 'crosshair';
+  }
+
+  function cancelMarkingMode() {
+    markingHazardIndex = null;
+    if (els.markingModeBanner) els.markingModeBanner.classList.add('hidden');
+    els.resultImg.style.cursor = '';
+  }
+
+  function handlePhotoClick(e) {
+    if (markingHazardIndex === null) return;
+    const xPct = Math.max(0, Math.min(100, (e.offsetX / els.resultImg.clientWidth) * 100));
+    const yPct = Math.max(0, Math.min(100, (e.offsetY / els.resultImg.clientHeight) * 100));
+    const allHazardsNow = [...baselineHazards, ...hazards, ...manualHazards];
+    const h = allHazardsNow[markingHazardIndex];
+    if (h) h.marker = { xPct, yPct };
+    cancelMarkingMode();
+    render();
+  }
+
+  function renderPhotoMarkers() {
+    if (!els.photoMarkerOverlay) return;
+    els.photoMarkerOverlay.textContent = '';
+    if (!imageData || imageData.startsWith('data:image/svg+xml')) return;
+    const allHazardsNow = [...baselineHazards, ...hazards, ...manualHazards];
+    allHazardsNow.forEach((h, i) => {
+      if (!h.marker) return;
+      const dot = document.createElement('div');
+      dot.className = 'photo-marker';
+      dot.style.left = `${h.marker.xPct}%`;
+      dot.style.top = `${h.marker.yPct}%`;
+      dot.textContent = String(i + 1);
+      dot.title = h.name;
+      els.photoMarkerOverlay.appendChild(dot);
+    });
+  }
+
   function render() {
     els.results.classList.remove('hidden');
     const isPlaceholderImage = imageData && imageData.startsWith('data:image/svg+xml');
     els.resultImg.src = isPlaceholderImage ? '' : (imageData || '');
     els.resultImg.style.display = isPlaceholderImage || !imageData ? 'none' : 'block';
+    if (els.resultImgWrap) els.resultImgWrap.style.display = isPlaceholderImage || !imageData ? 'none' : 'block';
+    cancelMarkingMode();
+    renderPhotoMarkers();
 
     // Always-visible indicator of which detection mode actually produced
     // these results — never a quiet internal flag. A coco/rule-based
@@ -2662,6 +2752,10 @@ Before finalising your answer, re-examine the image one more time specifically f
     tableB.appendChild(theadB);
     const tbodyB = document.createElement('tbody');
 
+    // Marking requires a real, visible photo — Manual/baseline entries have
+    // no image to mark (Manual Mode's placeholder SVG is hidden, not shown).
+    const canMark = !!imageData && !isPlaceholderImage;
+
     allHazards.forEach((h, i) => {
       const rowScore = scoreForMethod(h.L, h.S, h.exposure);
       const hr = bandForMethod(rowScore);
@@ -2726,6 +2820,7 @@ Before finalising your answer, re-examine the image one more time specifically f
           <td>
             <button class="edit-icon-btn" id="tableA_save_${i}" title="Save">💾</button>
             <button class="edit-icon-btn" id="tableA_cancel_${i}" title="Cancel">❌</button>
+            <button class="edit-icon-btn" id="tableA_mark_${i}" title="${h.marker ? 'Remove photo marker' : 'Mark on photo'}" ${canMark ? '' : 'disabled'}>${h.marker ? '📍' : '📌'}</button>
           </td>
         `;
       } else {
@@ -2741,11 +2836,24 @@ Before finalising your answer, re-examine the image one more time specifically f
           <td>${Math.round((h.conf || 0) * 100)}%${h.source === 'ai' && hazardNeedsReview(h) ? ` <span title="${h.key === 'unclear' ? 'AI could not clearly identify this — requires human verification' : 'Low or missing AI confidence — verify before sign-off'}" style="color:#c0392b;font-weight:700">⚠ Review</span>` : ''}</td>
           <td>
             <button class="edit-icon-btn" id="tableA_edit_${i}" title="Edit L/S" ${h.verified ? 'disabled' : ''}>✏️</button>
+            <button class="edit-icon-btn" id="tableA_mark_${i}" title="${h.marker ? 'Remove photo marker' : 'Mark on photo'}" ${canMark ? '' : 'disabled'}>${h.marker ? '📍' : '📌'}</button>
           </td>
         `;
       }
       tbodyA.appendChild(trA);
-      
+
+      const markBtn = trA.querySelector(`#tableA_mark_${i}`);
+      if (markBtn && canMark) {
+        markBtn.addEventListener('click', () => {
+          if (h.marker) {
+            delete h.marker;
+            render();
+          } else {
+            startMarkingMode(i);
+          }
+        });
+      }
+
       // Attach event listeners after adding to DOM
       if (isEditing) {
         const lSelect = trA.querySelector(`#tableA_L_${i}`);
@@ -4105,8 +4213,34 @@ Before finalising your answer, re-examine the image one more time specifically f
           const imgW = contentW;
           const imgH = Math.min(imgW / imgAspect, 80);
           checkPageBreak(imgH + 4);
-          doc.addImage(imageData, 'JPEG', margin, y, imgW, imgH);
+          const imgX = margin, imgY = y;
+          doc.addImage(imageData, 'JPEG', imgX, imgY, imgW, imgH);
+
+          // Same numbered markers as the on-screen photo overlay, scaled
+          // from the same relative xPct/yPct into this image's PDF placement.
+          const allHazardsForImage = [...baselineHazards, ...hazards, ...manualHazards];
+          const markedHazards = allHazardsForImage.map((h, i) => ({ h, i })).filter(({ h }) => h.marker);
+          markedHazards.forEach(({ h, i }) => {
+            const mx = imgX + (h.marker.xPct / 100) * imgW;
+            const my = imgY + (h.marker.yPct / 100) * imgH;
+            doc.setFillColor(192, 57, 43);
+            doc.setDrawColor(255, 255, 255);
+            doc.setLineWidth(0.3);
+            doc.circle(mx, my, 2.2, 'FD');
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(255, 255, 255);
+            doc.text(String(i + 1), mx, my + 0.9, { align: 'center' });
+          });
+
           y += imgH + 6;
+          if (markedHazards.length > 0) {
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('Numbered markers correspond to hazard # in the Risk Register.', imgX, y);
+            y += 5;
+          }
         } catch (_) {}
       }
 
@@ -4798,6 +4932,7 @@ Before finalising your answer, re-examine the image one more time specifically f
   }
   function resetApp() {
     stopCamera();
+    cancelMarkingMode();
     hazards = []; manualHazards = []; baselineHazards = []; overall = 0; imageData = null; analysisMode = 'rule-based'; useDemoMode = false;
     pendingAnalysis = null; assessmentTimestamp = null;
     manualModeActive = false;
@@ -5447,6 +5582,11 @@ Before finalising your answer, re-examine the image one more time specifically f
       switchResultsTab(tabs[newIndex].dataset.tab);
     });
   }
+  els.resultImg.addEventListener('click', handlePhotoClick);
+  if (els.btnCancelMarking) els.btnCancelMarking.addEventListener('click', cancelMarkingMode);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && markingHazardIndex !== null) cancelMarkingMode();
+  });
   updateConnectivityBadge();
 
   // ── AI provider selection ───────────────────────────────────────────────
