@@ -62,6 +62,12 @@ Then open `http://localhost:8000`. Camera access requires `localhost` or
 - `sw.js` / `manifest.json` — service worker and PWA manifest.
 - `disclaimer.html` — standalone legal disclaimer page.
 
+## Business requirements
+
+See [BRD.md](BRD.md) for the standing business requirements document —
+problem statement, scope, functional/non-functional requirements, growth
+roadmap, and risks.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
