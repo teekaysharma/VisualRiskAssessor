@@ -18,17 +18,25 @@ export interface RiskBand {
   label: string;
   /** Hex background colour used consistently across UI and matrix. */
   bg: string;
-  /** Hex text colour for use against `bg`. */
+  /**
+   * Hex text colour for use against `bg`. WCAG 2.2 AA requires 4.5:1 for
+   * normal-size text; white-on-`bg` only clears that for "extreme"
+   * (5.44:1) and "moderate" already used dark text. "low" (2.87:1) and
+   * "high" (2.85:1) both failed against white, so they use the same dark
+   * text as "moderate" instead of a new colour.
+   */
   textColor: string;
   /** Same colour as `bg`, pre-split for jsPDF's setFillColor(r, g, b). */
   rgb: readonly [number, number, number];
+  /** Same colour as `textColor`, pre-split for jsPDF's setTextColor(r, g, b). */
+  textRgb: readonly [number, number, number];
 }
 
 export const RISK_BANDS: readonly RiskBand[] = [
-  { key: "low", label: "Low Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
-  { key: "moderate", label: "Moderate Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
-  { key: "high", label: "High Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
-  { key: "extreme", label: "Extreme Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] },
+  { key: "low", label: "Low Risk", bg: "#27ae60", textColor: "#212121", rgb: [39, 174, 96], textRgb: [33, 33, 33] },
+  { key: "moderate", label: "Moderate Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15], textRgb: [33, 33, 33] },
+  { key: "high", label: "High Risk", bg: "#e67e22", textColor: "#212121", rgb: [230, 126, 34], textRgb: [33, 33, 33] },
+  { key: "extreme", label: "Extreme Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43], textRgb: [255, 255, 255] },
 ] as const;
 
 export const RISK_MATRIX_LEGEND =
@@ -218,6 +226,8 @@ export interface MethodBand {
   bg: string;
   textColor: string;
   rgb: readonly [number, number, number];
+  /** Same colour as `textColor`, pre-split for jsPDF's setTextColor(r, g, b). */
+  textRgb: readonly [number, number, number];
 }
 
 export interface ScoringMethod {
@@ -308,12 +318,17 @@ export function fineKinneyScore(kinneyLikelihood: number, exposure: number, cons
   return kinneyLikelihood * exposure * consequence;
 }
 
+// Same WCAG AA contrast fix as RISK_BANDS above: "slight" and "substantial"
+// share ADOSH-SF's green/orange, which fail 4.5:1 against white (2.87:1 and
+// 2.85:1) and so get the same dark text. "high" (5.44:1) and "very-high"
+// (9.95:1, despite looking like the riskiest colour) both already pass
+// against white and are left alone.
 export const FINE_KINNEY_BANDS: readonly MethodBand[] = [
-  { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#ffffff", rgb: [39, 174, 96] },
-  { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15] },
-  { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#ffffff", rgb: [230, 126, 34] },
-  { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43] },
-  { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28] },
+  { key: "slight", label: "Slight Risk", bg: "#27ae60", textColor: "#212121", rgb: [39, 174, 96], textRgb: [33, 33, 33] },
+  { key: "possible", label: "Possible Risk", bg: "#f1c40f", textColor: "#212121", rgb: [241, 196, 15], textRgb: [33, 33, 33] },
+  { key: "substantial", label: "Substantial Risk", bg: "#e67e22", textColor: "#212121", rgb: [230, 126, 34], textRgb: [33, 33, 33] },
+  { key: "high", label: "High Risk", bg: "#c0392b", textColor: "#ffffff", rgb: [192, 57, 43], textRgb: [255, 255, 255] },
+  { key: "very-high", label: "Very High Risk", bg: "#7b241c", textColor: "#ffffff", rgb: [123, 36, 28], textRgb: [255, 255, 255] },
 ] as const;
 
 /** Boundaries are lower-bound-inclusive (the published cutoffs are ambiguous at the boundary): <20 Slight, 20-<70 Possible, 70-<160 Substantial, 160-<320 High, >=320 Very High. */
