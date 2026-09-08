@@ -369,6 +369,7 @@
     .context-group label { display:block; font-weight:700; font-size:.82rem; color:#1565c0; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
     .context-select { width:100%; padding:9px 10px; border:1.5px solid #90caf9; border-radius:8px; font-size:.93rem; background:#fff; color:#212121; cursor:pointer; font-family:inherit; transition:border-color .2s; }
     .context-select:focus { outline:none; border-color:#1565c0; box-shadow:0 0 0 2px rgba(21,101,192,.2); }
+    .context-panel textarea.context-select { cursor:text; resize:vertical; }
     .context-hint { margin-top:10px; font-size:.8rem; color:#388e3c; font-style:italic; display:flex; align-items:center; gap:5px; }
     .baseline-info { margin-top:12px; padding:10px 12px; background:#fff; border-radius:8px; border-left:4px solid #00695c; display:none; }
     .baseline-info strong { color:#00695c; }
@@ -693,6 +694,12 @@
         </div>
       </div>
       <div class="context-hint">💡 Select all three fields to pre-load a baseline hazard set into the risk register.</div>
+      <div class="context-group" style="margin-top:14px;">
+        <label for="siteContextNotes">📝 Anything else the AI should know? (optional)</label>
+        <textarea id="siteContextNotes" class="context-select" rows="2" maxlength="500"
+          placeholder="e.g. GRC/resin lay-up area, rail vehicle undergoing isolation for maintenance, confined mezzanine storage — anything the dropdowns above don't capture"></textarea>
+        <div class="context-hint" style="margin-top:4px;">💡 This helps the AI calibrate its attention — it still checks every hazard category no matter what you write here.</div>
+      </div>
       <div id="baselineInfo" class="baseline-info">
         <strong>✅ Baseline hazards loaded:</strong> <span id="baselineCount">0</span> hazard(s) pre-populated from ADOSH-SF typical risk profiles.
         <div id="baselineTags" class="baseline-tags"></div>
@@ -1083,6 +1090,7 @@
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
     siteLocationName: $('siteLocationName'), btnDetectLocation: $('btnDetectLocation'), siteGPSDisplay: $('siteGPSDisplay'),
+    siteContextNotes: $('siteContextNotes'),
     btnSettingsJump: $('btnSettingsJump'), navAssessMobile: $('navAssessMobile'), navHistoryMobile: $('navHistoryMobile'), navSettingsMobile: $('navSettingsMobile'),
     navAssessDesktop: $('navAssessDesktop'), navHistoryDesktop: $('navHistoryDesktop'), navSettingsDesktop: $('navSettingsDesktop')
   };
@@ -2083,6 +2091,30 @@
       throw new Error('Demo mode is not configured on this site yet (see demo-proxy/README.md)');
     }
 
+    // Assessor-provided context (dropdowns + optional freeform notes) —
+    // passed to the model purely to sharpen attention, never to narrow
+    // which hazard categories it still checks. Built per-field (unlike the
+    // baseline-hazard preload's all-three-required hasContext gate below in
+    // render()/exportPDF()) since even a single filled field, or just the
+    // freeform note alone, is still useful calibration signal on its own.
+    const promptCtxIndustryEl = $('ctxIndustry');
+    const promptCtxTaskEl = $('ctxTask');
+    const promptCtxLocationEl = $('ctxLocation');
+    const promptCtxLines = [];
+    if (promptCtxIndustryEl.value) promptCtxLines.push(`Industry: ${promptCtxIndustryEl.options[promptCtxIndustryEl.selectedIndex]?.text || ''}`);
+    if (promptCtxTaskEl.value) promptCtxLines.push(`Task type: ${promptCtxTaskEl.options[promptCtxTaskEl.selectedIndex]?.text || ''}`);
+    if (promptCtxLocationEl.value) promptCtxLines.push(`Location type: ${promptCtxLocationEl.options[promptCtxLocationEl.selectedIndex]?.text || ''}`);
+    // .slice(0, 500) is a defensive belt-and-suspenders cap matching the
+    // textarea's maxlength, in case a stored history/queued record predates
+    // the cap or was edited outside the UI.
+    const siteContextNotesVal = (els.siteContextNotes ? els.siteContextNotes.value.trim() : '').slice(0, 500);
+    if (siteContextNotesVal) promptCtxLines.push(`Assessor notes: ${siteContextNotesVal}`);
+    const siteContextSection = promptCtxLines.length ? `
+
+Site context provided by the assessor (for calibration only — this does NOT narrow, replace, or limit which hazard categories you check below; check every category listed regardless of what is stated here, and still report anything else you observe that isn't mentioned):
+${promptCtxLines.map(l => `- ${l}`).join('\n')}
+` : '';
+
     // Security Patrol is additive to the standard categories, not a
     // separate mode — but wildlife/security/lighting checks only make
     // sense to ask for when that's actually the assessment context,
@@ -2100,7 +2132,7 @@ Security patrol — check for these as well (a Security Patrol assessment still 
 
     const prompt = `You are an expert HSE (Health, Safety and Environment) risk assessor.
 Analyse this workplace image and identify all visible hazards.
-
+${siteContextSection}
 Identify each hazard as a separate entry even if hazards are co-located. Do not merge multiple hazard types into one entry. A spilled chemical and a slip risk from that spill are two separate hazards with separate entries.
 
 For EACH hazard found, respond ONLY with a JSON array (no markdown, no prose) like:
@@ -2160,6 +2192,12 @@ Struck-by / machinery guarding — check specifically for each of these (report 
 - Stacked or stored materials that appear unstable, overloaded, or unsecured against falling/toppling
 - Tools or materials left in a position where they could fall onto a person below
 
+Vehicle, machinery, and energy isolation (lockout/tagout) — check specifically for each of these (report each one found as its own separate hazard entry with key "struck", not merged; only report what you can actually see):
+- Person working on, under, or immediately beside a vehicle, rail vehicle/rolling stock, or mounted machine with no visible wheel chocks, isolation tag, lockout device, or "do not operate" signage
+- Multiple heavy wheeled or rolling items (vehicles, bogies, trolleys, rail stock) staged or parked with no visible chocks or brakes applied
+- Ignition, control panel, or start switch left accessible or apparently live while a person works on a part of the same machine or vehicle that could move
+- An energy-isolation point (electrical isolator, valve, disconnect switch) near ongoing maintenance work with no visible lock, tag, or "out of service" marking
+
 Electrical — check specifically for each of these (report each one found as its own separate hazard entry with key "electrical", not merged; only report what you can actually see):
 - Visibly damaged, frayed, or cut cable/flex insulation with conductors exposed
 - Cable or extension lead trailing across a walkway, doorway, or other foot-traffic path with no cover or routing
@@ -2173,6 +2211,7 @@ Confined space — check specifically for each of these (report each one found a
 - Confined-space entry in progress with no permit board, tripod/retrieval system, or gas monitor visible at the entry point
 - No attendant/standby person visible at an open entry point where one would be expected
 - Ventilation ducting or forced-air equipment absent at an entry point where the space appears to need it
+- A floor-level opening, gap, recess, or void that is not a designated confined-space entry point (e.g. a missing floor panel, an open drain or trench section, a gap beside a platform or loading edge) with no visible cover, barrier, or warning marking — report this even if nobody appears to be entering it, since a person could still step or fall into it
 
 Manual handling — check specifically for each of these (report each one found as its own separate hazard entry with key "ergonomic", not merged; only report what you can actually see):
 - Person lifting or carrying a load with a visibly twisted back or torso
@@ -2192,6 +2231,11 @@ Chemical / hazardous materials storage — check specifically for each of these 
 - Gas cylinders stored upright but not visibly chained/secured, or without valve caps fitted
 - Chemical storage area with no visible secondary containment (bunding) around drums or tanks
 - Flammable/combustible liquid stored on open shelving rather than an approved metal storage cabinet (also valid as a "fire" entry if fire risk is the more relevant framing — report under whichever key better fits what is visible, not both)
+
+Dust and vapour exposure controls — check specifically for each of these (report each one found as its own separate hazard entry with key "chemical", not merged; only report what you can actually see). This is about the process's engineering controls, not whether a worker is wearing a respirator — that is already covered separately under PPE compliance below:
+- A dust-, fume-, or vapour-generating process (grinding, cutting, spraying, mixing, resin/composite lay-up) with no visible local exhaust ventilation, extraction hood, or enclosure at the point where the dust/fume/vapour is generated
+- Powder or fine-particulate material being handled, poured, or decanted in the open with no visible dust suppression, enclosure, or extraction
+- A chemical, resin, or solvent mixing/lay-up area that appears enclosed or indoors with no visible general ventilation (open windows, extraction fans, ducting)
 
 PPE compliance — check specifically for each of these (report each one found as its own separate hazard entry with key "ppe", not merged; only report what you can actually see; do not guess whether PPE would be required if the task itself isn't visible):
 - Person in a designated hard-hat/overhead-hazard area (construction, elevated work below, crane/lifting operations) not wearing a safety helmet
@@ -3243,12 +3287,18 @@ Before finalising your answer, re-examine the image one more time specifically f
         <span class="metadata-label">Site / Location:</span>
         <span class="metadata-value">${siteName || 'Not named'}${siteGPS ? ` — <a href="https://www.google.com/maps?q=${siteGPS.lat.toFixed(6)},${siteGPS.lon.toFixed(6)}" target="_blank" rel="noopener">${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)} →</a>` : ''}</span>
       </div>` : '';
+    const contextNotesVal = els.siteContextNotes ? els.siteContextNotes.value.trim() : '';
+    const contextNotesRow = contextNotesVal ? `
+      <div class="metadata-row">
+        <span class="metadata-label">Assessor Notes:</span>
+        <span class="metadata-value">${escapeHtml(contextNotesVal)}</span>
+      </div>` : '';
     els.metadataFooter.innerHTML = `
       <h4>Assessment Information</h4>${siteRow}
       <div class="metadata-row">
         <span class="metadata-label">Assessment Date and Time:</span>
         <span class="metadata-value">${formattedDate}</span>
-      </div>${contextRow}
+      </div>${contextRow}${contextNotesRow}
       <div class="metadata-row">
         <span class="metadata-label">Assessment Method:</span>
         <span class="metadata-value">AI Visual Analysis — ${AI_PROVIDERS[lastAIProvider || 'groq'].label}</span>
@@ -4178,6 +4228,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       const pdfSiteRows = (pdfSiteName || siteGPS) ? [
         ['Site / Location', `${pdfSiteName || 'Not named'}${siteGPS ? ` (${siteGPS.lat.toFixed(6)}, ${siteGPS.lon.toFixed(6)})` : ''}`]
       ] : [];
+      const pdfContextNotes = els.siteContextNotes ? els.siteContextNotes.value.trim() : '';
+      const pdfContextNotesRows = pdfContextNotes ? [['Assessor Notes', pdfContextNotes]] : [];
       const pdfMethod = selectedScoringMethod();
       const pdfMaxScore = { 'adosh-sf': '/ 25', 'nebosh-hsg65': '/ 9' }[pdfMethod.id] || '';
       const metaRows = [
@@ -4188,7 +4240,8 @@ Before finalising your answer, re-examine the image one more time specifically f
         ['Standard Reference', `ISO 45001:2018 / ${pdfMethod.citation}`],
         ['Overall Risk Score', `${formatMethodScore(overall)} ${pdfMaxScore}`.trim()],
         ['Overall Risk Level', bandForMethod(overall).label],
-        ...pdfCtxRows
+        ...pdfCtxRows,
+        ...pdfContextNotesRows
       ];
       doc.autoTable({
         startY: y,
@@ -4951,6 +5004,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     $('ctxLocation').value = '';
     $('baselineInfo').style.display = 'none';
     if (els.siteLocationName) els.siteLocationName.value = '';
+    if (els.siteContextNotes) els.siteContextNotes.value = '';
     siteGPS = null;
     renderSiteGPSDisplay();
     switchResultsTab('hazards');
@@ -4998,6 +5052,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       task: $('ctxTask').value,
       location: $('ctxLocation').value,
       siteName: els.siteLocationName ? els.siteLocationName.value.trim() : '',
+      contextNotes: els.siteContextNotes ? els.siteContextNotes.value.trim() : '',
       siteGPS: siteGPS ? { ...siteGPS } : null,
       analysisMode,
       overall,
@@ -5263,6 +5318,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     $('ctxTask').value = record.task || '';
     $('ctxLocation').value = record.location || '';
     if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
+    if (els.siteContextNotes) els.siteContextNotes.value = record.contextNotes || '';
     siteGPS = record.siteGPS || null;
     renderSiteGPSDisplay();
     els.historySection.classList.add('hidden');
@@ -5316,6 +5372,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       task: $('ctxTask').value,
       location: $('ctxLocation').value,
       siteName: els.siteLocationName ? els.siteLocationName.value.trim() : '',
+      contextNotes: els.siteContextNotes ? els.siteContextNotes.value.trim() : '',
       siteGPS: siteGPS ? { ...siteGPS } : null,
       imageMeta: window.currentImageMeta || null,
       photoDataUrl: dataUrl
@@ -5333,12 +5390,14 @@ Before finalising your answer, re-examine the image one more time specifically f
     }
     const prevCtx = {
       industry: $('ctxIndustry').value, task: $('ctxTask').value, location: $('ctxLocation').value,
-      siteName: els.siteLocationName ? els.siteLocationName.value : '', siteGPS
+      siteName: els.siteLocationName ? els.siteLocationName.value : '',
+      contextNotes: els.siteContextNotes ? els.siteContextNotes.value : '', siteGPS
     };
     $('ctxIndustry').value = record.industry || '';
     $('ctxTask').value = record.task || '';
     $('ctxLocation').value = record.location || '';
     if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
+    if (els.siteContextNotes) els.siteContextNotes.value = record.contextNotes || '';
     siteGPS = record.siteGPS || null;
     window.currentImageMeta = record.imageMeta || null;
     try {
@@ -5353,6 +5412,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       $('ctxTask').value = prevCtx.task;
       $('ctxLocation').value = prevCtx.location;
       if (els.siteLocationName) els.siteLocationName.value = prevCtx.siteName;
+      if (els.siteContextNotes) els.siteContextNotes.value = prevCtx.contextNotes;
       siteGPS = prevCtx.siteGPS;
       renderSiteGPSDisplay();
       await renderHistoryList();
