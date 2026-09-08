@@ -103,6 +103,7 @@
       #inputSec { grid-column:1; grid-row:2; }
       #results { grid-column:2; grid-row:1 / 3; }
       #historySection { grid-column:1 / 3; grid-row:3; }
+      #helpSection { grid-column:1 / 3; grid-row:4; }
     }
     .card { background:#fff; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04); border:1px solid #edeff2; }
     .btn { border:none; border-radius:10px; padding:12px 16px; font-weight:700; font-family:inherit; cursor:pointer; transition:filter .15s; }
@@ -426,6 +427,7 @@
     .app-footer a { color:#8a8f98; text-decoration:none; }
     .app-footer a:hover { color:var(--p); text-decoration:underline; }
     .app-footer-sep { color:#d0d3d9; }
+    .app-footer button.app-footer-link { background:none; border:none; padding:0; font:inherit; cursor:pointer; }
     @media (min-width:900px) { .app-footer { padding-bottom:24px; } }
     .signoff-field label { display:block; font-weight:600; font-size:.8rem; color:#616161; margin-bottom:4px; }
     .signoff-field input { width:100%; padding:8px 10px; border:1px solid #ccc; border-radius:6px; font-size:.9rem; }
@@ -1039,12 +1041,52 @@
       <div id="historyList"></div>
     </section>
 
+    <section id="helpSection" class="card hidden">
+      <h2 style="margin-top:0">❓ Help</h2>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <button type="button" class="btn btn-outline" id="btnHelpClose">Close</button>
+      </div>
+
+      <h3>What this app does</h3>
+      <p>VisualRiskAssessor helps HSE personnel identify workplace hazards from a photo. Point a camera or upload an image, and the app uses AI vision models (or a built-in rule-based/object-detection fallback) to flag hazards against checklists built from the NEBOSH National General Certificate handbook and ADOSH-SF Codes of Practice.</p>
+
+      <h3>Human review and sign-off</h3>
+      <p>AI findings are a starting point, not a final answer. Every finding can be reviewed, corrected, or removed, and low-confidence findings are flagged and block sign-off until resolved. No assessment counts as finished until a competent person completes the sign-off step.</p>
+
+      <h3>PDF export</h3>
+      <p>Once reviewed, an assessment can be exported as a formatted PDF report — risk register, corrective action tracker, hierarchy of controls, and risk matrix — suitable for filing or sharing.</p>
+
+      <h3>Offline behavior</h3>
+      <p>The app works offline once loaded (it's an installable PWA). If you take a photo with no connection while AI analysis was selected, it's queued in History and analyzed automatically the next time you're online.</p>
+
+      <h3>Compliance checklists</h3>
+      <p>Each hazard category (fire, working at height, excavation, workplace transport, machinery/struck-by, electrical, confined space, manual handling) is backed by an explicit checklist, shown alongside your results so nothing on the list gets missed even if the AI doesn't flag it.</p>
+
+      <h3>Site Trends</h3>
+      <p>In History, Site Trends groups your saved assessments by site name and shows whether risk is improving or worsening across repeat visits to the same site.</p>
+
+      <h3>AI Trust Signals</h3>
+      <p>In History, AI Trust Signals shows, per hazard category, how often the AI's findings needed correction — overridden, flagged for review, or missed entirely — across everything you've saved. It's a way to see where the AI is (or isn't) pulling its weight.</p>
+
+      <h3>Scoring-method selection</h3>
+      <p>You can choose the risk-scoring method used to turn Likelihood × Severity into a risk band, from the Scoring Method selector above the results. All methods score off the same underlying data, so switching methods never changes what hazards were found — only how the score is presented.</p>
+
+      <hr style="border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
+
+      <h3>📊 Share anonymized usage feedback</h3>
+      <p style="font-size:.85rem;color:#555;">Build a short report showing how you've used the app — assessment counts and how often AI findings needed correction — with no site names, photos, or free text included. Review the exact text before choosing to send it.</p>
+      <button type="button" class="btn btn-outline" id="btnFeedbackPreview">🔍 Build Feedback Preview</button>
+      <div id="feedbackPreviewPanel" class="hidden" style="background:#f4f5f7;border-radius:10px;padding:14px;margin-top:12px;"></div>
+    </section>
+
     <footer class="app-footer">
       <a href="disclaimer.html" target="_blank" rel="noopener">⚖️ Disclaimer &amp; Terms of Use</a>
       <span class="app-footer-sep">·</span>
       <a href="mailto:teekaysharma@googlemail.com?subject=VisualRiskAssessor%20Feedback">✉️ Send Feedback</a>
       <span class="app-footer-sep">·</span>
       <a href="https://github.com/teekaysharma/VisualRiskAssessor/issues/new?labels=feedback&title=Feedback%3A%20" target="_blank" rel="noopener">🔗 Report on GitHub</a>
+      <span class="app-footer-sep">·</span>
+      <button type="button" class="app-footer-link" id="btnHelpToggle">❓ Help</button>
     </footer>
   </main>
     </div>
@@ -1086,6 +1128,8 @@
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
     btnSiteTrends: $('btnSiteTrends'), siteTrendsPanel: $('siteTrendsPanel'),
     btnTrustSignals: $('btnTrustSignals'), trustSignalsPanel: $('trustSignalsPanel'),
+    helpSection: $('helpSection'), btnHelpToggle: $('btnHelpToggle'), btnHelpClose: $('btnHelpClose'),
+    btnFeedbackPreview: $('btnFeedbackPreview'), feedbackPreviewPanel: $('feedbackPreviewPanel'),
     connectivityBadge: $('connectivityBadge'), queuedBanner: $('queuedBanner'), queuedBannerText: $('queuedBannerText'),
     btnProcessQueued: $('btnProcessQueued'),
     aiProviderSelect: $('aiProviderSelect'), apiKeyLabel: $('apiKeyLabel'), apiKeyHelp: $('apiKeyHelp'),
@@ -5055,6 +5099,11 @@ Before finalising your answer, re-examine the image one more time specifically f
       contextNotes: els.siteContextNotes ? els.siteContextNotes.value.trim() : '',
       siteGPS: siteGPS ? { ...siteGPS } : null,
       analysisMode,
+      // lastAIProvider isn't reset by resetApp(), so it can be stale from a
+      // previous AI-mode assessment by the time a later Manual/rule-based
+      // one is saved — only trust it when this specific assessment was
+      // actually produced by AI.
+      provider: analysisMode === 'ai' ? (lastAIProvider || null) : null,
       overall,
       hazards, manualHazards, baselineHazards,
       trustSignals: computeTrustSignals(),
@@ -5224,6 +5273,99 @@ Before finalising your answer, re-examine the image one more time specifically f
     });
     html += '</tbody></table></div>';
     panel.innerHTML = html;
+  }
+
+  /**
+   * Builds the exact plain-text anonymized usage-feedback report, from an
+   * explicit ALLOW-list of aggregate/count data only — reuses the same
+   * historyStore.list() + per-category trustSignals summing shape as
+   * renderTrustSignals() above, plus a month-granularity date range and the
+   * distinct AI provider labels seen. Never touches hazard name/details,
+   * site name, contextNotes, GPS, photos, or reviewer/sign-off data — those
+   * fields exist on a history record but are deliberately never read here.
+   */
+  async function buildFeedbackPayload() {
+    const records = (await historyStore.list()).filter(r => r.status !== 'queued');
+    if (records.length === 0) return null;
+
+    const timestamps = records.map(r => r.timestamp).filter(Boolean);
+    const fmtMonth = ts => new Date(ts).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const minTs = Math.min(...timestamps), maxTs = Math.max(...timestamps);
+    const dateRange = timestamps.length
+      ? (minTs === maxTs ? fmtMonth(minTs) : `${fmtMonth(minTs)} – ${fmtMonth(maxTs)}`)
+      : 'n/a';
+
+    const providers = new Set();
+    records.forEach(r => { if (r.provider) providers.add(r.provider); });
+    const providerLabels = [...providers].map(p => (AI_PROVIDERS[p] && AI_PROVIDERS[p].label) || p);
+
+    const agg = {};
+    records.forEach(record => {
+      const ts = record.trustSignals;
+      if (!ts) return;
+      Object.keys(ts).forEach(key => {
+        const s = ts[key];
+        const a = agg[key] || (agg[key] = { aiFindings: 0, aiOverridden: 0, aiFlaggedForReview: 0, humanAdded: 0 });
+        a.aiFindings += s.aiFindings || 0;
+        a.aiOverridden += s.aiOverridden || 0;
+        a.aiFlaggedForReview += s.aiFlaggedForReview || 0;
+        a.humanAdded += s.humanAdded || 0;
+      });
+    });
+
+    const lines = [];
+    lines.push('VisualRiskAssessor — Anonymized Usage Feedback');
+    lines.push('================================================');
+    lines.push(`Total assessments saved: ${records.length}`);
+    lines.push(`History date range: ${dateRange}`);
+    lines.push(`AI provider(s) used: ${providerLabels.length ? providerLabels.join(', ') : 'none recorded'}`);
+    lines.push('');
+    lines.push('Per-category AI trust signals (summed across all saved assessments):');
+    const keys = Object.keys(agg);
+    if (keys.length === 0) {
+      lines.push('- No trust-signal data recorded yet.');
+    } else {
+      keys.forEach(key => {
+        const s = agg[key];
+        const label = (hazardDB[key] && hazardDB[key].name) || key;
+        const pct = s.aiFindings > 0 ? ` (${Math.round((s.aiOverridden / s.aiFindings) * 100)}%)` : '';
+        lines.push(`- ${label}: ${s.aiFindings} AI findings, ${s.aiOverridden} overridden by human${pct}, ${s.aiFlaggedForReview} flagged for review, ${s.humanAdded} missed by AI (added manually)`);
+      });
+    }
+    lines.push('');
+    lines.push('No site names, locations, photos, notes, hazard descriptions, or reviewer details are included in this report.');
+    return lines.join('\n');
+  }
+
+  async function renderFeedbackPreview() {
+    const panel = els.feedbackPreviewPanel;
+    if (!panel) return;
+    let text;
+    try {
+      text = await buildFeedbackPayload();
+    } catch (err) {
+      panel.innerHTML = `<p class="warning">Could not build feedback preview: ${err.message}</p>`;
+      return;
+    }
+    if (!text) {
+      panel.innerHTML = '<p style="color:#666;font-size:.85rem;margin:0;">No saved assessments yet — save at least one assessment to History to build a feedback report.</p>';
+      return;
+    }
+    panel.innerHTML = `
+      <p style="font-size:.8rem;color:#666;margin:0 0 10px;">This is exactly what would be sent — review it before choosing an action below.</p>
+      <pre id="feedbackPreviewText" style="white-space:pre-wrap;background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px;font-size:.8rem;max-height:320px;overflow:auto;"></pre>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <a class="btn btn-outline" id="btnFeedbackGithub" target="_blank" rel="noopener">🔗 Open as GitHub Issue</a>
+        <a class="btn btn-outline" id="btnFeedbackEmail">✉️ Open as Email</a>
+      </div>`;
+    // textContent, not innerHTML — this is plain aggregate text, not markup,
+    // so there's no escaping question to even ask.
+    panel.querySelector('#feedbackPreviewText').textContent = text;
+    const body = encodeURIComponent(text);
+    panel.querySelector('#btnFeedbackGithub').href =
+      `https://github.com/teekaysharma/VisualRiskAssessor/issues/new?labels=usage-insights&title=${encodeURIComponent('Anonymized Usage Feedback')}&body=${body}`;
+    panel.querySelector('#btnFeedbackEmail').href =
+      `mailto:teekaysharma@googlemail.com?subject=${encodeURIComponent('VisualRiskAssessor Usage Insights')}&body=${body}`;
   }
 
   async function renderHistoryList() {
@@ -5575,6 +5717,21 @@ Before finalising your answer, re-examine the image one more time specifically f
       const opening = els.trustSignalsPanel.classList.contains('hidden');
       els.trustSignalsPanel.classList.toggle('hidden');
       if (opening) await renderTrustSignals();
+    });
+  }
+  if (els.btnHelpToggle) {
+    els.btnHelpToggle.addEventListener('click', () => {
+      const opening = els.helpSection.classList.contains('hidden');
+      els.helpSection.classList.toggle('hidden');
+      if (opening) els.helpSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+  if (els.btnHelpClose) els.btnHelpClose.addEventListener('click', () => els.helpSection.classList.add('hidden'));
+  if (els.btnFeedbackPreview) {
+    els.btnFeedbackPreview.addEventListener('click', async () => {
+      const opening = els.feedbackPreviewPanel.classList.contains('hidden');
+      els.feedbackPreviewPanel.classList.toggle('hidden');
+      if (opening) await renderFeedbackPreview();
     });
   }
   els.btnExportHistory.addEventListener('click', () => {
