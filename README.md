@@ -29,6 +29,10 @@ no backend required for the app itself. Live at
   corrective action tracker, hierarchy of controls, and risk matrix.
 - **Local history** — assessments are saved in the browser (IndexedDB), with
   export/import for backup, and no server-side storage.
+- **Help & anonymized feedback** — an in-app Help section explains how the
+  app works, plus an opt-in feature to build an anonymized usage-feedback
+  report (assessment counts, date range, AI trust-signal tallies — no
+  site/photo/free-text data) and send it via GitHub issue or email.
 - **Offline-first** — a service worker caches the app for offline use, and
   photos taken with no connection are queued and analyzed once you're back
   online.
