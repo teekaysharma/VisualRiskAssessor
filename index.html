@@ -1001,6 +1001,7 @@
         <button class="btn btn-secondary" id="btnExport">Export Report</button>
         <button class="btn btn-pdf" id="btnPDF">📄 Export PDF</button>
         <button class="btn" id="btnSaveHistory" style="background:#2e7d32;color:#fff;">💾 Save to History</button>
+        <button class="btn btn-outline" id="btnSaveDraft" title="Save your progress and finish reviewing this assessment later">📝 Save Draft</button>
         <button class="btn btn-outline" id="btnReset">New Assessment</button>
       </div>
     </section>
@@ -1124,7 +1125,7 @@
     reviewExposureHeader: $('reviewExposureHeader'),
     btnAddHazard: $('btnAddHazard'), btnTryDemo: $('btnTryDemo'), compressToggle: $('compressToggle'),
     btnHistoryToggle: $('btnHistoryToggle'), btnHistoryClose: $('btnHistoryClose'), historySection: $('historySection'),
-    historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnExportHistory: $('btnExportHistory'),
+    historyList: $('historyList'), btnSaveHistory: $('btnSaveHistory'), btnSaveDraft: $('btnSaveDraft'), btnExportHistory: $('btnExportHistory'),
     importHistoryInput: $('importHistoryInput'), btnClearHistory: $('btnClearHistory'),
     btnSiteTrends: $('btnSiteTrends'), siteTrendsPanel: $('siteTrendsPanel'),
     btnTrustSignals: $('btnTrustSignals'), trustSignalsPanel: $('trustSignalsPanel'),
@@ -1177,6 +1178,11 @@
   let modelLoadError = null;
   let pendingAnalysis = null;
   let assessmentTimestamp = null;
+  // Set when a currently-open assessment was resumed from a saved draft — the
+  // next save (draft or final) removes this old draft record instead of
+  // leaving a duplicate behind. Cleared on resetApp() so starting a fresh
+  // assessment never deletes an unrelated draft later.
+  let resumingDraftId = null;
   let manualModeActive = false;
   let reviewData = {};  // Store override and verification data per hazard index
   let signoffData = { verified: false, name: '', designation: '', date: '' };
@@ -1652,6 +1658,13 @@
 
   function riskFor(score) {
     const b = RiskCore.band(score);
+    return { label: b.label, cls: RISK_CSS_CLASS[b.key], color: RISK_CSS_VAR[b.key], bg: b.bg, textColor: b.textColor };
+  }
+
+  /** Like riskFor(), but bands a saved history record through the method that actually scored it — not always ADOSH-SF. Falls back to ADOSH-SF for older records with no scoringMethod field. */
+  function riskForRecord(record) {
+    const method = RiskCore.getScoringMethod(record.scoringMethod);
+    const b = method.bandForScore(record.overall || 0);
     return { label: b.label, cls: RISK_CSS_CLASS[b.key], color: RISK_CSS_VAR[b.key], bg: b.bg, textColor: b.textColor };
   }
 
@@ -2236,6 +2249,13 @@ Struck-by / machinery guarding — check specifically for each of these (report 
 - Stacked or stored materials that appear unstable, overloaded, or unsecured against falling/toppling
 - Tools or materials left in a position where they could fall onto a person below
 
+Lifting operations and rigging — check specifically for each of these (report each one found as its own separate hazard entry with key "struck", not merged; only report what you can actually see):
+- Load suspended or being lifted with no visible tag line/tether to control swing
+- Lifting sling, chain, or rigging accessory showing visible damage (frayed, kinked, corroded) or with no visible SWL (safe working load) tag
+- Improvised rigging (e.g. rope or non-rated strap used in place of a rated lifting accessory) or a load cradled/balanced without a rated attachment point
+- Crane or hoist operator's view of the load or landing area appears obstructed with no banksman/signaller visible directing the lift
+- Rigging or sling in contact with a sharp edge or corner of the load with no visible edge protection (packing, corner blocks)
+
 Vehicle, machinery, and energy isolation (lockout/tagout) — check specifically for each of these (report each one found as its own separate hazard entry with key "struck", not merged; only report what you can actually see):
 - Person working on, under, or immediately beside a vehicle, rail vehicle/rolling stock, or mounted machine with no visible wheel chocks, isolation tag, lockout device, or "do not operate" signage
 - Multiple heavy wheeled or rolling items (vehicles, bogies, trolleys, rail stock) staged or parked with no visible chocks or brakes applied
@@ -2257,11 +2277,15 @@ Confined space — check specifically for each of these (report each one found a
 - Ventilation ducting or forced-air equipment absent at an entry point where the space appears to need it
 - A floor-level opening, gap, recess, or void that is not a designated confined-space entry point (e.g. a missing floor panel, an open drain or trench section, a gap beside a platform or loading edge) with no visible cover, barrier, or warning marking — report this even if nobody appears to be entering it, since a person could still step or fall into it
 
-Manual handling — check specifically for each of these (report each one found as its own separate hazard entry with key "ergonomic", not merged; only report what you can actually see):
+Manual handling and ergonomic posture — check specifically for each of these (report each one found as its own separate hazard entry with key "ergonomic", not merged; only report what you can actually see):
 - Person lifting or carrying a load with a visibly twisted back or torso
 - Person lifting or carrying a load held away from the body rather than close to the trunk
 - Person lifting a load from below knee height or above shoulder height
 - Person manually carrying a load that appears bulky, awkward, or heavy with no visible lifting aid (trolley, hoist, second person) in use
+- Person in a sustained awkward posture — kneeling, crouching, or reaching/working overhead — with no visible task rotation or support aid
+- Person's back or torso visibly flexed or twisted through a large angle during a static (non-lifting) task, e.g. bent over a low workpiece or twisted sideways to reach material
+- Person's neck visibly bent or twisted to view a screen, workpiece, or task for a sustained period
+- Repetitive same-motion task (e.g. continuous scraping, hammering, packing) with no visible job rotation or mechanical assist
 
 Housekeeping — check specifically for each of these (report each one found as its own separate hazard entry with key "slip", not merged; only report what you can actually see):
 - Passage, floor, walkway, or stairway obstructed by stored material, tools, or debris
@@ -5050,6 +5074,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     if (els.siteLocationName) els.siteLocationName.value = '';
     if (els.siteContextNotes) els.siteContextNotes.value = '';
     siteGPS = null;
+    resumingDraftId = null;
     renderSiteGPSDisplay();
     switchResultsTab('hazards');
   }
@@ -5104,6 +5129,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       // one is saved — only trust it when this specific assessment was
       // actually produced by AI.
       provider: analysisMode === 'ai' ? (lastAIProvider || null) : null,
+      scoringMethod: els.scoringMethodSelect ? els.scoringMethodSelect.value : RiskCore.DEFAULT_SCORING_METHOD_ID,
       overall,
       hazards, manualHazards, baselineHazards,
       trustSignals: computeTrustSignals(),
@@ -5115,6 +5141,13 @@ Before finalising your answer, re-examine the image one more time specifically f
     };
   }
 
+  /** Removes the draft this assessment was resumed from, if any — called right before saving a replacement record so resuming and re-saving never leaves a duplicate behind. */
+  async function clearResumedDraft() {
+    if (!resumingDraftId) return;
+    await historyStore.remove(resumingDraftId);
+    resumingDraftId = null;
+  }
+
   async function saveCurrentToHistory() {
     if (els.results.classList.contains('hidden')) {
       showWarning('Run an assessment before saving to history.');
@@ -5122,12 +5155,32 @@ Before finalising your answer, re-examine the image one more time specifically f
     }
     try {
       const record = collectCurrentAssessment();
+      await clearResumedDraft();
       await historyStore.save(record);
       await renderHistoryList();
       els.historySection.classList.remove('hidden');
       els.historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) {
       showWarning(`Could not save to history: ${err.message}`);
+    }
+  }
+
+  /** Saves the in-progress assessment as a resumable draft — same shape as a finished record, tagged status:'draft' and excluded from Site Trends / Trust Signals until finalized. */
+  async function saveDraftToHistory() {
+    if (els.results.classList.contains('hidden')) {
+      showWarning('Run an assessment before saving a draft.');
+      return;
+    }
+    try {
+      const record = { ...collectCurrentAssessment(), status: 'draft' };
+      await clearResumedDraft();
+      await historyStore.save(record);
+      await renderHistoryList();
+      els.historySection.classList.remove('hidden');
+      els.historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      showWarning('Draft saved — resume it any time from History.');
+    } catch (err) {
+      showWarning(`Could not save draft: ${err.message}`);
     }
   }
 
@@ -5157,7 +5210,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     }
     const bySite = {};
     records
-      .filter(r => r.status !== 'queued' && (r.siteName || '').trim())
+      .filter(r => r.status !== 'queued' && r.status !== 'draft' && (r.siteName || '').trim())
       .forEach(r => {
         const key = r.siteName.trim().toLowerCase();
         (bySite[key] || (bySite[key] = { label: r.siteName.trim(), records: [] })).records.push(r);
@@ -5174,9 +5227,16 @@ Before finalising your answer, re-examine the image one more time specifically f
     sites.forEach(site => {
       const recs = site.records;
       const first = recs[0], latest = recs[recs.length - 1];
+      // Raw overall scores are only comparable when both visits used the same
+      // scoring method — ADOSH-SF (1-25), NEBOSH (1-9), and Fine-Kinney
+      // (0.1-1000+) all live on different scales, so a numeric delta across
+      // a method change would be meaningless rather than just imprecise.
+      const methodChanged = (first.scoringMethod || RiskCore.DEFAULT_SCORING_METHOD_ID) !== (latest.scoringMethod || RiskCore.DEFAULT_SCORING_METHOD_ID);
       const delta = (latest.overall || 0) - (first.overall || 0);
-      const deltaLabel = delta === 0 ? 'No change since first visit' : (delta > 0 ? `▲ Worsened by ${delta} since first visit` : `▼ Improved by ${Math.abs(delta)} since first visit`);
-      const deltaColor = delta === 0 ? '#666' : (delta > 0 ? '#c62828' : '#2e7d32');
+      const deltaLabel = methodChanged
+        ? 'Scoring method changed since first visit — scores use different scales and aren\'t directly comparable'
+        : (delta === 0 ? 'No change since first visit' : (delta > 0 ? `▲ Worsened by ${delta} since first visit` : `▼ Improved by ${Math.abs(delta)} since first visit`));
+      const deltaColor = methodChanged ? '#b08900' : (delta === 0 ? '#666' : (delta > 0 ? '#c62828' : '#2e7d32'));
 
       // Hazard categories seen in 2+ separate visits to this site — a
       // recurring finding, not a one-off, and worth flagging as such.
@@ -5196,7 +5256,7 @@ Before finalising your answer, re-examine the image one more time specifically f
         <table class="risk-table" style="min-width:480px;">
           <thead><tr><th>Date</th><th>Risk Score</th><th>Hazards</th><th>Signed Off</th></tr></thead>
           <tbody>${recs.map(r => {
-            const rr = riskFor(r.overall || 0);
+            const rr = riskForRecord(r);
             const signedOff = !!(r.signoffData && r.signoffData.confirmed);
             return `<tr>
               <td>${new Date(r.timestamp).toLocaleDateString()}</td>
@@ -5234,6 +5294,7 @@ Before finalising your answer, re-examine the image one more time specifically f
     }
     const agg = {};
     records.forEach(record => {
+      if (record.status === 'draft') return; // not yet reviewed — would skew correction tallies
       const ts = record.trustSignals;
       if (!ts) return;
       Object.keys(ts).forEach(key => {
@@ -5285,7 +5346,7 @@ Before finalising your answer, re-examine the image one more time specifically f
    * fields exist on a history record but are deliberately never read here.
    */
   async function buildFeedbackPayload() {
-    const records = (await historyStore.list()).filter(r => r.status !== 'queued');
+    const records = (await historyStore.list()).filter(r => r.status !== 'queued' && r.status !== 'draft');
     if (records.length === 0) return null;
 
     const timestamps = records.map(r => r.timestamp).filter(Boolean);
@@ -5386,8 +5447,12 @@ Before finalising your answer, re-examine the image one more time specifically f
         els.historyList.appendChild(buildQueuedRow(record));
         return;
       }
+      if (record.status === 'draft') {
+        els.historyList.appendChild(buildDraftRow(record));
+        return;
+      }
       const allHazards = historyAllHazards(record);
-      const r = riskFor(record.overall || 0);
+      const r = riskForRecord(record);
       const unreviewed = RiskCore.hasUnreviewedHazards(allHazards);
       const signedOff = !!(record.signoffData && record.signoffData.confirmed);
 
@@ -5434,6 +5499,28 @@ Before finalising your answer, re-examine the image one more time specifically f
     return row;
   }
 
+  /** A draft has already been analyzed/reviewed in part but not finished — reopened for editing rather than shown as a final result. */
+  function buildDraftRow(record) {
+    const allHazards = historyAllHazards(record);
+    const row = document.createElement('div');
+    row.className = 'history-row';
+    row.style.cssText = 'display:flex;gap:12px;align-items:center;padding:10px;border:1px dashed #1565c0;border-radius:8px;margin-bottom:8px;background:#f5f9ff;';
+    row.innerHTML = `
+      ${record.thumbnail ? `<img src="${record.thumbnail}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:6px;flex-shrink:0;">` : '<div style="width:64px;height:64px;background:#eee;border-radius:6px;flex-shrink:0;"></div>'}
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;">${new Date(record.timestamp).toLocaleString()}
+          <span style="font-size:.72rem;color:#1565c0;margin-left:6px;">📝 Draft — in progress</span>
+        </div>
+        <div style="font-size:.82rem;color:#666;">${[record.industry, record.task, record.location].filter(Boolean).join(' · ') || 'No context set'} — ${allHazards.length} hazard(s)</div>
+      </div>
+      <button type="button" class="btn" data-action="resume" style="flex-shrink:0;background:#1565c0;color:#fff;">▶ Resume</button>
+      <button type="button" class="btn btn-outline" data-action="delete" style="flex-shrink:0;color:#c62828;border-color:#c62828;">Delete</button>
+    `;
+    row.querySelector('[data-action="resume"]').addEventListener('click', () => openHistoryRecord(record));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteHistoryRecord(record.id));
+    return row;
+  }
+
   function updateQueuedBanner(count) {
     if (!els.queuedBanner) return;
     if (count > 0) {
@@ -5462,6 +5549,9 @@ Before finalising your answer, re-examine the image one more time specifically f
     if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
     if (els.siteContextNotes) els.siteContextNotes.value = record.contextNotes || '';
     siteGPS = record.siteGPS || null;
+    if (els.scoringMethodSelect) els.scoringMethodSelect.value = record.scoringMethod || RiskCore.DEFAULT_SCORING_METHOD_ID;
+    updateScoringMethodUI();
+    resumingDraftId = record.status === 'draft' ? record.id : null;
     renderSiteGPSDisplay();
     els.historySection.classList.add('hidden');
     render();
@@ -5516,6 +5606,7 @@ Before finalising your answer, re-examine the image one more time specifically f
       siteName: els.siteLocationName ? els.siteLocationName.value.trim() : '',
       contextNotes: els.siteContextNotes ? els.siteContextNotes.value.trim() : '',
       siteGPS: siteGPS ? { ...siteGPS } : null,
+      scoringMethod: els.scoringMethodSelect ? els.scoringMethodSelect.value : RiskCore.DEFAULT_SCORING_METHOD_ID,
       imageMeta: window.currentImageMeta || null,
       photoDataUrl: dataUrl
     };
@@ -5533,7 +5624,8 @@ Before finalising your answer, re-examine the image one more time specifically f
     const prevCtx = {
       industry: $('ctxIndustry').value, task: $('ctxTask').value, location: $('ctxLocation').value,
       siteName: els.siteLocationName ? els.siteLocationName.value : '',
-      contextNotes: els.siteContextNotes ? els.siteContextNotes.value : '', siteGPS
+      contextNotes: els.siteContextNotes ? els.siteContextNotes.value : '', siteGPS,
+      scoringMethod: els.scoringMethodSelect ? els.scoringMethodSelect.value : RiskCore.DEFAULT_SCORING_METHOD_ID
     };
     $('ctxIndustry').value = record.industry || '';
     $('ctxTask').value = record.task || '';
@@ -5541,6 +5633,8 @@ Before finalising your answer, re-examine the image one more time specifically f
     if (els.siteLocationName) els.siteLocationName.value = record.siteName || '';
     if (els.siteContextNotes) els.siteContextNotes.value = record.contextNotes || '';
     siteGPS = record.siteGPS || null;
+    if (els.scoringMethodSelect) els.scoringMethodSelect.value = record.scoringMethod || RiskCore.DEFAULT_SCORING_METHOD_ID;
+    updateScoringMethodUI();
     window.currentImageMeta = record.imageMeta || null;
     try {
       await analyze(record.photoDataUrl);
@@ -5556,6 +5650,8 @@ Before finalising your answer, re-examine the image one more time specifically f
       if (els.siteLocationName) els.siteLocationName.value = prevCtx.siteName;
       if (els.siteContextNotes) els.siteContextNotes.value = prevCtx.contextNotes;
       siteGPS = prevCtx.siteGPS;
+      if (els.scoringMethodSelect) els.scoringMethodSelect.value = prevCtx.scoringMethod;
+      updateScoringMethodUI();
       renderSiteGPSDisplay();
       await renderHistoryList();
     }
@@ -5696,6 +5792,7 @@ Before finalising your answer, re-examine the image one more time specifically f
   els.btnPDF.addEventListener('click', exportPDF);
   els.btnReset.addEventListener('click', resetApp);
   els.btnSaveHistory.addEventListener('click', saveCurrentToHistory);
+  if (els.btnSaveDraft) els.btnSaveDraft.addEventListener('click', saveDraftToHistory);
   els.btnHistoryToggle.addEventListener('click', async () => {
     const opening = els.historySection.classList.contains('hidden');
     els.historySection.classList.toggle('hidden');
